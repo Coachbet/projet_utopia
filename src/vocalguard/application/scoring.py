@@ -29,12 +29,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.config import Settings, get_settings
 from vocalguard.domain.events import Event, EventType, Speaker
-from vocalguard.domain.models import RiskAssessment
+from vocalguard.domain.models import ReputationSignal, RiskAssessment
 from vocalguard.domain.scoring.engine import assess
 
 if TYPE_CHECKING:
@@ -46,6 +47,10 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+
+CONTACT_DENIED_REASON = "le vrai contact dit que ce n'est pas lui"
+"""Repris mot pour mot par le dashboard : c'est la phrase la plus convaincante
+que l'écran puisse afficher devant le jury."""
 
 
 class _VoiceTap:
@@ -100,6 +105,13 @@ class ScoringPipeline:
         self._llm_in_flight: set[str] = set()
         self._claimed_identity: dict[str, str | None] = {}
         self._reputation_done: set[str] = set()
+
+        # Démentis du proche de confiance. Ici et pas sur le signal :
+        # `_check_reputation` remplace `signals.reputation` par un objet neuf à
+        # chaque changement d'identité revendiquée, ce qui effacerait le drapeau
+        # et désarmerait le coupe-circuit au pire moment. Un démenti est un fait
+        # sur l'appel, pas sur le numéro.
+        self._contact_denied: set[str] = set()
 
         # Les tâches sont groupées par appel : oublier un appel ne doit pas
         # toucher aux analyses d'un autre, et deux appels simultanés arrivent
@@ -160,6 +172,7 @@ class ScoringPipeline:
         self._llm_in_flight.discard(call_id)
         self._reputation_done.discard(call_id)
         self._claimed_identity.pop(call_id, None)
+        self._contact_denied.discard(call_id)
         for task in tuple(self._tasks.get(call_id, ())):
             task.cancel()
 
@@ -263,6 +276,67 @@ class ScoringPipeline:
 
         await self._publish_score(session)
 
+    async def contact_replied(self, call_id: str, *, denied: bool) -> None:
+        """Réponse du proche de confiance au SMS de vérification.
+
+        Appelée par `/twilio/sms/inbound`. Idempotente : Twilio rejoue le webhook
+        si notre réponse tarde, et un même « non » peut arriver en deux SMS.
+        """
+        if not denied:
+            # Un « oui c'est bien moi » ne disculpe pas l'appel en cours : le
+            # proche peut répondre à un SMS d'hier, ou se tromper d'appel. On
+            # n'abaisse donc jamais le score sur cette base.
+            return
+
+        session = self._registry.get(call_id)
+        if session is None:
+            logger.warning("démenti du proche pour un appel inconnu : %s", call_id)
+            return
+        if call_id in self._contact_denied:
+            return
+
+        self._contact_denied.add(call_id)
+        logger.info("appel %s : le proche de confiance dément être l'appelant", call_id)
+        await self._apply_reputation(session, session.signals.reputation)
+        await self._publish_score(session)
+
+    def _with_denial(
+        self, call_id: str, signal: ReputationSignal | None
+    ) -> ReputationSignal | None:
+        """Réinjecte le démenti dans un signal de réputation reconstruit."""
+        if call_id not in self._contact_denied:
+            return signal
+        if signal is None:
+            # Le démenti peut arriver avant toute vérification de réputation :
+            # on fabrique alors le signal, sinon le coupe-circuit n'a rien à lire.
+            return ReputationSignal(risk=1.0, contact_denied=True, reasons=(CONTACT_DENIED_REASON,))
+        reasons = signal.reasons
+        if CONTACT_DENIED_REASON not in reasons:
+            reasons = (*reasons, CONTACT_DENIED_REASON)
+        # Risque maximal : aucune heuristique de numéro ne pèse plus que la
+        # personne concernée disant que ce n'est pas elle.
+        return replace(signal, risk=1.0, contact_denied=True, reasons=reasons)
+
+    async def _apply_reputation(
+        self, session: CallSession, signal: ReputationSignal | None
+    ) -> None:
+        """Pose le signal de réputation et le publie, démenti réinjecté."""
+        signal = self._with_denial(session.call_id, signal)
+        if signal is None:
+            return
+        session.signals.reputation = signal
+        await session.emit(
+            EventType.REPUTATION,
+            {
+                "risk": signal.risk,
+                "line_type": signal.line_type.value,
+                "in_contacts": signal.in_contacts,
+                "identity_mismatch": signal.identity_mismatch,
+                "contact_denied": signal.contact_denied,
+                "reasons": list(signal.reasons),
+            },
+        )
+
     async def _check_reputation(self, session: CallSession) -> None:
         if self._reputation is None:
             # Configuration assumée (rejeu, tests) : rien à signaler.
@@ -286,17 +360,7 @@ class ScoringPipeline:
         except Exception:
             logger.warning("vérification de réputation en échec", exc_info=True)
             return
-        session.signals.reputation = signal
-        await session.emit(
-            EventType.REPUTATION,
-            {
-                "risk": signal.risk,
-                "line_type": signal.line_type.value,
-                "in_contacts": signal.in_contacts,
-                "identity_mismatch": signal.identity_mismatch,
-                "reasons": list(signal.reasons),
-            },
-        )
+        await self._apply_reputation(session, signal)
 
     async def _publish_score(self, session: CallSession) -> RiskAssessment:
         assessment = assess(session.signals, weights=self._weights, thresholds=self._thresholds)

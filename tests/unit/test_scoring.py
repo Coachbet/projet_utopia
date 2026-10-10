@@ -20,7 +20,11 @@ from collections.abc import Sequence
 
 import pytest
 
-from vocalguard.application.scoring import ScoringPipeline, build_pipeline
+from vocalguard.application.scoring import (
+    CONTACT_DENIED_REASON,
+    ScoringPipeline,
+    build_pipeline,
+)
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.config import Settings
 from vocalguard.domain.events import Event, EventType
@@ -30,6 +34,7 @@ from vocalguard.domain.models import (
     KeywordSignal,
     LineType,
     TranscriptSegment,
+    VoiceSignal,
 )
 from vocalguard.domain.ports import (
     AudioConsumer,
@@ -822,3 +827,156 @@ async def test_no_reputation_checker_configured_is_not_a_warning(caplog):
         await session.on_segment(seg("bonjour"))
 
     assert caplog.text == ""
+
+
+# --- Démenti du proche de confiance ----------------------------------------
+# `/twilio/sms/inbound` appelle `contact_replied(call_id, denied=True)`. Le
+# démenti est le signal le plus fort du système : la seule personne qui puisse
+# trancher l'a tranché.
+
+
+async def test_denial_floors_the_score_at_intervention():
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour mamie"))
+
+    await harness.pipeline.contact_replied("CA1", denied=True)
+
+    assert harness.last_score >= 85
+    assert harness.last_level == "intervene"
+    assert "trusted_contact_denied" in harness.of_type("score")[-1].data["breakers_fired"]
+
+
+async def test_denial_survives_a_reputation_rebuild():
+    """La régression qui compte.
+
+    `_check_reputation` remplace `signals.reputation` par un objet neuf à chaque
+    changement d'identité revendiquée. Un drapeau posé sur cet objet serait
+    effacé, et le coupe-circuit se désarmerait au pire moment.
+    """
+    harness, registry = build(
+        analyzer=ScriptedAnalyzer(
+            ContentSignal(risk=0.4, tactics=("urgence",), claimed_identity="Lucas")
+        ),
+        reputation=CountingReputation(),
+    )
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("mamie c'est Lucas"))
+
+    await harness.pipeline.contact_replied("CA1", denied=True)
+    assert harness.last_score >= 85
+
+    # L'analyse de fond révèle l'identité -> nouvelle vérification de réputation,
+    # donc un signal reconstruit de zéro.
+    await harness.pipeline.aclose()
+    assert len(harness.of_type("reputation")) >= 2, "la reconstruction n'a pas eu lieu"
+
+    assert session.signals.reputation is not None
+    assert session.signals.reputation.contact_denied is True
+    assert harness.last_score >= 85
+    assert harness.last_level == "intervene"
+
+
+async def test_denial_is_published_with_a_french_reason():
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour"))
+
+    await harness.pipeline.contact_replied("CA1", denied=True)
+
+    data = harness.of_type("reputation")[-1].data
+    assert data["contact_denied"] is True
+    # Le dashboard reprend ces chaînes mot pour mot.
+    assert CONTACT_DENIED_REASON in data["reasons"]
+
+
+async def test_denial_before_any_reputation_check_still_arms():
+    """Le SMS peut revenir avant toute vérification de réputation."""
+    harness, registry = build(reputation=None)
+    session = await registry.open("CA1")
+
+    await harness.pipeline.contact_replied("CA1", denied=True)
+
+    assert session.signals.reputation is not None
+    assert session.signals.reputation.contact_denied is True
+    assert harness.last_score >= 85
+
+
+async def test_a_reassuring_reply_changes_nothing():
+    """« Oui c'est bien moi » ne disculpe pas : le proche peut se tromper d'appel."""
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour"))
+    before = harness.last_score
+
+    await harness.pipeline.contact_replied("CA1", denied=False)
+
+    assert harness.last_score == before
+    assert session.signals.reputation is not None
+    assert session.signals.reputation.contact_denied is False
+
+
+async def test_denial_is_idempotent():
+    """Twilio rejoue le webhook si notre réponse tarde."""
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour"))
+    reputations = len(harness.of_type("reputation"))
+
+    await harness.pipeline.contact_replied("CA1", denied=True)
+    after_first = len(harness.of_type("reputation"))
+    await harness.pipeline.contact_replied("CA1", denied=True)
+
+    assert after_first == reputations + 1
+    assert len(harness.of_type("reputation")) == after_first
+    assert harness.last_score >= 85
+
+
+async def test_denial_for_an_unknown_call_is_a_no_op():
+    harness, _ = build(reputation=FakeReputationChecker())
+    await harness.pipeline.contact_replied("CA_INCONNU", denied=True)
+    assert harness.of_type("score") == []
+
+
+async def test_forget_purges_the_denial():
+    """Sans purge, un appel suivant sur le même identifiant naîtrait condamné."""
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour"))
+    await harness.pipeline.contact_replied("CA1", denied=True)
+    assert harness.last_score >= 85
+
+    harness.pipeline.forget("CA1")
+    await registry.close("CA1")
+
+    session2 = await registry.open("CA1", caller_number="+33755555555")
+    await session2.on_segment(seg("bonjour"))
+
+    assert session2.signals.reputation is not None
+    assert session2.signals.reputation.contact_denied is False
+    assert harness.last_score < 85
+
+
+async def test_denial_beats_the_voice_alone_cap():
+    """Les plafonds s'appliquent APRÈS les planchers, donc un plafond gagne.
+
+    Sans exception, le plafond « voix seule » écraserait le plancher du démenti
+    et un « non » du vrai Lucas retomberait à 64, sous le seuil d'intervention.
+
+    Le poids de réputation est abaissé exprès : à 15 (défaut), la réputation
+    pèse pile `VOICE_ALONE_MARGIN` et le plafond ne se déclenche pas de
+    toute façon — le test ne prouverait rien. Les poids sont réglables par
+    `.env`, donc la garde doit tenir sans dépendre de cette coïncidence.
+    """
+    harness, registry = build(reputation=None, settings=settings_for(score_weight_reputation=10))
+    session = await registry.open("CA1")
+    session.signals.voice = VoiceSignal(risk=1.0, windows_analyzed=2)
+
+    await harness.pipeline.contact_replied("CA1", denied=True)
+
+    fired = harness.of_type("score")[-1].data["breakers_fired"]
+    assert "trusted_contact_denied" in fired
+    assert "voice_alone_capped" not in fired, (
+        "le plafond voix a écrasé le démenti du proche : le score retombe sous 85"
+    )
+    assert harness.last_score >= 85

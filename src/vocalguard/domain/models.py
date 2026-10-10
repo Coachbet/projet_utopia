@@ -103,6 +103,19 @@ class ReputationSignal:
     identity_mismatch: bool = False
     reasons: tuple[str, ...] = ()
 
+    contact_denied: bool = False
+    """Le vrai proche a répondu au SMS que ce n'est pas lui qui appelle.
+
+    La seule personne qui sache trancher l'a tranché : c'est le signal le plus
+    fort du système. Porté ici parce qu'un démenti est de la vérification
+    d'identité, comme `identity_mismatch`.
+
+    Attention, la source de vérité n'est pas cet objet : il est reconstruit à
+    neuf à chaque vérification de réputation. `ScoringPipeline` garde le démenti
+    en état par appel et le réinjecte ici — un démenti est un fait sur l'appel,
+    pas sur le numéro.
+    """
+
 
 @dataclass(slots=True)
 class SignalSet:

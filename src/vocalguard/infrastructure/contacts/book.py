@@ -18,25 +18,49 @@ from vocalguard.domain.models import Contact
 logger = logging.getLogger(__name__)
 
 _NON_DIAL = re.compile(r"[^\d+]")
+_FR = "+33"
 
 
 def normalize_number(raw: str) -> str:
-    """Forme comparable d'un numéro de téléphone.
+    """Forme comparable d'un numéro de téléphone, en E.164 quand c'est possible.
 
-    Le carnet d'adresses est saisi à la main ("06 12 34 56 78") et Twilio
-    renvoie de l'E.164 ("+33612345678") : sans normalisation, un proche connu
-    passerait pour un numéro inconnu et gonflerait le score à tort.
+    Le carnet d'adresses est saisi à la main ("06 12 34 56 78", "+33 (0)6 …") et
+    Twilio renvoie de l'E.164 ("+33612345678"). Sans normalisation complète, un
+    proche connu passe pour un numéro inconnu : `identity_mismatch` s'arme, le
+    coupe-circuit plancher le score à 85, et on met en attente un vrai
+    petit-fils. C'est exactement le faux positif que le projet veut éviter.
+
+    Hypothèse assumée : un numéro écrit en national (commençant par 0) est
+    français. C'est la limite du système — un numéro romain saisi
+    "06 1234 5678" devient "+33…". La lever demanderait un indicatif de pays
+    par contact, que le carnet ne porte pas.
     """
     if not raw:
         return ""
     cleaned = _NON_DIAL.sub("", raw.strip())
+    if not cleaned:
+        return ""
     # Un "+" ne vaut qu'en tête ; "00" est son équivalent composé.
     cleaned = cleaned[:1] + cleaned[1:].replace("+", "")
+
     if cleaned.startswith("00"):
         cleaned = "+" + cleaned[2:]
-    # Numéro national français : 0X XX XX XX XX -> +33XXXXXXXXX.
     elif cleaned.startswith("0") and len(cleaned) == 10:
-        cleaned = "+33" + cleaned[1:]
+        # National français : 0X XX XX XX XX -> +33XXXXXXXXX.
+        cleaned = _FR + cleaned[1:]
+    elif not cleaned.startswith(("+", "0")):
+        # E.164 écrit sans son "+" ("33612345678"). Les numéros commençant par 0
+        # sont exclus : ils sont nationaux ou malformés, jamais internationaux —
+        # mieux vaut les laisser visiblement cassés que leur inventer un
+        # indicatif plausible ("06123456789" ne doit pas devenir "+06123456789").
+        cleaned = "+" + cleaned
+
+    if cleaned.startswith(_FR + "0"):
+        # Convention "+33 (0)6 …" : aucun abonné français ne commence par 0
+        # après l'indicatif, donc ce 0 est le préfixe interurbain. On n'en
+        # retire qu'un seul — au-delà le numéro est de toute façon malformé, et
+        # le maquiller en numéro plausible serait pire que de le laisser tel quel.
+        cleaned = _FR + cleaned[len(_FR) + 1 :]
     return cleaned
 
 
@@ -61,7 +85,13 @@ class JsonContactBook:
 
     def __init__(self, contacts: Sequence[Contact] = ()) -> None:
         self._contacts = tuple(contacts)
-        self._by_number = {normalize_number(c.phone_number): c for c in self._contacts}
+        self._by_number: dict[str, Contact] = {}
+        for contact in self._contacts:
+            key = normalize_number(contact.phone_number)
+            # Une clé vide ferait passer un appelant sans numéro pour un contact
+            # connu, donc ferait *baisser* le score à tort : le sens dangereux.
+            if key:
+                self._by_number[key] = contact
 
     @classmethod
     def from_path(cls, path: str | Path) -> JsonContactBook:

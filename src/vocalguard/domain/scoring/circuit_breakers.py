@@ -2,7 +2,23 @@
 et qu'un signal peu fiable déclenche seul une intervention.
 
 Un coupe-circuit renvoie un plancher (`floor`) ou un plafond (`cap`) appliqué
-au score pondéré. Les planchers sont appliqués avant les plafonds.
+au score pondéré. Les planchers sont appliqués avant les plafonds, donc **un
+plafond gagne contre un plancher** — c'est pourquoi le plafond « voix seule »
+doit s'effacer devant un démenti du proche (cf. coupe-circuit 4).
+
+Les cinq règles, par ordre de définition :
+
+1. `payment_request_with_identity_mismatch` — plancher 85.
+2. `llm_high_confidence` — plancher 65.
+3. `keywords_alone_watch` — plancher 40, filet anti-latence.
+4. `voice_alone_capped` — plafond 64, la voix ne décide jamais seule.
+5. `trusted_contact_denied` — plancher 85.
+
+Pourquoi la 5 compte structurellement : sans elle et sans la 1, **85 est
+mathématiquement hors d'atteinte**. Les poids hors voix plafonnent à
+45 + 20 + 15 = 80, et le signal voix vaut 0 tant que `torch` n'est pas installé
+(`make install-voice`). Toute la mise en attente du scammeur reposait donc sur
+un seul coupe-circuit ; il y en a maintenant deux, indépendants.
 """
 
 from __future__ import annotations
@@ -33,6 +49,7 @@ PAYMENT_MARKERS = (
 LLM_HIGH_CONFIDENCE = 0.9
 KEYWORDS_ALONE_FLOOR = 40
 KEYWORDS_ALONE_TRIGGER = 0.6
+CONTACT_DENIED_FLOOR = 85
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,10 +92,21 @@ def evaluate(signals: SignalSet, weighted_score: float, weights: Weights) -> lis
         fired.append(BreakerResult(floor=KEYWORDS_ALONE_FLOOR, name="keywords_alone_watch"))
 
     # 4. La voix synthétique seule ne dépasse jamais 64.
+    #    Sauf si le proche a démenti : le plafond existe pour empêcher la VOIX de
+    #    décider seule, et un démenti humain est précisément une preuve non
+    #    vocale. Sans cette exception, le plafond écraserait le plancher de la
+    #    règle 5 (les plafonds sont appliqués après les planchers) et un « non »
+    #    du vrai Lucas retomberait à 64, soit sous le seuil d'intervention.
     voice = signals.voice
-    if voice is not None and voice.risk > 0:
+    denied = reputation is not None and reputation.contact_denied
+    if voice is not None and voice.risk > 0 and not denied:
         non_voice = weighted_score - weights.voice * voice.risk
         if non_voice < VOICE_ALONE_MARGIN:
             fired.append(BreakerResult(cap=VOICE_ALONE_CAP, name="voice_alone_capped"))
+
+    # 5. Le vrai proche répond que ce n'est pas lui qui appelle. La seule
+    #    personne qui puisse trancher l'a tranché : on force l'intervention.
+    if denied:
+        fired.append(BreakerResult(floor=CONTACT_DENIED_FLOOR, name="trusted_contact_denied"))
 
     return fired
