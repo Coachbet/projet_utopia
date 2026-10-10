@@ -212,7 +212,19 @@ class ScoringPipeline:
         await self._publish_score(session)
 
     async def _check_reputation(self, session: CallSession) -> None:
-        if self._reputation is None or not session.caller_number:
+        if self._reputation is None:
+            # Configuration assumée (rejeu, tests) : rien à signaler.
+            return
+        if not session.caller_number:
+            # Arrive si le flux média démarre sans le webhook entrant qui porte
+            # le `From`. Sans numéro, pas de signal réputation, donc le
+            # coupe-circuit paiement + identité ne peut jamais s'armer — et rien
+            # ne le dirait. D'où ce warning explicite plutôt qu'un retour muet.
+            logger.warning(
+                "appel %s sans numéro appelant : signal réputation désactivé, "
+                "le coupe-circuit paiement + identité ne peut pas s'armer",
+                session.call_id,
+            )
             return
         try:
             signal = await self._reputation.check(
@@ -247,3 +259,48 @@ class ScoringPipeline:
             },
         )
         return assessment
+
+
+def build_pipeline(settings: Settings, registry: SessionRegistry) -> ScoringPipeline:
+    """Câble la moitié Dev 2 : les quatre signaux et le moteur de score.
+
+    Vit ici et pas dans `interface/app.py` : ce sont les adapters de Dev 2, donc
+    en ajouter un ne doit pas obliger à éditer le fichier de Dev 1.
+
+    Imports tardifs : `torch` (installé seulement par `make install-voice`) et
+    `boto3` (qui veut des credentials) ne doivent pas être exigés pour démarrer
+    le serveur.
+    """
+    from vocalguard.infrastructure.contacts.book import JsonContactBook
+    from vocalguard.infrastructure.keywords.detector import KeywordDetector
+    from vocalguard.infrastructure.telephony.reputation import TwilioReputationChecker
+
+    if settings.transcribe_backend == "fake":
+        # Démo entièrement hors ligne : même interrupteur que la transcription,
+        # pour ne pas avoir deux façons de dire « sans AWS ».
+        from vocalguard.infrastructure.fakes.doubles import FakeContentAnalyzer
+
+        analyzer: ContentAnalyzer = FakeContentAnalyzer()
+    else:
+        from vocalguard.infrastructure.aws.bedrock_analyzer import BedrockContentAnalyzer
+
+        analyzer = BedrockContentAnalyzer()
+
+    def voice_factory() -> VoiceDetector:
+        from vocalguard.infrastructure.voice.synthetic_detector import (
+            Wav2VecVoiceDetector,
+        )
+
+        # Une fabrique et pas une instance : le détecteur accumule des fenêtres
+        # de 4 s, et en partager un entre deux appels donnerait un score absurde.
+        return Wav2VecVoiceDetector()
+
+    contacts = JsonContactBook.from_path(settings.contacts_path)
+    return ScoringPipeline(
+        registry=registry,
+        keyword_engine=KeywordDetector(),
+        content_analyzer=analyzer,
+        reputation_checker=TwilioReputationChecker(contacts=contacts, settings=settings),
+        voice_detector_factory=voice_factory,
+        settings=settings,
+    )

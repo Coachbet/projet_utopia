@@ -365,9 +365,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         results.append(check_bedrock(settings, session))
         if args.skip_transcribe:
-            results.append(
-                Result("Transcribe", True, "non testé (--skip-transcribe)", warn=True)
-            )
+            results.append(Result("Transcribe", True, "non testé (--skip-transcribe)", warn=True))
         else:
             results.append(check_transcribe(settings, session))
 

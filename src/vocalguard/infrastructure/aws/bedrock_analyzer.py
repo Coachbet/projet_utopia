@@ -68,9 +68,9 @@ class BedrockContentAnalyzer:
 
     # --- Port --------------------------------------------------------------
 
-    async def analyze(self, turns: Sequence[TranscriptSegment]) -> ContentSignal | None:
-        window = self._window(turns)
-        if not window:
+    async def analyze(self, window: Sequence[TranscriptSegment]) -> ContentSignal | None:
+        recent = self._window(window)
+        if not recent:
             return None
         if not self._may_call():
             return None
@@ -79,7 +79,7 @@ class BedrockContentAnalyzer:
         # ne doit pas être re-sollicité à chaque segment.
         self._last_call_at = time.monotonic()
 
-        body = self._request_body(window)
+        body = self._request_body(recent)
         try:
             client = self._get_client()
             response = await asyncio.to_thread(

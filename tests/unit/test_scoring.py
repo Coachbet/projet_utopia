@@ -13,11 +13,13 @@ Les actions (attente, annonce, SMS) ne sont plus ici : elles appartiennent à
 
 from __future__ import annotations
 
+import logging
+import sys
 from collections.abc import Sequence
 
 import pytest
 
-from vocalguard.application.scoring import ScoringPipeline
+from vocalguard.application.scoring import ScoringPipeline, build_pipeline
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.config import Settings
 from vocalguard.domain.events import Event, EventType
@@ -33,6 +35,7 @@ from vocalguard.domain.ports import (
     ContactBook,
     ContentAnalyzer,
     EventSink,
+    KeywordEngine,
     ReputationChecker,
     VoiceDetector,
 )
@@ -589,3 +592,95 @@ async def test_an_injected_clock_drives_the_event_timestamps():
     await session.on_segment(seg("virement urgent", t=7.0))
 
     assert [e.t for e in recorder.events] == [7.0, 7.0, 7.0]
+
+
+# --- build_pipeline : le câblage vit côté Dev 2 ----------------------------
+
+
+def _registry_for(settings: Settings) -> SessionRegistry:
+    return SessionRegistry(
+        transcriber_factory=FakeTranscriber, sink=InMemoryEventSink(), settings=settings
+    )
+
+
+def test_build_pipeline_wires_the_four_signals():
+    """`build_pipeline` vit dans scoring.py et non dans `interface/app.py` :
+    ajouter un adapter de Dev 2 ne doit pas obliger à éditer le fichier de Dev 1."""
+    settings = settings_for(transcribe_backend="fake")
+    pipeline = build_pipeline(settings, _registry_for(settings))
+
+    assert isinstance(pipeline, ScoringPipeline)
+    assert isinstance(pipeline, EventSink)
+
+    assert isinstance(pipeline._keywords, KeywordEngine)
+    assert isinstance(pipeline._content, ContentAnalyzer)
+    assert isinstance(pipeline._reputation, ReputationChecker)
+    # La voix est une fabrique, pas une instance : un détecteur par appel, sinon
+    # les fenêtres de 4 s de deux appels se mélangent.
+    assert callable(pipeline._voice_factory)
+
+
+def test_build_pipeline_stays_offline_with_the_fake_backend():
+    """`transcribe_backend=fake` est l'unique interrupteur « sans AWS » : il doit
+    aussi écarter Bedrock, sinon une démo hors ligne appelle quand même Claude."""
+    settings = settings_for(transcribe_backend="fake")
+    pipeline = build_pipeline(settings, _registry_for(settings))
+    assert type(pipeline._content).__name__ == "FakeContentAnalyzer"
+
+
+def test_build_pipeline_does_not_load_the_voice_stack():
+    """La fabrique voix ne doit pas être appelée au câblage.
+
+    `torch` n'est installé que par `make install-voice` (~2 Go) : construire le
+    pipeline ne doit même pas charger le module du détecteur. On vérifie
+    l'absence du module et pas seulement celle de `torch`, sinon le test
+    passerait tout seul sur une machine où torch n'est pas installé.
+    """
+    voice_module = "vocalguard.infrastructure.voice.synthetic_detector"
+    sys.modules.pop(voice_module, None)
+
+    settings = settings_for(transcribe_backend="fake")
+    build_pipeline(settings, _registry_for(settings))
+
+    assert voice_module not in sys.modules
+    assert "torch" not in sys.modules
+
+
+# --- Le numéro appelant manquant ne doit pas échouer en silence ------------
+
+
+async def test_an_empty_caller_number_is_warned_about(caplog):
+    """Si le flux média démarre sans le webhook qui porte le `From`, le signal
+    réputation ne part jamais et le coupe-circuit à 85 ne peut pas s'armer.
+    Sans log, on chercherait le bug dans le moteur de score."""
+    harness, registry = build(reputation=CountingReputation())
+    session = await registry.open("CA_SANS_NUMERO")
+
+    with caplog.at_level(logging.WARNING, logger="vocalguard.application.scoring"):
+        await session.on_segment(seg("bonjour"))
+
+    assert harness.of_type("reputation") == []
+    assert "CA_SANS_NUMERO" in caplog.text
+    assert "réputation" in caplog.text
+
+
+async def test_a_valid_caller_number_warns_about_nothing(caplog):
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+
+    with caplog.at_level(logging.WARNING, logger="vocalguard.application.scoring"):
+        await session.on_segment(seg("bonjour"))
+
+    assert harness.of_type("reputation")
+    assert caplog.text == ""
+
+
+async def test_no_reputation_checker_configured_is_not_a_warning(caplog):
+    """Rejeu et tests tournent sans vérificateur : c'est assumé, pas un défaut."""
+    _, registry = build(reputation=None)
+    session = await registry.open("CA1")
+
+    with caplog.at_level(logging.WARNING, logger="vocalguard.application.scoring"):
+        await session.on_segment(seg("bonjour"))
+
+    assert caplog.text == ""

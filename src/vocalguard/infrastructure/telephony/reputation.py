@@ -128,7 +128,7 @@ class TwilioReputationChecker:
         return differs, contact
 
     async def check(
-        self, phone_number: str, claimed_identity: str | None = None
+        self, phone_number: str, *, claimed_identity: str | None = None
     ) -> ReputationSignal:
         number = normalize_number(phone_number)
         line_type = await self._line_type(number)

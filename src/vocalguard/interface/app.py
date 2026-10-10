@@ -18,16 +18,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from vocalguard.application.intervention import InterventionRunner
-from vocalguard.application.scoring import ScoringPipeline
+from vocalguard.application.scoring import ScoringPipeline, build_pipeline
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.config import Settings, get_settings
-from vocalguard.domain.ports import (
-    AudioConsumer,
-    ContentAnalyzer,
-    EventSink,
-    Transcriber,
-    VoiceDetector,
-)
+from vocalguard.domain.ports import AudioConsumer, EventSink, Transcriber
 from vocalguard.infrastructure.fakes.call_controller import LoggingCallController
 from vocalguard.infrastructure.fakes.event_sink import ConsoleEventSink, FanOutSink
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
@@ -110,7 +104,7 @@ def create_app(
         settings=settings,
         registry=registry,
     )
-    pipeline = _scoring_pipeline(settings, registry)
+    pipeline = build_pipeline(settings, registry)
 
     # L'ordre compte : l'intervention avant le pipeline, pour qu'un `score` soit
     # traité avant que le segment suivant ne le remplace ; le pipeline en
@@ -188,42 +182,3 @@ def _subscribe_dashboard(fanout: FanOutSink) -> None:
     except ImportError:
         return
     fanout.add(HUB)
-
-
-def _scoring_pipeline(settings: Settings, registry: SessionRegistry) -> ScoringPipeline:
-    """Câble la moitié Dev 2 : les quatre signaux et le moteur de score.
-
-    Imports tardifs : `torch` et `boto3` ne doivent pas être exigés pour
-    démarrer le serveur, et `make install-voice` est optionnel.
-    """
-    from vocalguard.infrastructure.contacts.book import JsonContactBook
-    from vocalguard.infrastructure.keywords.detector import KeywordDetector
-    from vocalguard.infrastructure.telephony.reputation import TwilioReputationChecker
-
-    if settings.transcribe_backend == "fake":
-        # Démo entièrement hors ligne : même interrupteur que la transcription,
-        # pour ne pas avoir deux façons de dire « sans AWS ».
-        from vocalguard.infrastructure.fakes.doubles import FakeContentAnalyzer
-
-        analyzer: ContentAnalyzer = FakeContentAnalyzer()
-    else:
-        from vocalguard.infrastructure.aws.bedrock_analyzer import BedrockContentAnalyzer
-
-        analyzer = BedrockContentAnalyzer()
-
-    def voice_factory() -> VoiceDetector:
-        from vocalguard.infrastructure.voice.synthetic_detector import (
-            Wav2VecVoiceDetector,
-        )
-
-        return Wav2VecVoiceDetector()
-
-    contacts = JsonContactBook.from_path(settings.contacts_path)
-    return ScoringPipeline(
-        registry=registry,
-        keyword_engine=KeywordDetector(),
-        content_analyzer=analyzer,
-        reputation_checker=TwilioReputationChecker(contacts=contacts, settings=settings),
-        voice_detector_factory=voice_factory,
-        settings=settings,
-    )
