@@ -1,4 +1,30 @@
 {
+  "_notes": [
+    "Gabarit du carnet. Copier en data/contacts.json (gitignoré) et remplir avec",
+    "les VRAIS numéros. Clé ignorée par JsonContactBook.from_path.",
+    "",
+    "`owner` est le prénom de la personne protégée. Il sert au SMS de",
+    "vérification (« si c'est bien toi qui appelles Jeanne en ce moment… ») :",
+    "sans lui, le SMS parle d'un appel sans dire chez qui il arrive.",
+    "",
+    "`mode` est OPTIONNEL et vaut `trusted` par défaut — être au carnet, c'est",
+    "être de confiance. Un appel `trusted` est transmis tel quel : aucune annonce",
+    "à l'appelant, aucun flux audio ouvert, aucune transcription. C'est la",
+    "promesse produit (la famille n'est pas écoutée), pas un réglage de",
+    "performance.",
+    "",
+    "`mode: \"analyze\"` traite l'appelant comme un inconnu (annonce puis",
+    "analyse) tout en gardant son nom au carnet pour le reconnaître à l'écran.",
+    "C'est ce qu'on veut pour une banque, un démarcheur toléré, ou un numéro dont",
+    "on doute : voir « Banque Crédit Mutuel » ci-dessous.",
+    "",
+    "RÈGLE DE DÉMO À NE PAS CASSER : le numéro de Lucas Martin doit être le vrai",
+    "téléphone du proche de confiance, celui-là même que .env déclare en",
+    "TRUSTED_CONTACT_PHONE_NUMBER — c'est lui qui reçoit « Est-ce toi qui appelles",
+    "en ce moment ? » et le code de vérification. Et il doit être DIFFÉRENT du",
+    "téléphone depuis lequel le faux arnaqueur appelle, sinon identity_mismatch ne",
+    "s'arme pas et le score ne dépasse jamais l'alerte."
+  ],
   "owner": "Jeanne Moreau",
   "contacts": [
     {
@@ -35,7 +61,8 @@
       "name": "Banque Crédit Mutuel",
       "phone_number": "+33969321234",
       "relation": "banque",
-      "aliases": ["crédit mutuel", "ma banque", "conseiller bancaire"]
+      "aliases": ["crédit mutuel", "ma banque", "conseiller bancaire"],
+      "mode": "analyze"
     }
   ]
 }

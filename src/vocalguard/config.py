@@ -122,9 +122,7 @@ class Settings(BaseSettings):
     qui ment sur l'identité de l'appelant ne doit jamais pouvoir agir en
     silence."""
 
-    caller_notice_text: str = (
-        "Cet appel est analysé par un service de protection contre la fraude."
-    )
+    caller_notice_text: str = "Cet appel est analysé par un service de protection contre la fraude."
     """Phrase dite à l'APPELANT inconnu, à lui seul, avant tout flux audio.
 
     C'est la pièce centrale du montage juridique : on n'analyse que ce qui suit
