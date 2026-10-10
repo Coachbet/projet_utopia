@@ -73,8 +73,7 @@ def _apply(signals: SignalSet, event: dict) -> None:
             signals.keywords = KeywordSignal(
                 risk=d["risk"],
                 hits=tuple(
-                    KeywordHit(term=t, weight=3, category="demo")
-                    for t in d.get("terms", ())
+                    KeywordHit(term=t, weight=3, category="demo") for t in d.get("terms", ())
                 ),
             )
         case "voice":

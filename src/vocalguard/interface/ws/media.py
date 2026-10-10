@@ -14,6 +14,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from vocalguard.infrastructure.telephony.media_stream import StreamStart, parse_frame
+from vocalguard.interface.lifecycle import release_call
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +54,14 @@ async def media_stream(websocket: WebSocket) -> None:
         log.exception("Erreur dans le media stream")
     finally:
         if session is not None:
-            await session.aclose()
+            # C'est LE chemin de nettoyage fiable : la fermeture du stream arrive
+            # toujours quand l'appel se termine, alors que le `StatusCallback` de
+            # la jambe entrante est configuré sur le numéro dans la console
+            # Twilio et peut ne jamais nous être posté.
+            # `release_call` passe par `registry.close()`, qui appelle déjà
+            # `session.aclose()` : le faire aussi ici serait redondant (inoffensif,
+            # `aclose` est idempotent, mais trompeur à relire).
+            await release_call(websocket.app.state, session.call_id)
 
 
 async def _attach(registry, frame: StreamStart):

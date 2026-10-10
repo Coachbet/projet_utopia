@@ -63,8 +63,7 @@ DEFAULT_THRESHOLDS = Thresholds()
 # Courts et sans jargon : la victime les entend une seule fois, sous stress.
 
 ANNOUNCE_ALERT = (
-    "Attention, cet appel présente des signes d'arnaque. "
-    "Ne donnez aucune information bancaire."
+    "Attention, cet appel présente des signes d'arnaque. Ne donnez aucune information bancaire."
 )
 
 SMS_VERIFY_CONTACT = "Est-ce toi qui appelles en ce moment ?"
@@ -112,7 +111,5 @@ def plan_actions(
     actions.append(
         PlannedAction(ActionKind.ANNOUNCE_VICTIM, "victim", announce_intervene(contact_name))
     )
-    actions.append(
-        PlannedAction(ActionKind.SMS_CONTACT, "trusted_contact", SMS_VERIFY_CONTACT)
-    )
+    actions.append(PlannedAction(ActionKind.SMS_CONTACT, "trusted_contact", SMS_VERIFY_CONTACT))
     return tuple(actions)

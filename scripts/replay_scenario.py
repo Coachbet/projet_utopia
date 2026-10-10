@@ -199,6 +199,44 @@ class LateBoundSink:
             await self.handler(event)
 
 
+class ScenarioClock:
+    """L'horloge de la session pendant un rejeu : le temps du scénario.
+
+    Seul l'événement `transcript` porte un `t` explicite (celui du tour). Tous
+    les événements dérivés — `keyword`, `llm`, `reputation`, `score`, `action` —
+    passent par `session.emit()` sans `t` et héritent donc de l'horloge de la
+    session. Avec l'horloge murale et `--no-wait`, ils tombaient tous à ~0 s
+    pendant que les transcripts s'étalaient sur la durée de l'appel : la frise
+    montrait une conversation de 90 s et tous les scores empilés à l'origine.
+
+    Démarrer à 0.0 n'est pas cosmétique : `CallSession` retient
+    `started_at = clock()` à la construction et calcule `t() = clock() - started_at`.
+    La session étant ouverte avant le premier tour, `started_at` vaut 0.0 et
+    `t()` rend exactement le `t` du scénario.
+
+    La même horloge sert les deux cadences. En mode cadencé, temps du scénario et
+    temps réel coïncident déjà à peu près, donc rien n'est dégradé — et les
+    événements dérivés gagnent même d'être datés du tour qui les a provoqués
+    plutôt que de la latence d'analyse qui a suivi.
+    """
+
+    def __init__(self) -> None:
+        self._t = 0.0
+
+    def advance_to(self, t: float) -> None:
+        """Avance au tour courant, jamais en arrière.
+
+        `max()` plutôt qu'une affectation : `Event.t` est `ge=0` et une horloge
+        qui recule ferait lever pydantic sur le premier événement dérivé. Les
+        tours sont triés au chargement, mais l'horloge n'a pas à faire confiance
+        à son appelant pour une garantie que le contrat d'événement exige.
+        """
+        self._t = max(self._t, t)
+
+    def __call__(self) -> float:
+        return self._t
+
+
 def _contact_book(settings: Any) -> JsonContactBook:
     """Le carnet réel s'il existe, sinon celui d'exemple.
 
@@ -254,10 +292,12 @@ async def replay(
     sink = FanOutSink(*sinks)
 
     transcriber = FakeTranscriber()
+    scenario_clock = ScenarioClock()
     registry = SessionRegistry(
         transcriber_factory=lambda: transcriber,
         sink=sink,
         settings=settings,
+        clock=scenario_clock,
     )
 
     # Le runner écrit ses événements `action` dans le même sink : ils s'affichent
@@ -293,6 +333,8 @@ async def replay(
 
     # `registry.open` démarre déjà la session : un `session.start()` de plus
     # ouvrirait un second jeu de streams de transcription.
+    # Ouverte avant d'avoir avancé l'horloge : la session prend donc 0.0 comme
+    # origine, et `session.t()` rend ensuite le temps du scénario tel quel.
     await registry.open(
         scenario.call_id,
         caller_number=scenario.caller_number,
@@ -308,6 +350,11 @@ async def replay(
                 delay = turn.t / speed - (time.monotonic() - started)
                 if delay > 0:
                     await asyncio.sleep(delay)
+
+            # Avant de pousser le tour, pas après : les signaux et le score sont
+            # émis en réaction immédiate au transcript, et doivent porter le `t`
+            # du tour qui les a provoqués.
+            scenario_clock.advance_to(turn.t)
 
             await transcriber.say(turn.speaker, turn.text, t=turn.t, is_final=turn.is_final)
 
@@ -385,9 +432,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Rejoue un ou plusieurs scénarios d'appel dans le pipeline complet.",
     )
-    parser.add_argument(
-        "scenarios", nargs="+", type=Path, help="fichiers JSON de scénario"
-    )
+    parser.add_argument("scenarios", nargs="+", type=Path, help="fichiers JSON de scénario")
     parser.add_argument(
         "--speed",
         type=float,

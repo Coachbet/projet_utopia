@@ -36,9 +36,7 @@ def _settings() -> Settings:
 
 
 async def _play(scenario_name: str) -> tuple[InMemoryEventSink, list]:
-    scenario = json.loads(
-        (ROOT / "scenarios" / scenario_name).read_text(encoding="utf-8")
-    )
+    scenario = json.loads((ROOT / "scenarios" / scenario_name).read_text(encoding="utf-8"))
     observed = InMemoryEventSink()
     app = create_app(_settings(), sink=observed)
 
@@ -113,8 +111,7 @@ async def test_identity_mismatch_is_detected_through_the_whole_chain():
 
     scores = _scores(sink)
     assert any(
-        "payment_request_with_identity_mismatch" in s.get("breakers_fired", [])
-        for s in scores
+        "payment_request_with_identity_mismatch" in s.get("breakers_fired", []) for s in scores
     )
 
 

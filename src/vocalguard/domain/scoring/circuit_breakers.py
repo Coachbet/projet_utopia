@@ -62,9 +62,7 @@ def evaluate(signals: SignalSet, weighted_score: float, weights: Weights) -> lis
         and reputation is not None
         and reputation.identity_mismatch
     ):
-        fired.append(
-            BreakerResult(floor=85, name="payment_request_with_identity_mismatch")
-        )
+        fired.append(BreakerResult(floor=85, name="payment_request_with_identity_mismatch"))
 
     # 2. Claude très sûr de lui : au minimum l'alerte, quels que soient les autres.
     if content is not None and content.risk >= LLM_HIGH_CONFIDENCE:

@@ -25,6 +25,7 @@ from vocalguard.infrastructure.telephony.twiml import (
     inbound_call_twiml,
     join_conference_twiml,
 )
+from vocalguard.interface.lifecycle import release_call
 
 log = logging.getLogger(__name__)
 
@@ -135,14 +136,31 @@ async def voice_hold_music() -> Response:
 
 @router.post("/voice/status")
 async def voice_status(request: Request) -> Response:
-    """Fin d'appel : on libère la session, sinon les streams Transcribe fuient."""
+    """Fin d'appel : on libère tout l'état, sinon il fuit d'un appel au suivant.
+
+    Ce webhook est le filet, pas le chemin principal : le `StatusCallback` de la
+    jambe entrante est configuré sur le NUMÉRO dans la console Twilio, pas par
+    notre code, donc il peut parfaitement ne jamais arriver. Le nettoyage fiable
+    est celui de `ws/media.py`. Les deux appellent `release_call`, qui est
+    idempotent — c'est voulu, ils arrivent souvent tous les deux.
+
+    Comportement connu et ACCEPTÉ, ne pas « corriger » : la jambe sortante vers
+    la victime poste aussi ici, avec SON PROPRE CallSid (cf. `status_callback`
+    dans `TwilioCallController.dial_victim`). Ce SID n'est pas un `call_id`
+    connu, donc la libération est un no-op inoffensif. Conséquence : si la
+    VICTIME raccroche la première, la session reste ouverte jusqu'à ce que le
+    scammeur raccroche aussi — il reste seul dans la conférence, son propre
+    statut terminal arrive alors et libère l'appel. Nettoyer sur le SID de la
+    victime demanderait de mémoriser la correspondance jambe→appel, pour
+    fermer... un appel dont le scammeur parle peut-être encore.
+    """
     form = await request.form()
     call_sid = str(form.get("CallSid") or "")
     status = str(form.get("CallStatus") or "")
     log.info("Statut d'appel %s : %s", call_sid, status)
 
     if call_sid and status in {"completed", "canceled", "failed", "busy", "no-answer"}:
-        await request.app.state.registry.close(call_sid)
+        await release_call(request.app.state, call_sid)
 
     return _xml(empty_twiml())
 

@@ -21,7 +21,9 @@ from vocalguard.config import Settings
 from vocalguard.domain.events import Event, EventType
 from vocalguard.infrastructure.fakes.event_sink import InMemoryEventSink
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
+from vocalguard.infrastructure.telephony.client import TwilioCallController
 from vocalguard.interface.app import create_app
+from vocalguard.interface.lifecycle import release_call
 
 CALL_ID = "CA_integration_01"
 STREAM_SID = "MZ_integration_01"
@@ -221,3 +223,139 @@ def test_fin_d_appel_libere_la_session(harness):
 
     assert app.state.registry.get(CALL_ID) is None
     assert client.get("/healthz").json()["active_calls"] == []
+
+
+# --- Libération de l'état d'appel ------------------------------------------
+#
+# L'état d'un appel vit à trois endroits qui ne se connaissent pas (session,
+# pipeline de score, contrôleur Twilio) et deux déclencheurs indépendants
+# annoncent la fin de l'appel. Les tests ci-dessous vérifient les trois purges et
+# les deux chemins : c'est la fuite qui se verrait au deuxième appel de démo.
+
+
+@pytest.fixture
+def controller_twilio(harness):
+    """Remplace la doublure de log par le vrai contrôleur, sans credentials.
+
+    `LoggingCallController` ne tient aucun état par appel, donc il ne peut rien
+    prouver sur la purge du cache de conférence. `TwilioCallController` sans
+    client Twilio ne joint jamais le réseau mais porte bien ce cache, et partage
+    la file d'annonces de l'app comme dans `create_app`.
+    """
+    _, app, _, _ = harness
+    controller = TwilioCallController(app.state.settings, announcements=app.state.announcements)
+    app.state.controller = controller
+    return controller
+
+
+def test_statut_terminal_purge_les_trois_etats(harness, controller_twilio):
+    client, app, transcriber, _ = harness
+    client.post(
+        "/twilio/voice/inbound",
+        data={"CallSid": CALL_ID, "From": "+33755555555", "To": "+33600000000"},
+    )
+    asyncio.run(_dire(transcriber))
+    # Le SID de conférence est normalement mémorisé par le premier appel REST ;
+    # ici on le pose à la main, aucun réseau n'est joignable dans ce test.
+    controller_twilio._conference_sids[CALL_ID] = "CF_integration_01"
+    app.state.announcements.queue(CALL_ID, "Annonce jamais prononcée")
+
+    pipeline = app.state.pipeline
+    assert CALL_ID in pipeline._reputation_done, "sans état avant, le test ne prouve rien"
+
+    client.post("/twilio/voice/status", data={"CallSid": CALL_ID, "CallStatus": "completed"})
+
+    assert app.state.registry.get(CALL_ID) is None
+    # L'état interne du pipeline : c'est lui qui empêchait le second appel de
+    # refaire sa vérification de réputation.
+    assert CALL_ID not in pipeline._reputation_done
+    assert CALL_ID not in pipeline._llm_in_flight
+    assert CALL_ID not in pipeline._claimed_identity
+    # Le contrôleur : un SID de conférence périmé ferait agir sur un appel mort,
+    # et une annonce orpheline serait prononcée pendant l'appel suivant.
+    assert controller_twilio._conference_sids == {}
+    assert app.state.announcements.pending(CALL_ID) == ()
+
+
+def test_fermeture_du_media_stream_libere_l_appel(harness):
+    """Le chemin de nettoyage FIABLE : le `StatusCallback` de la jambe entrante
+    est configuré sur le numéro dans la console Twilio et peut ne jamais arriver,
+    alors que la fermeture du stream accompagne toujours la fin de l'appel."""
+    client, app, _, _ = harness
+    client.post("/twilio/voice/inbound", data={"CallSid": CALL_ID, "From": "+1555", "To": "+1555"})
+
+    with client.websocket_connect("/ws/media") as ws:
+        ws.send_text(_start_frame())
+        ws.send_text(_media_frame("inbound", 0))
+        assert app.state.registry.get(CALL_ID) is not None
+
+    assert app.state.registry.active() == [], "le registre grossissait à chaque appel"
+    assert client.get("/healthz").json()["active_calls"] == []
+
+
+def test_le_second_appel_refait_sa_verification_de_reputation(harness):
+    """La régression qui compterait devant le jury : rejouer la démo.
+
+    Le pipeline ne vérifie la réputation qu'une fois par `call_id`. Sans purge,
+    le deuxième appel n'émettait plus de `reputation` — donc plus de « numéro
+    inconnu » ni de mismatch d'identité, le signal le plus parlant du pitch.
+    """
+    client, _, transcriber, sink = harness
+    comptes = []
+
+    for _ in range(2):
+        sink.clear()
+        client.post(
+            "/twilio/voice/inbound",
+            data={"CallSid": CALL_ID, "From": "+33755555555", "To": "+33600000000"},
+        )
+        asyncio.run(_dire(transcriber))
+        client.post("/twilio/voice/status", data={"CallSid": CALL_ID, "CallStatus": "completed"})
+        comptes.append(len(sink.by_type(EventType.REPUTATION)))
+
+    # Pas de compte en dur : ce qui doit tenir est que le second appel produise
+    # le même signal que le premier, quel que soit le nombre de vérifications que
+    # le chemin LLM ajoute.
+    assert comptes[1] >= 1, "le second appel n'émettait plus aucune réputation"
+    assert comptes[1] == comptes[0]
+
+
+def test_un_statut_non_terminal_ne_libere_rien(harness, controller_twilio):
+    """`in-progress` arrive au décrochage : libérer là couperait l'appel vivant."""
+    client, app, transcriber, _ = harness
+    client.post(
+        "/twilio/voice/inbound",
+        data={"CallSid": CALL_ID, "From": "+33755555555", "To": "+33600000000"},
+    )
+    asyncio.run(_dire(transcriber))
+    controller_twilio._conference_sids[CALL_ID] = "CF_integration_01"
+
+    client.post("/twilio/voice/status", data={"CallSid": CALL_ID, "CallStatus": "in-progress"})
+
+    assert app.state.registry.get(CALL_ID) is not None
+    assert CALL_ID in app.state.pipeline._reputation_done
+    assert controller_twilio._conference_sids == {CALL_ID: "CF_integration_01"}
+
+
+def test_liberer_un_appel_inconnu_ne_leve_pas(harness):
+    """Deux raisons d'arriver ici avec un `call_id` inconnu, les deux normales :
+    les deux déclencheurs de libération se chevauchent (donc le second est un
+    no-op), et la jambe sortante vers la victime poste sur `/twilio/voice/status`
+    avec SON PROPRE CallSid, qui n'est pas un `call_id` de chez nous."""
+    client, app, _, _ = harness
+    client.post("/twilio/voice/inbound", data={"CallSid": CALL_ID, "From": "+1555", "To": "+1555"})
+
+    # Le statut terminal de la jambe victime : l'appel du scammeur doit survivre.
+    client.post(
+        "/twilio/voice/status",
+        data={"CallSid": "CA_jambe_victime", "CallStatus": "completed"},
+    )
+    assert app.state.registry.get(CALL_ID) is not None
+
+    asyncio.run(release_call(app.state, "CA_jamais_vu"))
+    asyncio.run(release_call(app.state, ""))
+
+    # Et deux libérations du même appel : la seconde est silencieuse.
+    asyncio.run(release_call(app.state, CALL_ID))
+    asyncio.run(release_call(app.state, CALL_ID))
+    assert app.state.registry.active() == []

@@ -206,6 +206,15 @@ class SessionRegistry:
 
     Mémoire seulement : une démo de hackathon n'a pas besoin de survivre à un
     redémarrage, et ça évite une dépendance de plus à la base.
+
+    `clock` est un point d'extension et pas un détail de test : le rejeu de
+    scénario (`make replay`) doit pouvoir imposer le temps du scénario, parce que
+    seul l'événement `transcript` porte un `t` explicite — tous les événements
+    dérivés (`keyword`, `llm`, `reputation`, `score`, `action`) prennent celui de
+    `CallSession.t()`. Avec l'horloge murale et `--no-wait`, ils s'empilent donc
+    tous à ~0 s alors que les transcripts s'étalent sur la durée de l'appel : la
+    frise du dashboard devient illisible et `make replay` ne répète plus la démo,
+    il la ment.
     """
 
     def __init__(
@@ -215,16 +224,29 @@ class SessionRegistry:
         sink: EventSink,
         settings: Settings,
         audio_tap_factory: Callable[[CallSession], AudioConsumer | None] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._transcriber_factory = transcriber_factory
         self._sink = sink
         self._settings = settings
         self._audio_tap_factory = audio_tap_factory
+        self._clock = clock
         self._sessions: dict[str, CallSession] = {}
 
     async def open(
-        self, call_id: str, *, caller_number: str = "", victim_number: str = ""
+        self,
+        call_id: str,
+        *,
+        caller_number: str = "",
+        victim_number: str = "",
+        clock: Callable[[], float] | None = None,
     ) -> CallSession:
+        """Ouvre (ou retrouve) la session de `call_id`.
+
+        `clock=None` signifie « celle du registre » : un appelant qui n'a rien à
+        dire sur le temps n'a rien à passer, et le rejeu peut quand même imposer
+        son horloge appel par appel.
+        """
         existing = self._sessions.get(call_id)
         if existing is not None:
             # Twilio rejoue un webhook en cas de timeout : ouvrir deux fois la
@@ -239,6 +261,7 @@ class SessionRegistry:
             settings=self._settings,
             caller_number=caller_number,
             victim_number=victim_number,
+            clock=self._clock if clock is None else clock,
         )
         if self._audio_tap_factory is not None:
             session.audio_tap = self._audio_tap_factory(session)

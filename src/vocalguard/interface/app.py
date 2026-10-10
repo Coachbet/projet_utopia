@@ -33,7 +33,7 @@ from vocalguard.infrastructure.fakes.event_sink import ConsoleEventSink, FanOutS
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
 from vocalguard.infrastructure.telephony.announcements import AnnouncementStore
 from vocalguard.infrastructure.telephony.client import TwilioCallController
-from vocalguard.interface.http import webhooks
+from vocalguard.interface.http import control, webhooks
 from vocalguard.interface.ws import media
 
 log = logging.getLogger(__name__)
@@ -145,6 +145,9 @@ def create_app(
 
     app.include_router(webhooks.router)
     app.include_router(media.router)
+    # Import direct, pas via `_mount_dashboard` : le panneau de contrôle fait
+    # partie de la moitié Dev 1, son absence serait un bug à voir au démarrage.
+    app.include_router(control.router)
     _mount_dashboard(app)
 
     @app.get("/healthz")

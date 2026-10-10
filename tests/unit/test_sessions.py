@@ -231,3 +231,96 @@ async def test_t_est_monotone_et_jamais_negatif() -> None:
     # Une horloge qui revient en arrière ne doit pas produire un `t` négatif :
     # le contrat d'événement l'interdit (ge=0) et la validation lèverait.
     assert session.t() == 0.0
+
+
+class FakeClock:
+    """L'horloge qu'un rejeu de scénario injecte : avancée à la main."""
+
+    def __init__(self, start: float = 0.0) -> None:
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+
+async def test_le_registre_propage_son_horloge_a_la_session() -> None:
+    """Sans ce passage de relais, le rejeu de scénario subit l'horloge murale et
+    tous les événements dérivés s'empilent à 0 s."""
+    clock = FakeClock()
+    registry = SessionRegistry(
+        transcriber_factory=FakeTranscriber,
+        sink=InMemoryEventSink(),
+        settings=_settings(),
+        clock=clock,
+    )
+
+    session = await registry.open("CA1")
+
+    assert session.t() == 0.0
+    clock.now = 42.0
+    assert session.t() == 42.0
+
+
+async def test_l_horloge_de_open_prime_sur_celle_du_registre() -> None:
+    registry = SessionRegistry(
+        transcriber_factory=FakeTranscriber,
+        sink=InMemoryEventSink(),
+        settings=_settings(),
+        clock=FakeClock(1000.0),
+    )
+    par_appel = FakeClock()
+
+    session = await registry.open("CA1", clock=par_appel)
+
+    par_appel.now = 7.5
+    assert session.t() == 7.5
+
+
+async def test_un_registre_sans_horloge_garde_le_temps_reel() -> None:
+    """Non-régression : l'injection est un point d'extension, pas un changement
+    de comportement par défaut."""
+    registry = SessionRegistry(
+        transcriber_factory=FakeTranscriber, sink=InMemoryEventSink(), settings=_settings()
+    )
+
+    session = await registry.open("CA1")
+
+    # L'horloge murale avance toute seule : deux lectures ne rendent pas le même
+    # instant figé, contrairement à une horloge injectée.
+    premiere = session.t()
+    seconde = session.t()
+    assert 0.0 <= premiere < seconde
+
+
+async def test_un_evenement_sans_t_explicite_suit_l_horloge_injectee() -> None:
+    """Le vrai bug : `transcript` porte le `t` du segment, mais `keyword`, `llm`,
+    `score` et `action` passent par `emit()` sans `t` — c'est donc à ce niveau
+    que l'horloge du scénario doit se voir."""
+    clock = FakeClock()
+    sink = InMemoryEventSink()
+    registry = SessionRegistry(
+        transcriber_factory=FakeTranscriber, sink=sink, settings=_settings(), clock=clock
+    )
+    session = await registry.open("CA1")
+
+    clock.now = 12.0
+    await session.emit(EventType.SCORE, {"score": 80})
+
+    (event,) = sink.by_type(EventType.SCORE)
+    assert event.t == 12.0
+
+
+async def test_une_horloge_qui_recule_n_emet_pas_de_t_negatif() -> None:
+    clock = FakeClock(50.0)
+    sink = InMemoryEventSink()
+    registry = SessionRegistry(
+        transcriber_factory=FakeTranscriber, sink=sink, settings=_settings(), clock=clock
+    )
+    session = await registry.open("CA1")
+
+    clock.now = 10.0
+    # `Event.t` est `ge=0` : sans le plancher, pydantic lèverait ici.
+    await session.emit(EventType.KEYWORD, {"hits": []})
+
+    (event,) = sink.by_type(EventType.KEYWORD)
+    assert event.t == 0.0
