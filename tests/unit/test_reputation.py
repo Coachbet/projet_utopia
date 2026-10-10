@@ -152,14 +152,14 @@ async def test_known_contact_normalized_form() -> None:
 
 
 async def test_real_grandson_calling_is_not_a_mismatch() -> None:
-    signal = await make_checker().check("+33612345678", "Lucas, petit-fils")
+    signal = await make_checker().check("+33612345678", claimed_identity="Lucas, petit-fils")
     assert signal.identity_mismatch is False
     assert signal.risk <= 0.1
 
 
 async def test_identity_mismatch_dominates() -> None:
     """L'appelant se dit Lucas, mais Lucas a un autre numéro."""
-    signal = await make_checker().check(SCAMMER, "Lucas, votre petit-fils")
+    signal = await make_checker().check(SCAMMER, claimed_identity="Lucas, votre petit-fils")
     assert signal.identity_mismatch is True
     assert signal.risk >= 0.9
     assert "numéro différent de celui de Lucas Martin" in signal.reasons
@@ -167,7 +167,9 @@ async def test_identity_mismatch_dominates() -> None:
 
 async def test_unknown_claimed_identity_is_not_a_mismatch() -> None:
     """Conservateur : sans vérité terrain, on ne contredit personne."""
-    signal = await make_checker().check(SCAMMER, "Commandant Dupont, police nationale")
+    signal = await make_checker().check(
+        SCAMMER, claimed_identity="Commandant Dupont, police nationale"
+    )
     assert signal.identity_mismatch is False
     assert signal.risk < 0.9
 
@@ -183,7 +185,7 @@ async def test_non_fixed_voip_worse_than_mobile() -> None:
 
 async def test_mismatch_on_voip_is_maximal() -> None:
     checker = make_checker(FakeLookup("nonFixedVoip"))
-    signal = await checker.check(SCAMMER, "Lucas")
+    signal = await checker.check(SCAMMER, claimed_identity="Lucas")
     assert signal.risk == 1.0
 
 
@@ -212,7 +214,7 @@ async def test_line_type_cached_per_number() -> None:
     fake = FakeLookup("nonFixedVoip")
     checker = make_checker(fake)
     first = await checker.check(SCAMMER)
-    second = await checker.check(SCAMMER, "Lucas")
+    second = await checker.check(SCAMMER, claimed_identity="Lucas")
     assert len(fake.calls) == 1
     assert first.line_type is second.line_type is LineType.NON_FIXED_VOIP
     assert second.identity_mismatch is True
