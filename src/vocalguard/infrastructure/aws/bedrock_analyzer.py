@@ -186,22 +186,31 @@ def parse_content_signal(text: str) -> ContentSignal | None:
     if not text:
         return None
 
-    # Le préremplissage « { » n'est pas renvoyé par le modèle : on tente le
-    # texte tel quel, puis le texte recollé à son accolade ouvrante.
-    payload = _first_json_object(text) or _first_json_object(_ASSISTANT_PREFILL + text)
-    if payload is None:
-        return None
-
-    risk = _clamped_risk(payload.get("risk"))
-    if risk is None:
-        return None
-
-    return ContentSignal(
-        risk=risk,
-        tactics=_string_tuple(payload.get("tactics")),
-        claimed_identity=_optional_string(payload.get("claimed_identity")),
-        explanation=_optional_string(payload.get("explanation")) or "",
-    )
+    # Le préremplissage « { » n'est pas renvoyé par le modèle : on essaie donc
+    # d'abord le texte recollé à son accolade ouvrante, puis le texte tel quel,
+    # et on retient le premier candidat qui porte un `risk` exploitable.
+    #
+    # L'ordre ET le double essai comptent. Claude ajoute parfois une clé
+    # imbriquée de son cru (un objet « budget » avec des compteurs de tokens).
+    # Sans l'accolade de tête, le scanner s'arrêtait sur cette imbrication et
+    # renvoyait un dictionnaire parfaitement valide mais sans `risk` ; comme il
+    # était non-nul, le `or` court-circuitait le second essai et le signal du
+    # LLM — 45 points, le plus lourd — disparaissait en silence. Mesuré sur
+    # Bedrock : une réponse sur trois.
+    for candidate in (_ASSISTANT_PREFILL + text, text):
+        payload = _first_json_object(candidate)
+        if payload is None:
+            continue
+        risk = _clamped_risk(payload.get("risk"))
+        if risk is None:
+            continue
+        return ContentSignal(
+            risk=risk,
+            tactics=_string_tuple(payload.get("tactics")),
+            claimed_identity=_optional_string(payload.get("claimed_identity")),
+            explanation=_optional_string(payload.get("explanation")) or "",
+        )
+    return None
 
 
 def _clamped_risk(value: Any) -> float | None:

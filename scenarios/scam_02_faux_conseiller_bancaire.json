@@ -1,0 +1,23 @@
+{
+  "title": "Faux conseiller bancaire",
+  "notes": "Teste l'identité INSTITUTIONNELLE, un chemin différent de celui du faux petit-fils : l'identité revendiquée se rapproche du contact « Banque Crédit Mutuel » par sa relation (« banque »), pas par un prénom. Le numéro appelant n'est pas celui de la banque au carnet, donc identity_mismatch s'arme et le coupe-circuit paiement + identité porte le score à 85. ATTENTION, fragilité connue de la doublure : la formulation naturelle « je suis votre conseiller du Crédit Mutuel » ne produit AUCUNE identité revendiquée avec FakeContentAnalyzer (sa regex exige un mot capitalisé juste après « c'est »). Le scénario répète donc la revendication sous forme d'annonce, ce que fait de toute façon un démarcheur. Avec le vrai Claude, « conseiller de la banque » se rapproche aussi par la relation.",
+  "call_id": "CA_DEMO_SCAM_02",
+  "caller_number": "+33757000111",
+  "expect": {
+    "min_score": 85,
+    "level": "intervene"
+  },
+  "turns": [
+    { "t": 1.0, "speaker": "caller", "text": "Bonjour, madame Moreau ? Je suis votre conseiller du Crédit Mutuel, service sécurité des comptes." },
+    { "t": 7.0, "speaker": "victim", "text": "Ah bonjour... mais je n'ai pas l'habitude qu'on m'appelle" },
+    { "t": 11.0, "speaker": "caller", "text": "C'est Banque Crédit Mutuel, service anti-fraude. Nous avons détecté des opérations suspectes sur votre compte ce matin." },
+    { "t": 18.0, "speaker": "victim", "text": "Des opérations suspectes ? Mon Dieu, mais je n'ai rien fait moi" },
+    { "t": 23.0, "speaker": "caller", "text": "Ne vous inquiétez pas, nous allons bloquer tout ça. Mais il faut agir tout de suite, sinon le prélèvement passe cette nuit." },
+    { "t": 30.0, "speaker": "caller", "text": "Pour sécuriser vos fonds, je vais vous faire faire un virement vers votre nouveau compte protégé. Vous avez votre carte bancaire sous les yeux ?" },
+    { "t": 38.0, "speaker": "victim", "text": "Oui elle est là, dans mon porte-monnaie" },
+    { "t": 42.0, "speaker": "caller", "text": "Parfait. Donnez-moi les seize chiffres, et le code à trois chiffres derrière." },
+    { "t": 49.0, "speaker": "victim", "text": "Vous êtes sûr ? On m'a dit de ne jamais donner ça au téléphone" },
+    { "t": 55.0, "speaker": "caller", "text": "C'est une procédure interne, l'enquête est confidentielle. Ne parlez de cet appel à personne, même pas à votre famille, cela pourrait compromettre la procédure." },
+    { "t": 64.0, "speaker": "caller", "text": "Restez bien en ligne avec moi, ne raccrochez surtout pas, je vous accompagne jusqu'au bout." }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "title": "Vraie urgence familiale (test de faux positif le plus dur)",
+  "notes": "Le cas le plus difficile du jeu, et le seul qui compte vraiment pour le jury : la vraie fille, depuis son vrai numéro du carnet, avec une urgence authentique. Elle est pressée, bouleversée, parle d'hôpital et d'argent — tout ce qu'un moteur de mots-clés déteste. Le seul rempart est la réputation : numéro connu, identité revendiquée cohérente, donc aucun identity_mismatch et aucun coupe-circuit armé. Doit rester sous 40 : une mise en attente ici couperait un appel d'urgence réel, ce qui serait bien plus grave que de rater une arnaque.",
+  "call_id": "CA_DEMO_LEGIT_02",
+  "caller_number": "+33698765432",
+  "expect": {
+    "max_score": 39,
+    "level": "none"
+  },
+  "turns": [
+    { "t": 1.0, "speaker": "caller", "text": "Maman ? Maman c'est Camille, écoute-moi, il faut que je te dise quelque chose" },
+    { "t": 7.0, "speaker": "victim", "text": "Camille ? Qu'est-ce qu'il y a, tu as une voix bizarre" },
+    { "t": 12.0, "speaker": "caller", "text": "Lucas a eu un accident avec son scooter ce matin. Il est à l'hôpital, aux urgences de Saint-Antoine." },
+    { "t": 20.0, "speaker": "victim", "text": "Oh mon Dieu... il est blessé ? Dis-moi qu'il n'a rien" },
+    { "t": 26.0, "speaker": "caller", "text": "Il a la jambe cassée et trois points de suture, mais il est conscient, il parle. Pardon, je pleure, j'ai eu tellement peur." },
+    { "t": 35.0, "speaker": "victim", "text": "Je veux le voir, je prends un taxi tout de suite" },
+    { "t": 40.0, "speaker": "caller", "text": "Non, attends, viens plutôt ce soir, là ils font les radios et on ne peut pas entrer. Je te rappelle dès qu'on sait." },
+    { "t": 49.0, "speaker": "victim", "text": "Bon... bon d'accord. Et le scooter, les papiers, tout ça ?" },
+    { "t": 55.0, "speaker": "caller", "text": "J'ai dû avancer deux cents euros à la pharmacie pour les attelles, la mutuelle remboursera. Ne t'inquiète pas pour l'argent, on verra ça après." },
+    { "t": 65.0, "speaker": "victim", "text": "Tu me diras, je te rendrai ça" },
+    { "t": 70.0, "speaker": "caller", "text": "On en parlera plus tard maman. Je te rappelle dans une heure, promis. Je t'embrasse." }
+  ]
+}

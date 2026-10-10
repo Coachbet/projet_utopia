@@ -8,6 +8,8 @@ pas encore répondu. Un faux positif ici allume le dashboard sur un vrai appel.
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 
 import pytest
 
@@ -236,6 +238,178 @@ def test_legitimate_calls_stay_low(detector, turns_text):
     turns = [turn(text, t=float(i * 5)) for i, text in enumerate(turns_text)]
     signal = detector.scan_call(turns)
     assert signal.risk < 0.3, f"faux positif : {signal.terms}"
+
+
+# --- Robustesse à la sortie d'Amazon Transcribe ----------------------------
+# Le lexique a été calibré sur du français écrit : majuscules, ponctuation,
+# apostrophes, orthographe correcte. Transcribe ne produit rien de tout ça.
+# Ces dégradations sont déterministes et SIMULÉES : elles couvrent la moitié
+# prévisible du problème, pas les erreurs de reconnaissance sur les noms
+# propres (« Lucas » -> « Luca »), traitées par les alias du carnet d'adresses.
+
+
+def _strip_punctuation(text: str) -> str:
+    return re.sub(r"[.,;:!?…]", " ", text)
+
+
+def _strip_apostrophes(text: str) -> str:
+    return re.sub(r"['’ʼ‘`]", " ", text)  # noqa: RUF001 — variantes voulues
+
+
+def _strip_accents(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def _insert_fillers(text: str) -> str:
+    """Glisse « euh » après les mots qui ouvrent une expression du lexique."""
+    return re.sub(
+        r"\b(carte|code|ne|virement|tout|j'ai|j ai|je|il)\b(\s)",
+        r"\1\2euh\2",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+
+def _degrade_lower(text: str) -> str:
+    return _strip_punctuation(text.lower())
+
+
+def _degrade_no_apostrophe(text: str) -> str:
+    return _strip_apostrophes(_degrade_lower(text))
+
+
+def _degrade_no_accent(text: str) -> str:
+    return _strip_accents(_degrade_no_apostrophe(text))
+
+
+def _degrade_filler(text: str) -> str:
+    return _insert_fillers(_degrade_no_accent(text))
+
+
+# Du plus propre au plus abîmé. Chaque étape cumule les précédentes.
+ASR_LEVELS = (
+    ("clean", str),
+    ("lower_no_punct", _degrade_lower),
+    ("no_apostrophe", _degrade_no_apostrophe),
+    ("no_accent", _degrade_no_accent),
+    ("filler", _degrade_filler),
+)
+
+_SCAM_GRANDCHILD = (
+    "Mamie c'est Lucas, j'ai changé de numéro",
+    "J'ai eu un accident, j'ai un gros problème",
+    "Il me faut de l'argent tout de suite",
+    "Tu peux acheter des cartes cadeaux, un coursier va passer",
+    "Surtout ne dis rien à papa, ça reste entre nous",
+)
+
+_SCAM_BANK = (
+    "Bonjour, je suis du service des fraudes de votre banque",
+    "Il y a un virement urgent suspect sur votre compte",
+    "Donnez-moi le code reçu par SMS immédiatement",
+    "Ne raccrochez pas et n'appelez pas la banque",
+)
+
+# Les répliques de l'appelant de `scenarios/scam_01_petit_fils.json`, recopiées
+# plutôt que relues sur disque : les deux autres scripts de ce fichier sont
+# écrits pour le test et sont plus denses en termes à risque, donc ils gardent
+# de la marge même en perdant des termes. Celui-ci est le vrai script de la
+# démo, et c'est LUI qui tombait à 0,43 sous les hésitations. C'est donc la
+# seule des trois qui mesure vraiment la tolérance.
+_SCAM_DEMO_SCRIPT = (
+    "Mamie ? Mamie c'est Lucas, tu m'entends ?",
+    "Oui c'est le téléphone, j'ai cassé le mien. Écoute, j'ai eu un accident avec la voiture.",
+    "Non ça va mais il faut payer le garage tout de suite sinon ils gardent la voiture.",
+    "Il faut faire un virement de deux mille euros maintenant, c'est urgent.",
+    "Je t'explique, tu me donnes le code de ta carte bancaire et je m'occupe de tout.",
+    "Et surtout ne dis rien à maman, elle va s'inquiéter pour rien. "
+    "Reste bien au téléphone avec moi.",
+)
+
+_LEGIT_FAMILY = (
+    "Allô mamie, c'est Lucas",
+    "Je passe te voir dimanche, j'apporte le gâteau",
+    "Tu veux que je prenne du pain en arrivant ?",
+)
+
+
+@pytest.mark.parametrize("level,degrade", ASR_LEVELS, ids=[n for n, _ in ASR_LEVELS])
+@pytest.mark.parametrize(
+    "script",
+    [_SCAM_GRANDCHILD, _SCAM_BANK, _SCAM_DEMO_SCRIPT],
+    ids=["grandchild", "bank", "demo_script"],
+)
+def test_scam_still_fires_the_trigger_on_degraded_asr(detector, level, degrade, script):
+    """Une hésitation au mauvais endroit ne doit pas désarmer le coupe-circuit.
+
+    Mesuré avant correctif : l'insertion de « euh » faisait tomber le scénario
+    de démo de 0,96 à 0,43, donc SOUS `KEYWORDS_ALONE_TRIGGER`. Les mots-clés
+    sont le filet quand Claude est lent — un filet qui lâche sur du texte
+    d'ASR réel n'est pas un filet.
+    """
+    turns = [turn(degrade(text), t=float(i * 6)) for i, text in enumerate(script)]
+    signal = detector.scan_call(turns)
+    assert signal.risk >= KEYWORDS_ALONE_TRIGGER, (
+        f"dégradation « {level} » : risque {signal.risk}, termes {signal.terms}"
+    )
+
+
+@pytest.mark.parametrize("level,degrade", ASR_LEVELS, ids=[n for n, _ in ASR_LEVELS])
+def test_legitimate_call_does_not_drift_up_on_degraded_asr(detector, level, degrade):
+    """La tolérance ajoutée ne doit pas élargir les termes vers l'innocent."""
+    turns = [turn(degrade(text), t=float(i * 5)) for i, text in enumerate(_LEGIT_FAMILY)]
+    signal = detector.scan_call(turns)
+    assert signal.risk < 0.3, f"dégradation « {level} » : faux positif {signal.terms}"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "c'est urgent",
+        "c est urgent",
+        "c’est urgent",  # noqa: RUF001 — apostrophe courbe de l'ASR
+    ],
+)
+def test_apostrophe_is_interchangeable_with_a_space(detector, text):
+    assert "c'est urgent" in detector.scan(text).terms
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "carte cadeau",
+        "carte euh cadeau",
+        "carte heu cadeau",
+        "cartes euh cadeaux",
+    ],
+)
+def test_one_filler_between_words_is_absorbed(detector, text):
+    assert "carte cadeau" in detector.scan(text).terms
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Un mot quelconque n'est pas une hésitation : « carte » et « cadeau »
+        # ne doivent pas se rejoindre à travers une phrase.
+        "j'ai acheté une carte postale et un cadeau",
+        "ta carte de fidélité, et le cadeau est pour toi",
+        # Deux hésitations de suite dépassent la tolérance bornée.
+        "carte euh euh cadeau",
+    ],
+)
+def test_filler_tolerance_stays_bounded(detector, text):
+    assert "carte cadeau" not in detector.scan(text).terms
+
+
+def test_segment_boundary_holds_even_with_fillers(detector):
+    """Le séparateur ne traverse pas le point qui recolle deux segments."""
+    turns = [
+        turn("je ne euh dis", t=0.0),
+        turn("rien à personne de bien", t=1.0),
+    ]
+    assert detector.scan_call(turns).terms == ()
 
 
 # --- Surcharge du lexique par Biz 1 ----------------------------------------

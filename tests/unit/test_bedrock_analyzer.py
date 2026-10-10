@@ -269,3 +269,36 @@ def test_parse_content_signal_is_usable_standalone():
     """Utilisé par le scénario rejoué et les fakes, sans passer par Bedrock."""
     assert parse_content_signal(SCAM_JSON) is not None
     assert parse_content_signal("rien") is None
+
+
+def test_extra_nested_key_without_the_prefilled_brace():
+    """Régression mesurée sur Bedrock : une réponse sur trois était perdue.
+
+    Claude ajoute parfois une clé imbriquée de son cru. Comme le préremplissage
+    « { » n'est pas renvoyé, le scanner d'objet s'arrêtait sur cette
+    imbrication, renvoyait un dictionnaire valide mais sans `risk`, et le
+    court-circuit du `or` empêchait le second essai : le signal du LLM — 45
+    points, le plus lourd — disparaissait sans erreur visible.
+    """
+    observed = (
+        '\n  "risk": 0.95,'
+        '\n  "tactics": ["urgence", "paiement inhabituel"],'
+        '\n  "claimed_identity": "Lucas, petit-fils",'
+        '\n  "explanation": "Demande de virement immédiat.",'
+        '\n  "budget": {'
+        '\n    "tokens_used": 1247,'
+        '\n    "tokens_remaining": 198753'
+        "\n  }"
+        "\n}"
+    )
+    signal = parse_content_signal(observed)
+    assert signal is not None, "la clé imbriquée fait de nouveau perdre le signal"
+    assert signal.risk == 0.95
+    assert signal.claimed_identity == "Lucas, petit-fils"
+
+
+def test_prefilled_brace_is_not_required_to_be_absent():
+    """L'autre sens doit continuer de marcher : réponse complète, accolade incluse."""
+    signal = parse_content_signal('{"risk": 0.4, "tactics": [], "explanation": "ok"}')
+    assert signal is not None
+    assert signal.risk == 0.4

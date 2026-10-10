@@ -44,14 +44,41 @@ def normalize(text: str) -> str:
     return "".join(c for c in folded if not unicodedata.combining(c))
 
 
-def _term_pattern(term: str) -> str:
-    """Un terme -> un fragment de regex tolérant au pluriel et aux traits d'union.
+# Hésitations que Transcribe transcrit au milieu d'une expression (« carte euh
+# bancaire »). Liste fermée et volontairement courte : tolérer un mot
+# quelconque entre deux mots d'un terme laisserait « carte » et « bancaire » se
+# rejoindre à travers une phrase entière.
+_FILLERS = ("euh", "heu", "hein", "hum", "hm", "ben", "bah")
 
-    `[sx]?` couvre les deux pluriels français (« cartes cadeaux ») et `[\\s-]+`
-    rend le trait d'union optionnel, l'ASR ne le plaçant pas de façon fiable.
+# Séparateur entre deux mots d'un terme. L'apostrophe y est admise au même
+# titre qu'une espace : l'ASR écrit aussi bien « c'est » que « c est », et les
+# mots des termes sont découpés sur l'apostrophe (voir `_term_pattern`).
+# Au plus UNE hésitation, pour que la tolérance reste bornée.
+_SEPARATOR = rf"['\s-]+(?:(?:{'|'.join(_FILLERS)})['\s-]+)?"
+
+# Un `[sx]?` sur un mot d'une ou deux lettres n'a pas de sens (les mots
+# fonctionnels ne se pluralisent pas) et ferait matcher « js » ou « cs ».
+_MIN_PLURAL_LEN = 3
+
+
+def _term_pattern(term: str) -> str:
+    """Un terme -> un fragment de regex tolérant aux écarts prévisibles de l'ASR.
+
+    Trois tolérances, chacune mesurée sur du texte dégradé :
+      - `[sx]?` couvre les deux pluriels français (« cartes cadeaux ») ;
+      - le séparateur rend le trait d'union ET l'apostrophe optionnels, l'ASR
+        ne les plaçant pas de façon fiable (« c est urgent ») ;
+      - il absorbe une hésitation (« ne euh dis rien à »), qui sinon faisait
+        tomber le signal de l'appel de démo de 0,96 à 0,43 — sous le seuil du
+        coupe-circuit `keywords_alone_watch`.
+
+    Le séparateur ne traverse jamais un point, donc une expression ne peut
+    toujours pas se former à la jonction de deux segments (`_SEGMENT_JOIN`).
     """
-    words = [w for w in re.split(r"[\s-]+", normalize(term)) if w]
-    body = r"[\s-]+".join(re.escape(w) + "[sx]?" for w in words)
+    words = [w for w in re.split(r"['\s-]+", normalize(term)) if w]
+    body = _SEPARATOR.join(
+        re.escape(w) + ("[sx]?" if len(w) >= _MIN_PLURAL_LEN else "") for w in words
+    )
     return rf"\b{body}\b"
 
 

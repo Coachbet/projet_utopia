@@ -1,0 +1,22 @@
+{
+  "title": "Fausse autorité — gendarmerie",
+  "notes": "L'archétype qui révèle un TROU DE COUVERTURE, et le bloc `expect` ci-dessous encode ce trou, pas un objectif. Mesuré : pic 52, niveau « vigilance », AUCUN coupe-circuit, ZÉRO action. Autrement dit, un appel qui réclame deux mille euros par virement au nom de la gendarmerie, avec mandat, secret de l'instruction et consigne de ne pas raccrocher, ne produit RIEN d'audible : ni annonce à la victime, ni SMS au proche. Pourquoi : l'identité revendiquée (« Brigadier ») est absente du carnet, donc identity_mismatch ne peut pas s'armer, donc le coupe-circuit paiement + identité ne peut pas tirer ; et le risque de contenu (0,66 avec la doublure) reste sous le seuil de 0,9 du coupe-circuit llm_high_confidence. Hors coupe-circuit, le plafond structurel est 45 + 20 + 15 = 80, le signal voix valant 0 sans torch. Trois remèdes possibles, à trancher en équipe : un coupe-circuit « fausse autorité + paiement » qui n'exige aucun rapprochement d'identité, l'ajout des institutions usurpées au carnet (gendarmerie, impôts, banque) pour rendre le rapprochement possible, ou le démenti du proche par SMS. Si un correctif fait monter ce scénario, ce test échouera — c'est voulu, il faut alors relire ces notes et mettre à jour l'attente.",
+  "call_id": "CA_DEMO_SCAM_03",
+  "caller_number": "+33757000222",
+  "expect": {
+    "min_score": 50,
+    "level": "watch"
+  },
+  "turns": [
+    { "t": 1.0, "speaker": "caller", "text": "Madame Jeanne Moreau ? C'est Brigadier Mercier, de la gendarmerie nationale." },
+    { "t": 7.0, "speaker": "victim", "text": "La gendarmerie ? Qu'est-ce qui se passe ?" },
+    { "t": 11.0, "speaker": "caller", "text": "Votre identité a été utilisée dans une affaire de blanchiment d'argent. Votre nom apparaît sur des virements frauduleux." },
+    { "t": 19.0, "speaker": "victim", "text": "Mais ce n'est pas possible, je n'ai jamais fait ça !" },
+    { "t": 24.0, "speaker": "caller", "text": "Nous le savons, madame, vous êtes victime. Mais il y a un mandat à votre nom, et si rien n'est fait avant ce soir, une garde à vue est possible." },
+    { "t": 33.0, "speaker": "victim", "text": "Une garde à vue ? À mon âge ? Mais je ne comprends rien" },
+    { "t": 39.0, "speaker": "caller", "text": "Il faut verser une caution judiciaire immédiatement pour suspendre la procédure. Deux mille euros, par virement, maintenant." },
+    { "t": 48.0, "speaker": "victim", "text": "Deux mille euros... je ne sais même pas comment on fait" },
+    { "t": 53.0, "speaker": "caller", "text": "Je vous guide. Et je dois vous rappeler que l'instruction est secrète : vous ne devez parler de cet appel à personne, ni à votre fille, ni à votre banque." },
+    { "t": 63.0, "speaker": "caller", "text": "Ne quittez pas la ligne, c'est une procédure continue. Si vous raccrochez, le dossier part au parquet." }
+  ]
+}
