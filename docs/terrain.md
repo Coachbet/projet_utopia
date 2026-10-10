@@ -364,14 +364,17 @@ savoir avant de coder.**
 1. Monter un appel de test (celui du §3 ou du §7 convient : on cumule).
 2. Pendant l'appel, sur le combiné de la personne protégée, **appuyer sur `1`, puis `2`,
    puis `#`**, en espaçant d'une seconde.
-3. Observer le journal de `make run`. Les trames `dtmf` sont **parsées puis ignorées** au
-   niveau de la session (`application/sessions.py` : « connected / mark / dtmf : rien à
-   faire au niveau de la session »), donc il n'y a **pas encore de ligne de log dédiée**.
-   Deux façons de voir quelque chose :
-   - `LOG_LEVEL=DEBUG make run` et chercher toute mention de `dtmf` dans le flux ;
-   - sinon, **demander à l'agent qui tient `media_stream.py` / `sessions.py` un log
-     temporaire d'une ligne** sur la branche `dtmf`. C'est une modification de code :
-     elle ne relève pas de ce document.
+3. Observer le journal de `make run`. **Rien à régler** : `CallSession._on_dtmf` trace
+   chaque touche reçue au niveau `INFO`, et la trace est posée **avant** le branchement
+   vers la vérification, précisément pour que cette vérification terrain soit possible
+   sans toucher au code ni passer tout le serveur en `DEBUG`. Chercher :
+
+   ```
+   touche '1' reçue sur l'appel CAxxxxxxxx
+   ```
+
+   Aucune ligne de ce genre = Twilio ne pousse pas le DTMF dans ce flux. C'est une
+   réponse, pas une panne.
 4. Refaire l'essai en appuyant depuis le **téléphone appelant** : les deux pistes ne se
    comportent pas forcément pareil. Noter les deux résultats séparément.
 
@@ -387,8 +390,9 @@ Trace exacte relevée (coller la ligne) :
 
 **Si c'est non** — ce n'est pas un échec, c'est une réponse. Conséquences à acter :
 
-1. le déclencheur « appuyez sur 1 » **ne sera pas implémenté** (ne pas écrire du code
-   mort ni l'annoncer au jury) ;
+1. le déclencheur « appuyez sur 1 » **est déjà câblé** (`CallSession.dtmf_hook` →
+   `IdentityVerifier.on_dtmf`) mais reste **inerte** : la touche n'arrivant jamais, il
+   n'y a rien à retirer et surtout **rien à annoncer au jury** ;
 2. le déclencheur principal du Lot 2 reste `POST /control/calls/{call_id}/verify`,
    appelé par le bouton de l'app et du dashboard — ce qui est de toute façon le seul qui
    fonctionne aussi sur les **appels de confiance**, où aucun flux audio n'est ouvert ;

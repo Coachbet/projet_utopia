@@ -115,7 +115,7 @@ print(b.owner, '|', b.by_number(normalize_number('+336XXXXXXXX')))"
 |---|---|---|---|
 | 0:00 | **Narrateur** | app : « Protection active » | « Jeanne a 82 ans. Elle a gardé son numéro. Son fils l'appelle. » |
 | 0:08 | **Thomas** compose le numéro public de Jeanne | dashboard : rien encore | tonalité |
-| 0:12 | l'opérateur renvoie vers Twilio, `/twilio/voice/inbound` décide | dashboard : nouvel appel, bandeau **vert**, `action: trusted_passthrough`, « **appel de confiance, non analysé** » | **silence côté Thomas — aucune annonce** |
+| 0:12 | l'opérateur renvoie vers Twilio, `/twilio/voice/inbound` décide | dashboard : nouvel appel, bandeau **vert**, `action: trusted_passthrough`, « **Appel de confiance : transmis, non analysé** » | **silence côté Thomas — aucune annonce** |
 | 0:15 | l'app sonne | app, en grand : « **Appel de Thomas Moreau** · *Contact de confiance* » | sonnerie |
 | 0:20 | **Jeanne** décroche dans l'app | app : écran en appel, **pas de niveau de risque** | « Allô ? » |
 | 0:24 | **Thomas** *(d'après `legit_01_famille.json`, « Lucas » → « Thomas »)* | | « Salut maman, je ne te réveille pas ? » |
@@ -175,9 +175,9 @@ c'est précisément la formulation qui fait monter le score.
 |---|---|---|---|
 | 0:00 | **Narrateur** | dashboard vide | « Même numéro, même Jeanne. Cette fois, l'appelant n'est dans aucun carnet. » |
 | 0:05 | **L'appelant** compose le numéro public | | tonalité |
-| 0:10 | `/twilio/voice/inbound`, branche « inconnu » | dashboard : nouvel appel, bandeau **gris**, « inconnu — appel analysé » | **l'appelant entend l'annonce** : « *Cet appel est analysé par un service de protection contre la fraude.* » (`CALLER_NOTICE_TEXT`) |
+| 0:10 | `/twilio/voice/inbound`, branche « inconnu » | dashboard : nouvel appel, bandeau **gris**, « Appelant informé de l'analyse » | **l'appelant entend l'annonce** : « *Cet appel est analysé par un service de protection contre la fraude.* » (`CALLER_NOTICE_TEXT`) |
 | 0:14 | **Narrateur**, pendant l'annonce | | « Il vient d'être **informé**. C'est ce qui rend l'analyse licite : on n'écoute que ce qui suit cette phrase. » |
-| 0:17 | l'app sonne | app : « **Numéro inconnu** · *appel analysé* » + le vrai numéro | sonnerie |
+| 0:17 | l'app sonne | app : « **Inconnu — appel analysé** » + le vrai numéro | sonnerie |
 | 0:20 | **Jeanne** décroche | app : jauge de risque à **0** | « Allô ? » |
 | 0:24 | **Appelant** *(scam_02, t=1)* | transcript qui défile sur le dashboard | « Bonjour, madame Moreau ? Je suis votre conseiller du Crédit Mutuel, service sécurité des comptes. » |
 | 0:32 | **Appelant** *(t=11)* | signal **Claude** : fausse autorité ; **réputation** : `identity_mismatch` | « C'est Banque Crédit Mutuel, service anti-fraude. Nous avons détecté des opérations suspectes sur votre compte ce matin. » |
@@ -256,7 +256,7 @@ s = get_settings(); print('demo_spoof_active =', s.demo_spoof_active)"   # doit 
 |---|---|---|---|
 | 0:00 | **Narrateur** | dashboard vide | « Dernier appel. Cette fois, l'arnaqueur a fait ses devoirs : il a **le numéro de Lucas** et **la voix de Lucas**. » |
 | 0:06 | **L'appelant** compose le numéro public ; `DEMO_SPOOF_AS` s'applique | journal de `make run` : ligne **en MAJUSCULES** signalant l'usurpation simulée | tonalité |
-| 0:12 | branche **confiance** : le numéro est au carnet | dashboard : bandeau **vert**, `action: trusted_passthrough`, « **appel de confiance, non analysé** » | **aucune annonce côté appelant** |
+| 0:12 | branche **confiance** : le numéro est au carnet | dashboard : bandeau **vert**, `action: trusted_passthrough`, « **Appel de confiance : transmis, non analysé** » | **aucune annonce côté appelant** |
 | 0:15 | l'app sonne | app : « **Appel de Lucas Martin** · *Contact de confiance* » | sonnerie |
 | 0:18 | **Narrateur** — poser le problème | | « Notre liste blanche vient de se faire avoir. Et c'est **normal** : le numéro est le bon. Aucun filtre par numéro ne peut faire mieux. » |
 | 0:22 | **Jeanne** décroche | app : écran en appel, pas de score | « Lucas ? » |
