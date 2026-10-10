@@ -479,6 +479,37 @@ def test_le_mode_lot_3_n_ecoute_que_la_personne_protegee(monter_app):
     assert [action["action"] for action in _actions(sink)] == ["trusted_passthrough"]
 
 
+def test_le_mode_lot_3_n_ouvre_qu_une_seule_transcription(monter_app):
+    """Les pistes transcrites doivent correspondre à celles que le TwiML diffuse.
+
+    Le `<Stream>` ne porte que `outbound_track` : ouvrir aussi la piste appelant
+    laisserait une connexion Transcribe facturée sur une piste qui ne recevra
+    jamais un octet. Et le symptôme serait invisible — une transcription vide ne
+    ressemble pas à une panne.
+    """
+    client, app, _ = monter_app(trusted_victim_only_analysis=True)
+
+    _appeler(client, depuis=LUCAS)
+
+    session = app.state.registry.get(CALL_ID)
+    assert session.speakers == ("victim",)
+    assert set(session._streams) == {"victim"}
+
+
+def test_un_appel_analyse_ouvre_les_deux_transcriptions(monter_app):
+    """Le cas nominal, pour que le test précédent ne puisse pas passer en
+    cassant l'analyse des inconnus : `both_tracks` porte bien les deux pistes, et
+    c'est leur séparation qui dit qui parle."""
+    client, app, _ = monter_app()
+
+    racine = _appeler(client, depuis=INCONNU)
+
+    assert racine.find("Start/Stream").get("track") == "both_tracks"
+    session = app.state.registry.get(CALL_ID)
+    assert session.speakers == ("caller", "victim")
+    assert set(session._streams) == {"caller", "victim"}
+
+
 def test_le_mode_lot_3_est_eteint_par_defaut(monter_app):
     client, app, _ = monter_app()
 

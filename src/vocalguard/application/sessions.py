@@ -62,11 +62,24 @@ class CallSession:
         victim_number: str = "",
         audio_tap: AudioConsumer | None = None,
         transcribe: bool = True,
+        speakers: tuple[Speaker, ...] = _SPEAKERS,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.call_id = call_id
         self.caller_number = caller_number
         self.victim_number = victim_number
+        self.speakers = speakers
+        """Locuteurs dont on ouvre une transcription.
+
+        Les deux par défaut : le `<Stream track="both_tracks">` du cas nominal
+        porte les deux pistes, et c'est leur séparation qui nous dit qui parle.
+
+        Restreint à `("victim",)` par le mode « analyse de la voix de l'abonnée
+        seule » (`TRUSTED_VICTIM_ONLY_ANALYSIS`), où le TwiML ne diffuse que
+        `outbound_track`. Ouvrir quand même la piste appelant y laisserait une
+        connexion Transcribe facturée sur une piste qui ne recevra jamais un
+        octet — invisible, puisqu'une transcription vide ne ressemble pas à une
+        panne."""
         self.transcribe = transcribe
         """Faux pour un appel de CONFIANCE : la session existe, mais aucune
         transcription n'est ouverte.
@@ -166,7 +179,7 @@ class CallSession:
                 self.call_id,
             )
             return
-        await asyncio.gather(*(self._open_stream(speaker) for speaker in _SPEAKERS))
+        await asyncio.gather(*(self._open_stream(speaker) for speaker in self.speakers))
 
     async def _open_stream(self, speaker: Speaker) -> None:
         """Une piste, une panne isolée : une transcription refusée ne doit jamais
@@ -214,6 +227,14 @@ class CallSession:
         l'appel ne l'est pas. Un service de vérification en panne ne doit pas
         interrompre la boucle média pour une touche pressée par curiosité.
         """
+        # Tracé AVANT le test du hook, et au niveau INFO : c'est la seule
+        # observation qui réponde à la question ouverte du Lot 0 §5 (« Twilio
+        # remonte-t-il une touche à travers un `<Start><Stream>` unidirectionnel ? »).
+        # Sans cette ligne, un « non » et un « on n'a pas su le voir » sont
+        # indistinguables, et le protocole terrain demanderait de passer tout le
+        # serveur en DEBUG pour une trame qui arrive une fois par appel.
+        logger.info("touche %r reçue sur l'appel %s", digit, self.call_id)
+
         hook = self.dtmf_hook
         if hook is None:
             return
@@ -356,6 +377,7 @@ class SessionRegistry:
         caller_number: str = "",
         victim_number: str = "",
         transcribe: bool = True,
+        speakers: tuple[Speaker, ...] = _SPEAKERS,
         clock: Callable[[], float] | None = None,
     ) -> CallSession:
         """Ouvre (ou retrouve) la session de `call_id`.
@@ -367,6 +389,10 @@ class SessionRegistry:
         `transcribe=False` ouvre une session **sans écoute**, pour un appel de
         confiance (cf. `CallSession.transcribe`). Le défaut reste `True` : tout
         appelant est analysé sauf décision explicite du routage.
+
+        `speakers` doit refléter les pistes que le TwiML diffuse réellement (cf.
+        `CallSession.speakers`) : une transcription ouverte sur une piste muette
+        est une connexion facturée qui ne ressemble à aucune panne.
         """
         existing = self._sessions.get(call_id)
         if existing is not None:
@@ -383,6 +409,7 @@ class SessionRegistry:
             caller_number=caller_number,
             victim_number=victim_number,
             transcribe=transcribe,
+            speakers=speakers,
             clock=self._clock if clock is None else clock,
         )
         if self._audio_tap_factory is not None:

@@ -300,3 +300,111 @@ def test_un_hook_qui_leve_ne_devient_pas_une_500(client, monkeypatch):
     _ouvrir_appel(client)
 
     _sms(client, "non")
+
+
+# --- L'ensemble des expéditeurs crus ----------------------------------------
+# La vérification d'identité par code (Lot 2) envoie son SMS au numéro que LE
+# CARNET connaît pour le proche revendiqué — Camille, le médecin, la voisine —
+# et pas seulement au contact du `.env`. Avec la garde d'origine, leur « NON »
+# était rejeté en silence : le texte du SMS leur demandait de répondre, et leur
+# réponse ne pesait sur rien. L'ensemble reste FERMÉ et contrôlé par la personne
+# protégée, ce qui est le point : cette garde est la seule authentification de la
+# route.
+
+CARNET_AUTRE = "+33698765432"
+"""Camille Martin dans `data/contacts.example.json` : au carnet, absente du `.env`."""
+
+
+def _app_avec_carnet(**overrides):
+    """Même montage, mais pointé sur le carnet d'exemple versionné."""
+    from pathlib import Path
+
+    racine = Path(__file__).resolve().parents[2]
+    return _app(contacts_path=racine / "data" / "contacts.example.json", **overrides)
+
+
+@pytest.fixture
+def client_carnet():
+    with TestClient(_app_avec_carnet()) as c:
+        yield c
+
+
+@pytest.fixture
+def appels_carnet(client_carnet, monkeypatch):
+    recu: list[tuple[str, bool]] = []
+
+    def contact_replied(call_id: str, *, denied: bool) -> None:
+        recu.append((call_id, denied))
+
+    _poser_hook(client_carnet.app.state.pipeline, monkeypatch, contact_replied)
+    return recu
+
+
+def test_un_non_d_un_autre_contact_du_carnet_pese_aussi(client_carnet, appels_carnet):
+    """Le cas que la garde d'origine jetait : le code est parti chez Camille."""
+    _ouvrir_appel(client_carnet)
+
+    _sms(client_carnet, "non c'est pas moi", from_number=CARNET_AUTRE)
+
+    assert appels_carnet == [(CALL_ID, True)]
+
+
+def test_le_contact_du_env_reste_cru_meme_absent_du_carnet(client_carnet, appels_carnet):
+    """Les deux sources sont réunies, pas substituées : `CONTACT` ne figure pas
+    dans le carnet d'exemple, et son démenti doit continuer de passer."""
+    _ouvrir_appel(client_carnet)
+
+    _sms(client_carnet, "non", from_number=CONTACT)
+
+    assert appels_carnet == [(CALL_ID, True)]
+
+
+def test_un_inconnu_reste_refuse_malgre_le_carnet(client_carnet, appels_carnet):
+    """Le test qui compte le plus, dans sa version élargie : l'ensemble s'ouvre
+    au carnet, pas à Internet. Notre numéro Twilio est public."""
+    _ouvrir_appel(client_carnet)
+
+    _sms(client_carnet, "non", from_number=INCONNU)
+
+    assert appels_carnet == []
+
+
+def test_un_expediteur_absent_est_refuse(client_carnet, appels_carnet):
+    """Normalisés, deux numéros vides sont ÉGAUX : sans l'écart des valeurs
+    vides, un `From` absent passerait pour un expéditeur légitime."""
+    _ouvrir_appel(client_carnet)
+
+    _sms(client_carnet, "non", from_number="")
+
+    assert appels_carnet == []
+
+
+def test_un_carnet_illisible_ne_rouvre_pas_la_route(monkeypatch, appels_recus, client):
+    """Un carnet en panne ne doit jamais élargir l'ensemble : on garde le numéro
+    du `.env`, on le dit, et l'inconnu reste refusé."""
+
+    class CarnetEnPanne:
+        """Ne casse que sur `all()`, la seule lecture qu'on veut éprouver ici.
+
+        Le routage entrant, lui, interroge `by_number` : le faire échouer aussi
+        ne prouverait rien sur la garde du SMS et empêcherait simplement d'ouvrir
+        l'appel dont ce test a besoin.
+        """
+
+        def by_number(self, phone_number):
+            return None
+
+        def by_identity(self, claimed_identity):
+            return None
+
+        def all(self):
+            raise OSError("fichier illisible")
+
+    client.app.state.contacts = CarnetEnPanne()
+    _ouvrir_appel(client)
+
+    _sms(client, "non", from_number=INCONNU)
+    assert appels_recus == []
+
+    _sms(client, "non", from_number=CONTACT)
+    assert appels_recus == [(CALL_ID, True)]

@@ -33,7 +33,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from twilio.request_validator import RequestValidator
 
 from vocalguard.domain.alerts import ReportedAction
-from vocalguard.domain.events import EventType
+from vocalguard.domain.events import EventType, Speaker
 from vocalguard.infrastructure.contacts.book import normalize_number
 from vocalguard.infrastructure.keywords.detector import normalize as fold_text
 from vocalguard.infrastructure.telephony.twiml import (
@@ -330,6 +330,15 @@ async def voice_inbound(request: Request) -> Response:
     # facturées pour une piste muette seraient payées pour rien.
     ecoute = confiance is None or settings.trusted_victim_only_analysis
 
+    # Les locuteurs transcrits doivent correspondre aux pistes que le TwiML
+    # diffuse, sinon on ouvre une connexion Transcribe facturée sur une piste qui
+    # ne recevra jamais un octet — et une transcription vide ne ressemble à
+    # aucune panne, donc personne ne le verrait. En mode « voix de l'abonnée
+    # seule », le `<Stream>` ne porte que `outbound_track`.
+    locuteurs: tuple[Speaker, ...] = (
+        ("victim",) if confiance is not None and ecoute else ("caller", "victim")
+    )
+
     # `open()` est idempotent : Twilio rejoue ce webhook en cas de timeout, et
     # deux sessions pour un appel dédoubleraient transcript et score.
     session = await registry.open(
@@ -337,6 +346,7 @@ async def voice_inbound(request: Request) -> Response:
         caller_number=from_number,
         victim_number=settings.victim_phone_number,
         transcribe=ecoute,
+        speakers=locuteurs,
     )
 
     # L'appel de la victime part en tâche de fond : Twilio attend ce TwiML pour
@@ -699,10 +709,21 @@ async def sms_inbound(request: Request) -> Response:
     #
     # Contact de confiance non configuré : on refuse tout. Normalisés, deux
     # numéros vides seraient égaux, et un `From` absent passerait pour le proche.
-    trusted = normalize_number(settings.trusted_contact_phone_number)
-    if not trusted or normalize_number(from_number) != trusted:
+    #
+    # L'ensemble accepté est `TRUSTED_CONTACT_PHONE_NUMBER` **et tout numéro du
+    # carnet d'adresses**, parce que la vérification d'identité par code
+    # (`application/verification.py`) envoie son SMS au numéro que LE CARNET
+    # connaît pour le proche revendiqué — qui peut être Camille, le médecin, la
+    # voisine, et pas seulement le contact du `.env`. Avec la garde d'origine,
+    # leur « NON » était rejeté en silence : le texte du SMS leur demandait de
+    # répondre, et leur réponse ne pesait sur rien. Ça reste un ensemble FERMÉ,
+    # que la personne protégée contrôle entièrement — c'est ce qui compte, cette
+    # garde étant la seule authentification de la route.
+    expediteurs = _expediteurs_autorises(state, settings)
+    if not expediteurs or normalize_number(from_number) not in expediteurs:
         log.warning(
-            "SMS entrant de %s ignoré : seul le contact de confiance peut répondre (sid=%s)",
+            "SMS entrant de %s ignoré : seuls le contact de confiance et les "
+            "numéros du carnet peuvent répondre (sid=%s)",
             from_number or "(numéro absent)",
             message_sid,
         )
@@ -758,6 +779,41 @@ async def sms_inbound(request: Request) -> Response:
     # réponse, et un auto-répondeur qui réagit à ses propres envois est la boucle
     # classique du SMS (Twilio reposterait ici notre propre texte).
     return _xml(empty_twiml())
+
+
+def _expediteurs_autorises(state: Any, settings: Any) -> frozenset[str]:
+    """Numéros normalisés dont un SMS entrant peut être cru, sur cette route.
+
+    Deux sources réunies, pas une :
+
+      - `TRUSTED_CONTACT_PHONE_NUMBER`, le proche du `.env`, qui reçoit « Est-ce
+        toi qui appelles en ce moment ? » lors d'une alerte ;
+      - **tout numéro du carnet d'adresses**, parce que le code de vérification
+        part au numéro que le carnet connaît pour le proche revendiqué, qui n'est
+        pas forcément celui du `.env`.
+
+    Les valeurs vides sont écartées, et c'est la garde qui porte tout le reste :
+    normalisés, deux numéros vides sont égaux, donc un `From` absent passerait
+    pour un expéditeur légitime et n'importe qui pourrait injecter « le proche a
+    dit non » pour faire mettre en attente un appel parfaitement légitime.
+
+    `getattr` sur `contacts` : les tests et le rejeu passent parfois un simple
+    namespace comme `state`. Carnet absent = on se rabat sur le seul numéro du
+    `.env`, soit le comportement d'avant la vérification par code — jamais sur
+    « tout le monde ».
+    """
+    numeros = {normalize_number(settings.trusted_contact_phone_number)}
+
+    carnet = getattr(state, "contacts", None)
+    if carnet is not None:
+        try:
+            numeros.update(normalize_number(c.phone_number) for c in carnet.all())
+        except Exception:
+            # Un carnet illisible ne doit pas ouvrir la route : on garde ce qu'on
+            # a, on le dit, et la réponse du proche du `.env` continue de passer.
+            log.warning("Carnet illisible : seuls les numéros du .env peuvent répondre par SMS")
+
+    return frozenset(numero for numero in numeros if numero)
 
 
 def _reply_is_denial(body: str) -> bool | None:

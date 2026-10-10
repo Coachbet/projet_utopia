@@ -591,6 +591,27 @@ const ACTIONS = {
   announce_victim:  { label: "Annonce à la victime",     icon: "#i-speak" },
   sms_contact:      { label: "SMS au proche de confiance", icon: "#i-sms" },
   notify_dashboard: { label: "Dashboard notifié",        icon: "#i-watch" },
+
+  /* Faits de routage et de vérification d'identité. Ils voyagent dans le même
+     événement `action` parce que le contrat figé à H0 n'accepte aucun nouveau
+     `type` (cf. domain/alerts.py, ReportedAction). Sans ces entrées, la frise
+     affichait le nom machine brut — « trusted_passthrough » devant un jury. */
+  trusted_passthrough: { label: "Appel de confiance : transmis, non analysé", icon: "#i-good" },
+  caller_notice:    { label: "Appelant informé de l'analyse", icon: "#i-speak" },
+  /* `failure` existe parce que `ok: false` ne veut PAS dire la même chose
+     partout. Sur une action de la politique d'alerte, c'est Twilio qui a refusé.
+     Sur une vérification, c'est l'appelant qui n'a pas su lire le code : annoncer
+     « Échec de l'appel API Twilio » à cet instant-là ferait chercher une panne
+     réseau au moment précis où le système vient de démasquer un usurpateur. */
+  verify_requested: { label: "Code de vérification envoyé au vrai proche", icon: "#i-sms",
+                      failure: "Le code n'a pas pu être envoyé." },
+  identity_verified: { label: "Identité vérifiée par code",  icon: "#i-good",
+                       failure: "Code faux : l'appelant n'a pas pu le lire." },
+  verify_expired:   { label: "Vérification sans réponse",    icon: "#i-alert",
+                      failure: "Aucun code lu pendant la fenêtre." },
+  /* Jamais en service réel : DEMO_SPOOF_AS. L'écran doit MONTRER le mensonge —
+     « le serveur croit que c'est Lucas » est exactement ce que la démo prouve. */
+  spoof_simulated:  { label: "DÉMO : numéro appelant usurpé (simulé)", icon: "#i-alert" },
 };
 
 /* Décidé une fois, au chargement : le chemin démonstration et le chemin live
@@ -1062,7 +1083,7 @@ function applyEvent(ev) {
     case "action": {
       const a = ACTIONS[d.action] || { label: String(d.action || "action"), icon: "#i-intervene" };
       addFeed(ev, "action", a.label, a.icon, {
-        sub: d.ok === false ? "Échec de l'appel API Twilio." : undefined,
+        sub: d.ok === false ? (a.failure || "Échec de l'appel API Twilio.") : undefined,
         quote: d.message ? String(d.message).trim() : undefined,
       });
       if (d.ok !== false) {

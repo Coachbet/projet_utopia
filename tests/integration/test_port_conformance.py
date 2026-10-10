@@ -37,6 +37,7 @@ import pytest
 from vocalguard.application.intervention import InterventionRunner
 from vocalguard.application.scoring import ScoringPipeline
 from vocalguard.application.sessions import SessionRegistry
+from vocalguard.application.verification import IdentityVerifier
 from vocalguard.config import Settings
 from vocalguard.domain import ports
 from vocalguard.infrastructure.aws.bedrock_analyzer import BedrockContentAnalyzer
@@ -133,6 +134,21 @@ def _implementations() -> list[tuple[str, type, Any]]:
                 sink=sink,
                 settings=settings,
                 registry=registry,
+            ),
+        ),
+        # Le vérificateur d'identité s'abonne au bus pour deux raisons : entendre
+        # le code sur la piste appelant, et la demande de vérification sur la
+        # piste victime. Il est donc bien un `EventSink`, et sa dérive se paierait
+        # au pire moment — un `emit` renommé le rendrait sourd en silence, le bus
+        # avalant l'erreur pour ne pas priver les autres destinations.
+        (
+            "IdentityVerifier",
+            ports.EventSink,
+            IdentityVerifier(
+                registry=registry,
+                controller=LoggingCallController(),
+                contacts=contacts,
+                settings=settings,
             ),
         ),
         # CallController — le port dont la version Dev 2 oubliait le call_id.
