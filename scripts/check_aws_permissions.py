@@ -120,7 +120,8 @@ def _error_detail(exc: BaseException) -> str:
         return str(exc)
     response = getattr(exc, "response", None)
     code = response.get("Error", {}).get("Code", "") if isinstance(response, dict) else ""
-    code = code if isinstance(code, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9]{0,63}", code) else ""
+    if not isinstance(code, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]{0,63}", code):
+        code = ""
     return f"{type(exc).__name__}{f' [{code}]' if code else ''}"
 
 

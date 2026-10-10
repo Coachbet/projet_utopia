@@ -193,7 +193,9 @@ class AwsTranscriber:
         if self._client is None:
             credentials = aws_session(self._settings).get_credentials()
             if credentials is None:
-                raise AWSCredentialsError("Aucun identifiant AWS configuré (.env, exports ou profil).")
+                raise AWSCredentialsError(
+                    "Aucun identifiant AWS configuré (.env, exports ou profil)."
+                )
             frozen = credentials.get_frozen_credentials()
             self._client = TranscribeStreamingClient(
                 region=self._settings.transcribe_region,
