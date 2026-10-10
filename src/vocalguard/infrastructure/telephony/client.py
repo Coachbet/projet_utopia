@@ -6,8 +6,13 @@ réseau Twilio en écriture ; tout ce qui décide *quand* agir vit dans le domai
 Trois partis pris :
 - Le SDK Twilio est synchrone. Chaque appel réseau part dans `asyncio.to_thread`,
   sinon on bloque la boucle qui reçoit l'audio (50 trames/s) et le transcript décroche.
-- Une action qui échoue renvoie `False` et ne lève pas. Pendant un appel réel, une
-  annonce ratée ne doit pas tuer la session : le dashboard et le score continuent.
+- Une action qui échoue renvoie `False` et ne lève pas, QUELLE QUE SOIT la panne.
+  Chaque appel réseau rattrape donc `TwilioRestException` — pour en journaliser le
+  code, qui est le seul diagnostic utile pendant une démo — *et* `Exception`, parce
+  que le SDK ne lève pas que des erreurs Twilio : un timeout HTTP sur le wifi du
+  lieu remonte en `ConnectionError`. Pendant un appel réel, une annonce ratée ne
+  doit pas tuer la session : le dashboard et le score continuent.
+  Cette promesse est vérifiée par `tests/integration/test_port_semantics.py`.
 - Aucune méthode de raccrochage, même privée. Un faux positif sur un vrai appel
   d'urgence serait grave ; la mise en attente protège autant et laisse la décision
   à la victime (cf. `domain.alerts.plan_actions`).
@@ -104,6 +109,11 @@ class TwilioCallController:
                 exc.msg,
             )
             return None
+        except Exception:
+            # Le SDK ne lève pas que des `TwilioRestException` : un timeout HTTP
+            # (le wifi du lieu, pas une hypothèse) remonte en `ConnectionError`.
+            logger.warning("Conférence %s illisible (panne réseau ?)", friendly_name, exc_info=True)
+            return None
 
         if not conferences:
             # Cas normal avant que la victime décroche : la conférence n'existe pas
@@ -138,6 +148,11 @@ class TwilioCallController:
                 call_id,
                 exc.code,
                 exc.msg,
+            )
+            return None, None
+        except Exception:
+            logger.warning(
+                "Participants illisibles pour %s (panne réseau ?)", call_id, exc_info=True
             )
             return None, None
 
@@ -178,6 +193,9 @@ class TwilioCallController:
             # sert pas, mais le code apparaît si quelqu'un réactive cette piste.
             logger.warning("%s échoué (code Twilio %s) : %s", action, exc.code, exc.msg)
             return False
+        except Exception:
+            logger.warning("%s échoué (panne réseau ?)", action, exc_info=True)
+            return False
         return True
 
     # --- Port CallController ----------------------------------------------
@@ -210,6 +228,9 @@ class TwilioCallController:
         except TwilioRestException as exc:
             # En compte d'essai, un numéro non vérifié tombe ici (code 21219).
             logger.warning("Appel vers la victime échoué (code Twilio %s) : %s", exc.code, exc.msg)
+            return None
+        except Exception:
+            logger.warning("Appel vers la victime échoué (panne réseau ?)", exc_info=True)
             return None
         return call.sid
 
@@ -279,6 +300,9 @@ class TwilioCallController:
             )
         except TwilioRestException as exc:
             logger.warning("SMS échoué (code Twilio %s) : %s", exc.code, exc.msg)
+            return False
+        except Exception:
+            logger.warning("SMS échoué (panne réseau ?)", exc_info=True)
             return False
         return True
 

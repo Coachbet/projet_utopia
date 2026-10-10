@@ -277,19 +277,6 @@ async def test_twilio_controller_returns_false_on_api_error(method: str) -> None
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Violation connue, fichier de Dev 1. `infrastructure/telephony/client.py` "
-        "ne rattrape que `TwilioRestException`, alors que sa propre docstring "
-        "promet « renvoie False et ne lève pas ». Correctif : élargir à "
-        "`except Exception`. Portée mesurée : `intervention.py` enveloppe chaque "
-        "action séparément, donc les trois actions sont quand même tentées et "
-        "rien ne remonte au bus — fragilité latente, pas un bug vivant. "
-        "strict=True : ce test DOIT échouer en XPASS une fois corrigé, pour "
-        "forcer la suppression de ce marqueur dans le même commit."
-    ),
-)
 @pytest.mark.parametrize("method", CONTROLLER_METHODS)
 @pytest.mark.parametrize(
     "exc", [ConnectionError("timeout réseau"), RuntimeError("panne inattendue")]
