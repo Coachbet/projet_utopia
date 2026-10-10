@@ -10,10 +10,16 @@
    Catégorielle slots 1-4 (identité des quatre signaux) et palette de statut
    (état du score). Les deux modes sont choisis, pas inversés.
    Validé : node scripts/validate_palette.js
-     light "#2a78d6,#eb6834,#1baf7a,#eda100" --mode light  -> tout PASS
-     dark  "#3987e5,#d95926,#199e70,#c98500" --mode dark    -> tout PASS
-   WARN contraste en clair sur aqua (2.74) et jaune (2.11) : relief obligatoire,
-   assuré par les étiquettes directes au bout des barres + la vue tableau.
+     light "#2a78d6,#d9551f,#0f8f62,#a86f00" --mode light -> 5/5 PASS
+     dark  "#3987e5,#d95926,#199e70,#c98500" --mode dark  -> 5/5 PASS
+   Le mode clair ne dépend plus d'un relief pour le contraste : les quatre
+   slots passent 3:1 seuls (ils étaient à 2,74 et 2,11, donc lisibles au
+   bureau mais faibles sur un projecteur, et la démo est regardée de loin).
+   Les étiquettes directes et la vue tableau restent : elles portent
+   l'identité sans la couleur, ce qu'aucun contraste ne remplace.
+   Il a fallu assombrir TROIS slots, pas deux : ne corriger que l'aqua et le
+   jaune cassait la séparation CVD (ΔE 5,3 protan, sous le plancher 8). Une
+   palette est un système, pas quatre choix indépendants.
    ------------------------------------------------------------------------ */
 .viz-root {
   color-scheme: light;
@@ -27,9 +33,9 @@
   --border:         rgba(11,11,11,0.10);
 
   --series-1: #2a78d6;  /* contenu / Claude */
-  --series-2: #eb6834;  /* mots-clés */
-  --series-3: #1baf7a;  /* voix synthétique */
-  --series-4: #eda100;  /* réputation */
+  --series-2: #d9551f;  /* mots-clés */
+  --series-3: #0f8f62;  /* voix synthétique */
+  --series-4: #a86f00;  /* réputation */
 
   /* Statut : réservé, jamais thémé. */
   --status-good:     #0ca30c;
@@ -388,7 +394,7 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
 </style>
 </head>
 
-<body data-palette="#2a78d6,#eb6834,#1baf7a,#eda100" data-mode="light">
+<body data-palette="#2a78d6,#d9551f,#0f8f62,#a86f00" data-mode="light">
 <div class="viz-root">
 
 <svg class="vh" aria-hidden="true">
