@@ -283,7 +283,7 @@ footer { color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--
 <div class="tiles">
   <div class="tile">
     <div class="lbl"><span class="ic" style="color:var(--good)">✓</span> Tests automatisés</div>
-    <div class="val">545</div>
+    <div class="val">559</div>
     <div class="sub2">passés · 1 ignoré · 0 xfail</div>
   </div>
   <div class="tile">
@@ -293,8 +293,8 @@ footer { color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--
   </div>
   <div class="tile">
     <div class="lbl"><span class="ic" style="color:var(--good)">✓</span> Scénarios de calibrage</div>
-    <div class="val">5 / 5</div>
-    <div class="sub2">3 arnaques · 2 légitimes · 6/6 conformes</div>
+    <div class="val">6</div>
+    <div class="sub2">3 arnaques · 3 légitimes · 7/7 conformes</div>
   </div>
   <div class="tile">
     <div class="lbl"><span class="ic" style="color:var(--critical)">✕</span> Téléphonie réelle</div>
@@ -904,18 +904,18 @@ make run            # lance l'API sur :8000
 make tunnel         # expose le port via ngrok (autre terminal)
 make check-aws      # vérifie Bedrock et Transcribe avec les creds courants
 make replay SCENARIO=scenarios/scam_01_petit_fils.json
-make test           # 545 tests
+make test           # 559 tests
 make lint           # ruff check + format</code></pre>
 
 <h3>Chiffres</h3>
 <table>
   <thead><tr><th>Mesure</th><th class="num">Valeur</th></tr></thead>
   <tbody>
-    <tr><td>Tests passés</td><td class="num">545</td></tr>
+    <tr><td>Tests passés</td><td class="num">559</td></tr>
     <tr><td>Tests ignorés</td><td class="num">1</td></tr>
     <tr><td>Fichiers Python</td><td class="num">74</td></tr>
     <tr><td>Lignes de Python</td><td class="num">12 437</td></tr>
-    <tr><td>Scénarios de rejeu</td><td class="num">6</td></tr>
+    <tr><td>Scénarios de rejeu</td><td class="num">7</td></tr>
     <tr><td>Chemins indépendants vers l'intervention</td><td class="num">3</td></tr>
     <tr><td>Appels réels passés</td><td class="num">0</td></tr>
   </tbody>
