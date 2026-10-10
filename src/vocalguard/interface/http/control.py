@@ -13,9 +13,19 @@ Ce module ajoute les deux boutons que l'automatisme ne produira jamais :
     route, un clic de trop sur `resume` rendait la parole au scammeur
     DÉFINITIVEMENT.
 
-Les deux sont des **surcharges humaines** : elles agissent directement sur
+Ces deux-là sont des **surcharges humaines** : elles agissent directement sur
 l'appel via le contrôleur Twilio et ne touchent pas `acted_level`, donc pas la
 machine à états du score. Voir `_surcharge_humaine` pour le pourquoi détaillé.
+
+La troisième route est d'une autre nature et il ne faut pas les confondre :
+
+  - `contact-denied` : l'opérateur rapporte un FAIT (« le vrai proche dit que ce
+    n'est pas lui »), il ne commande pas une action. Le signal est injecté dans
+    le pipeline, exactement comme l'aurait fait un SMS entrant, et c'est le score
+    qui décide ensuite. Elle existe parce que le coupe-circuit
+    `trusted_contact_denied` n'avait qu'un seul déclencheur — un SMS d'un mobile
+    français vers un long code américain, dont la délivrabilité n'est pas
+    garantie et dont l'échec est muet.
 
 Ce module n'est donc **pas** un webhook Twilio, contrairement à son voisin
 `webhooks.py` : il répond en JSON à notre propre dashboard, pas en TwiML à
@@ -25,6 +35,7 @@ codes HTTP exploitables par un `fetch()`.
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import TYPE_CHECKING
 
@@ -66,6 +77,64 @@ async def hold_call(call_id: str, request: Request) -> dict[str, object]:
     score ne reprendra jamais la main sur cet appel.
     """
     return await _surcharge_humaine(request, call_id, held=True)
+
+
+@router.post("/calls/{call_id}/contact-denied")
+async def contact_denied(call_id: str, request: Request) -> dict[str, object]:
+    """Le vrai proche dément être l'appelant, saisi depuis le dashboard.
+
+    Pourquoi cette route existe alors que `/twilio/sms/inbound` fait déjà le
+    travail : le coupe-circuit `trusted_contact_denied` n'a qu'UN déclencheur, et
+    c'est un SMS d'un mobile français vers un long code américain. Si ce SMS
+    n'arrive pas, le signal le plus décisif du système devient indémontrable —
+    pas dégradé, indémontrable — et le symptôme est muet : le webhook ne part
+    jamais, aucune erreur nulle part. Cette route rend le chemin indépendant du
+    réseau, et un bouton reste déterministe devant un jury là où attendre un SMS
+    sur scène est un pari.
+
+    **Ce n'est pas une surcharge humaine** comme `hold` et `resume`, et c'est la
+    différence qui compte : ces deux-là agissent sur l'appel et court-circuitent
+    le score, alors que celle-ci injecte exactement le signal qu'un SMS aurait
+    injecté, puis laisse l'automatisme décider. L'opérateur dit ce qu'il sait,
+    pas ce qu'il veut qu'il arrive.
+
+    D'où la forme de réponse — `ok` et `call_id`, sans `caller_held` : la mise en
+    attente découle du score republié par le pipeline, donc elle n'a pas encore
+    eu lieu quand on répond. Annoncer `caller_held` ici serait une valeur périmée
+    à l'instant où le dashboard la lit.
+    """
+    session = request.app.state.registry.get(call_id)
+    if session is None:
+        # Même raisonnement que les deux autres routes : un appel absent du
+        # registre est raccroché, pas en panne. Le bouton doit disparaître.
+        raise HTTPException(
+            status_code=404,
+            detail=f"Appel {call_id} inconnu : déjà terminé ou jamais ouvert.",
+        )
+
+    pipeline = getattr(request.app.state, "pipeline", None)
+    hook = getattr(pipeline, "contact_replied", None)
+    if hook is None:
+        # Même garde défensive que `/twilio/sms/inbound` : on nomme la
+        # conséquence plutôt que de renvoyer un succès silencieux.
+        log.warning(
+            "Pipeline sans `contact_replied` : le démenti du proche est reçu "
+            "mais ne pèse pas sur le score de %s",
+            call_id,
+        )
+        return {"ok": False, "call_id": call_id}
+
+    try:
+        result = hook(call_id, denied=True)
+        if inspect.isawaitable(result):
+            await result
+    except Exception:
+        # Un clic d'opérateur ne devient jamais une 500. `contact_replied` est
+        # idempotente côté pipeline, donc un second clic est sans danger.
+        log.exception("démenti du proche impossible à appliquer sur %s", call_id)
+        return {"ok": False, "call_id": call_id}
+
+    return {"ok": True, "call_id": call_id}
 
 
 async def _surcharge_humaine(request: Request, call_id: str, *, held: bool) -> dict[str, object]:

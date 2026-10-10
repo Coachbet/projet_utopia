@@ -291,3 +291,99 @@ def test_mettre_en_attente_un_appel_deja_tenu_n_appelle_pas_twilio(harness):
     assert session.caller_held is True
     assert app.state.controller.calls == []
     assert sink.by_type(EventType.ACTION) == []
+
+
+# --- Le démenti du proche, saisi à la main -----------------------------------
+# Ces tests couvrent le chemin de secours du coupe-circuit
+# `trusted_contact_denied`. Son unique autre déclencheur est un SMS d'un mobile
+# français vers un long code américain : si la délivrabilité ne suit pas, c'est
+# cette route qui porte le signal le plus décisif du système.
+
+
+def test_le_dementi_du_proche_fait_monter_le_score_a_l_intervention(harness):
+    """Le test qui compte : la route ne se contente pas de répondre 200, elle
+    doit réellement armer le coupe-circuit et déclencher l'intervention."""
+    client, app, sink = harness
+    session = _ouvrir_appel(client, app)
+
+    reponse = client.post(f"/control/calls/{CALL_ID}/contact-denied")
+
+    assert reponse.status_code == 200
+    assert reponse.json() == {"ok": True, "call_id": CALL_ID}
+
+    scores = [e.data for e in sink.by_type(EventType.SCORE)]
+    assert scores, "aucun score republié : le signal n'a pas atteint le pipeline"
+    assert scores[-1]["score"] >= 85
+    assert scores[-1]["level"] == "intervene"
+    assert "trusted_contact_denied" in scores[-1]["breakers_fired"]
+
+    # Et l'intervention a bien suivi : l'appelant est en attente.
+    actions = [e.data["action"] for e in sink.by_type(EventType.ACTION)]
+    assert "hold_caller" in actions
+    assert session.caller_held is True
+
+
+def test_un_dementi_sur_un_appel_inconnu_repond_404(harness):
+    client, app, sink = harness
+    _ouvrir_appel(client, app)
+
+    reponse = client.post("/control/calls/CA_inexistant/contact-denied")
+
+    assert reponse.status_code == 404
+    assert "CA_inexistant" in reponse.json()["detail"]
+    assert not [e for e in sink.by_type(EventType.SCORE)], "aucun score ne devait être publié"
+
+
+def test_deux_dementis_de_suite_sont_sans_danger(harness):
+    """Double clic de l'opérateur. `contact_replied` est idempotente côté
+    pipeline : le second passage ne doit pas republier de score ni rejouer
+    l'annonce dans l'oreille de la victime."""
+    client, app, sink = harness
+    _ouvrir_appel(client, app)
+
+    premier = client.post(f"/control/calls/{CALL_ID}/contact-denied")
+    scores_apres_un = len(sink.by_type(EventType.SCORE))
+    second = client.post(f"/control/calls/{CALL_ID}/contact-denied")
+
+    assert premier.status_code == second.status_code == 200
+    assert second.json() == {"ok": True, "call_id": CALL_ID}
+    assert len(sink.by_type(EventType.SCORE)) == scores_apres_un
+
+
+def test_un_pipeline_sans_contact_replied_renvoie_ok_false(harness):
+    """Garde défensive : un pipeline amputé ne doit pas faire croire au succès.
+
+    C'est exactement l'état qu'avait le projet avant que Dev 2 n'écrive la
+    méthode — le signal était reçu et ne pesait sur rien.
+    """
+    client, app, _ = harness
+    _ouvrir_appel(client, app)
+
+    class PipelineAmpute:
+        """Tout sauf `contact_replied`."""
+
+        async def emit(self, event):
+            return None
+
+    app.state.pipeline = PipelineAmpute()
+
+    reponse = client.post(f"/control/calls/{CALL_ID}/contact-denied")
+
+    assert reponse.status_code == 200
+    assert reponse.json() == {"ok": False, "call_id": CALL_ID}
+
+
+def test_un_pipeline_qui_leve_ne_devient_pas_une_500(harness):
+    client, app, _ = harness
+    _ouvrir_appel(client, app)
+
+    class PipelineQuiLeve:
+        async def contact_replied(self, call_id, *, denied):
+            raise RuntimeError("Bedrock injoignable")
+
+    app.state.pipeline = PipelineQuiLeve()
+
+    reponse = client.post(f"/control/calls/{CALL_ID}/contact-denied")
+
+    assert reponse.status_code == 200
+    assert reponse.json() == {"ok": False, "call_id": CALL_ID}

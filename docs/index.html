@@ -262,7 +262,7 @@ footer { color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--
 
 <h1>Où nous en sommes, et ce qu'il reste à faire</h1>
 <p class="sub">
-  Dernier point : branche <code>main</code> à <code>875d028</code>. Les deux moitiés du
+  Dernier point : branche <code>main</code>, trois chemins indépendants vers l'intervention. Les deux moitiés du
   projet sont intégrées et la chaîne complète fonctionne — sur des doublures.
   Cette page dit précisément ce qui est prouvé, ce qui ne l'est pas, et dans quel ordre
   avancer.
@@ -283,18 +283,18 @@ footer { color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--
 <div class="tiles">
   <div class="tile">
     <div class="lbl"><span class="ic" style="color:var(--good)">✓</span> Tests automatisés</div>
-    <div class="val">493</div>
+    <div class="val">545</div>
     <div class="sub2">passés · 1 ignoré · 0 xfail</div>
   </div>
   <div class="tile">
     <div class="lbl"><span class="ic" style="color:var(--good)">✓</span> AWS</div>
     <div class="val">2 / 2</div>
-    <div class="sub2">Bedrock + Transcribe fr-FR autorisés</div>
+    <div class="sub2">Bedrock + Transcribe, vérifiés dans l'app</div>
   </div>
   <div class="tile">
-    <div class="lbl"><span class="ic" style="color:var(--warning)">▲</span> Scénarios de calibrage</div>
-    <div class="val">3 / 5</div>
-    <div class="sub2">1 seul légitime sur 3 attendus</div>
+    <div class="lbl"><span class="ic" style="color:var(--good)">✓</span> Scénarios de calibrage</div>
+    <div class="val">5 / 5</div>
+    <div class="sub2">3 arnaques · 2 légitimes · 6/6 conformes</div>
   </div>
   <div class="tile">
     <div class="lbl"><span class="ic" style="color:var(--critical)">✕</span> Téléphonie réelle</div>
@@ -602,7 +602,12 @@ footer { color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--
     <tr>
       <td><code>trusted_contact_denied</code></td>
       <td class="num">plancher 85</td>
-      <td>le vrai proche répond « non, ce n'est pas moi » au SMS</td>
+      <td>le vrai proche dément être l'appelant — par SMS, ou par le bouton du dashboard</td>
+    </tr>
+    <tr>
+      <td><code>false_authority_with_payment</code></td>
+      <td class="num">plancher 85</td>
+      <td>« fausse autorité » <em>et</em> demande de paiement <em>et</em> risque ≥ 0,85 — l'archétype gendarmerie / impôts, qu'aucune institution usurpée ne pouvait atteindre faute d'être au carnet d'adresses</td>
     </tr>
     <tr>
       <td><code>llm_high_confidence</code></td>
@@ -623,13 +628,14 @@ footer { color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--
 </table>
 
 <figure class="card">
-  <figcaption>Un seul chemin vers l'intervention, puis deux</figcaption>
+  <figcaption>Un seul chemin vers l'intervention, puis trois</figcaption>
   <p class="note">
-    Avant aujourd'hui, toute la mise en attente reposait sur un unique rapprochement
-    d'identité — fragile dès que la reconnaissance vocale entend « Luca » au lieu de
-    « Lucas ». Il existe maintenant deux chemins indépendants.
+    Toute la mise en attente reposait sur un unique rapprochement d'identité — fragile
+    dès que la reconnaissance vocale entend « Luca » au lieu de « Lucas », et
+    structurellement inatteignable pour une institution usurpée, qui n'est jamais au
+    carnet d'adresses de la victime. Il existe maintenant trois chemins indépendants.
   </p>
-  <svg viewBox="0 0 760 232" role="img" aria-label="Avant : un seul chemin vers le seuil 85. Après : deux chemins indépendants.">
+  <svg viewBox="0 0 760 292" role="img" aria-label="Avant : un seul chemin vers le seuil 85. Après : trois chemins indépendants vers l'intervention.">
     <!-- AVANT -->
     <text class="lb-p" x="16" y="22">Avant</text>
     <g class="hit" tabindex="0" data-tip="Il fallait la conjonction de deux faits : Claude détecte une demande de paiement, ET le carnet d'adresses contredit l'identité revendiquée.">
@@ -646,23 +652,29 @@ footer { color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--
 
     <line x1="16" y1="104" x2="744" y2="104" stroke="var(--grid)" stroke-width="1"/>
 
-    <!-- APRES -->
+    <!-- APRES : trois chemins -->
     <text class="lb-p" x="16" y="128">Aujourd'hui</text>
-    <g class="hit" tabindex="0" data-tip="Chemin 1, inchangé : la conjonction paiement + identité contredite. Robustifié par des alias tolérants à la reconnaissance vocale (Luca, Loukas, Lukas, Louka).">
+    <g class="hit" tabindex="0" data-tip="Chemin 1, inchangé : paiement + identité contredite par le carnet d'adresses. Robustifié par des alias tolérants à la reconnaissance vocale (Luca, Loukas, Lukas, Louka).">
       <rect x="16" y="140" width="250" height="40" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
       <text class="lb" x="141" y="164" text-anchor="middle">paiement + identité qui ne colle pas</text>
     </g>
-    <g class="hit" tabindex="0" data-tip="Chemin 2, nouveau : le vrai proche répond « non » au SMS de vérification. C'est aussi la chose la plus convaincante à montrer à un jury — une preuve humaine, pas une heuristique.">
+    <g class="hit" tabindex="0" data-tip="Chemin 2 : le vrai proche dément être l'appelant. C'est la chose la plus convaincante à montrer à un jury — une preuve humaine, pas une heuristique. Deux déclencheurs : la réponse au SMS, ou le bouton du dashboard si la délivrabilité ne suit pas.">
       <rect x="16" y="188" width="250" height="40" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
-      <text class="lb" x="141" y="212" text-anchor="middle">le vrai proche répond « non »</text>
+      <text class="lb" x="141" y="206" text-anchor="middle">le vrai proche dément</text>
+      <text class="lb" x="141" y="221" text-anchor="middle">(SMS ou bouton)</text>
     </g>
-    <path d="M272 160 L336 160 L336 184 L396 184" stroke="var(--axis)" stroke-width="2" fill="none" marker-end="url(#ar)"/>
-    <path d="M272 208 L336 208 L336 184" stroke="var(--axis)" stroke-width="2" fill="none"/>
-    <rect x="402" y="161" width="150" height="46" rx="8" fill="var(--good)" opacity="0.1"/>
-    <rect x="402" y="161" width="150" height="46" rx="8" fill="none" stroke="var(--good)" stroke-width="1.5"/>
-    <text class="lb-p" x="477" y="181" text-anchor="middle">score 85</text>
-    <text class="lb" x="477" y="198" text-anchor="middle">intervention</text>
-    <text class="lb" x="568" y="188" style="fill:var(--success-text)">✓ deux chemins indépendants</text>
+    <g class="hit" tabindex="0" data-tip="Chemin 3 : fausse autorité (gendarmerie, impôts) + demande de paiement + risque ≥ 0,85. Cet archétype était hors d'atteinte du chemin 1, puisqu'une institution usurpée n'est jamais dans le carnet d'adresses. Mesuré avec le vrai Claude : le score plafonnait à 66.">
+      <rect x="16" y="236" width="250" height="40" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
+      <text class="lb" x="141" y="260" text-anchor="middle">fausse autorité + paiement</text>
+    </g>
+    <path d="M272 160 L336 160 L336 208 L396 208" stroke="var(--axis)" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+    <path d="M272 208 L336 208" stroke="var(--axis)" stroke-width="2" fill="none"/>
+    <path d="M272 256 L336 256 L336 208" stroke="var(--axis)" stroke-width="2" fill="none"/>
+    <rect x="402" y="185" width="150" height="46" rx="8" fill="var(--good)" opacity="0.1"/>
+    <rect x="402" y="185" width="150" height="46" rx="8" fill="none" stroke="var(--good)" stroke-width="1.5"/>
+    <text class="lb-p" x="477" y="205" text-anchor="middle">score 85</text>
+    <text class="lb" x="477" y="222" text-anchor="middle">intervention</text>
+    <text class="lb" x="568" y="212" style="fill:var(--success-text)">✓ trois chemins indépendants</text>
   </svg>
 </figure>
 
@@ -820,9 +832,10 @@ le proche répond « non ce n'est pas moi »  -> score 85 / intervene
 <h3>À réclamer hors développement</h3>
 <ul>
   <li>
-    <strong>Biz 1 — il manque 2 scénarios légitimes sur 5.</strong> Il n'y en a qu'un.
-    Ce sont précisément les tests de faux positifs : sans eux le calibrage ne veut rien
-    dire, et c'est la première question d'un jury sérieux. Du texte brut suffit.
+    <strong>Biz 1 — comblé.</strong> Les cinq scénarios de calibrage existent : trois
+    arnaques (petit-fils, faux conseiller bancaire, fausse autorité) et deux légitimes,
+    dont le cas le plus dur — la vraie fille, urgence réelle, hôpital, argent avancé —
+    qui reste à 24 et prouve que le garde-fou anti-faux-positif tient. 6/6 conformes.
   </li>
   <li>
     <strong>Biz 2 — vérifier la promesse du pitch.</strong> Le README ne mentionne plus
@@ -878,6 +891,7 @@ le proche répond « non ce n'est pas moi »  -> score 85 / intervene
     <tr><td><code>POST</code></td><td><code>/twilio/sms/inbound</code></td><td>la réponse du vrai proche</td></tr>
     <tr><td><code>POST</code></td><td><code>/control/calls/{id}/hold</code></td><td>bouton opérateur — mettre en attente</td></tr>
     <tr><td><code>POST</code></td><td><code>/control/calls/{id}/resume</code></td><td>bouton opérateur — reprendre l'appel</td></tr>
+    <tr><td><code>POST</code></td><td><code>/control/calls/{id}/contact-denied</code></td><td>bouton opérateur — le vrai proche dément, sans dépendre du SMS</td></tr>
     <tr><td><code>GET</code></td><td><code>/healthz</code></td><td>diagnostic — à regarder avant chaque démo</td></tr>
     <tr><td><code>WS</code></td><td><code>/ws/media</code></td><td>audio Twilio entrant</td></tr>
     <tr><td><code>WS</code></td><td><code>/ws/dashboard</code></td><td>flux d'événements vers le dashboard</td></tr>
@@ -890,24 +904,25 @@ make run            # lance l'API sur :8000
 make tunnel         # expose le port via ngrok (autre terminal)
 make check-aws      # vérifie Bedrock et Transcribe avec les creds courants
 make replay SCENARIO=scenarios/scam_01_petit_fils.json
-make test           # 493 tests
+make test           # 545 tests
 make lint           # ruff check + format</code></pre>
 
 <h3>Chiffres</h3>
 <table>
   <thead><tr><th>Mesure</th><th class="num">Valeur</th></tr></thead>
   <tbody>
-    <tr><td>Tests passés</td><td class="num">493</td></tr>
+    <tr><td>Tests passés</td><td class="num">545</td></tr>
     <tr><td>Tests ignorés</td><td class="num">1</td></tr>
     <tr><td>Fichiers Python</td><td class="num">74</td></tr>
     <tr><td>Lignes de Python</td><td class="num">12 437</td></tr>
-    <tr><td>Scénarios de rejeu</td><td class="num">3</td></tr>
+    <tr><td>Scénarios de rejeu</td><td class="num">6</td></tr>
+    <tr><td>Chemins indépendants vers l'intervention</td><td class="num">3</td></tr>
     <tr><td>Appels réels passés</td><td class="num">0</td></tr>
   </tbody>
 </table>
 
 <footer>
-  VocalGuard · <code>main</code> à <code>875d028</code> · page générée à la main, sans
+  VocalGuard · <code>main</code> · page générée à la main, sans
   dépendance réseau. Palette validée par <code>validate_palette.js</code> en mode clair
   et sombre.
 </footer>
