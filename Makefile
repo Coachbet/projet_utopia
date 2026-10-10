@@ -11,11 +11,17 @@ install: ## Crée le venv et installe tout (sauf torch)
 install-voice: ## Ajoute torch + transformers (long, ~2 Go)
 	uv sync --group dev --extra voice
 
-run: ## Lance l'API FastAPI en rechargement auto
-	uv run uvicorn vocalguard.interface.app:create_app --factory --reload --host 0.0.0.0 --port 8000
+PORT ?= 8000
+# Surchargeable : `make run PORT=8001`. Indispensable quand 8000 est déjà pris
+# (un conteneur Docker, un autre uvicorn) — sinon le serveur démarre « quelque
+# part » et Twilio parle à la mauvaise application, sans que rien ne le dise.
+# `make tunnel` doit TOUJOURS recevoir le même port que `make run`.
 
-tunnel: ## Expose le port 8000 via ngrok (autre terminal)
-	ngrok http 8000
+run: ## Lance l'API FastAPI en rechargement auto (PORT=8001 pour changer de port)
+	uv run uvicorn vocalguard.interface.app:create_app --factory --reload --host 0.0.0.0 --port $(PORT)
+
+tunnel: ## Expose le port via ngrok, autre terminal (PORT=8001 pour changer)
+	ngrok http $(PORT)
 
 check-aws: ## H0 — vérifie Bedrock et Transcribe avec les creds courants
 	uv run python scripts/check_aws_permissions.py
