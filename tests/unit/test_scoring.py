@@ -22,6 +22,7 @@ import pytest
 
 from vocalguard.application.scoring import (
     CONTACT_DENIED_REASON,
+    IDENTITY_VERIFIED_REASON,
     ScoringPipeline,
     build_pipeline,
 )
@@ -57,6 +58,7 @@ from vocalguard.infrastructure.fakes.doubles import (
 )
 from vocalguard.infrastructure.fakes.event_sink import InMemoryEventSink
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
+from vocalguard.infrastructure.telephony.reputation import KNOWN_CONTACT_RISK
 
 
 class Bus:
@@ -984,6 +986,216 @@ async def test_denial_beats_the_voice_alone_cap():
         "le plafond voix a écrasé le démenti du proche : le score retombe sous 85"
     )
     assert harness.last_score >= 85
+
+
+# --- Vérification d'identité par code : la disculpation ---------------------
+# `application/verification.py` appelle `contact_verified(call_id)` quand le code
+# à 4 chiffres envoyé au numéro DU CARNET est prononcé correctement dans l'appel.
+# C'est le pendant du démenti, et il doit se tenir aussi droit : le signal le
+# plus fort du système dans l'autre sens — l'interlocuteur tient physiquement le
+# téléphone du proche, ce qu'une usurpation de numéro ne donne pas.
+
+
+async def test_un_code_correct_abaisse_le_risque_de_reputation():
+    harness, registry = build(reputation=FakeReputationChecker(risk=0.75))
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour mamie"))
+    avant = harness.of_type("reputation")[-1].data["risk"]
+
+    await harness.pipeline.contact_verified("CA1")
+
+    data = harness.of_type("reputation")[-1].data
+    assert data["risk"] < avant
+    assert data["risk"] == pytest.approx(KNOWN_CONTACT_RISK)
+    assert data["identity_mismatch"] is False
+    # Le dashboard reprend ces chaînes mot pour mot.
+    assert data["reasons"] == [IDENTITY_VERIFIED_REASON]
+
+
+async def test_un_code_correct_desarme_le_coupe_circuit_paiement_identite():
+    """L'effet qui compte : c'est `identity_mismatch` qui plancherait à 85.
+
+    On part de l'état exact du scénario C de la démo — « Lucas » réclame un
+    virement depuis un numéro qui n'est pas le sien — puis le vrai Lucas lit le
+    code. Sans désarmement, le plancher resterait et la personne protégée
+    entendrait une intervention sur l'appel de son propre petit-fils.
+    """
+    harness, registry = build(
+        analyzer=ScriptedAnalyzer(
+            ContentSignal(
+                risk=0.5,
+                tactics=("urgence", "paiement inhabituel"),
+                claimed_identity="Lucas",
+            )
+        ),
+        reputation=FakeReputationChecker(identity_mismatch=True),
+    )
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("mamie c'est Lucas, il faut un virement"))
+    await harness.pipeline.aclose()
+    assert (
+        "payment_request_with_identity_mismatch"
+        in harness.of_type("score")[-1].data["breakers_fired"]
+    ), "le scénario de départ n'arme pas le coupe-circuit : le test ne prouverait rien"
+
+    await harness.pipeline.contact_verified("CA1")
+
+    fired = harness.of_type("score")[-1].data["breakers_fired"]
+    assert "payment_request_with_identity_mismatch" not in fired
+    assert harness.last_score < 85
+    assert harness.last_level != "intervene"
+
+
+async def test_un_code_correct_ne_blanchit_pas_le_contenu():
+    """La partie honnête du dispositif, et celle qu'un « nettoyage » casserait.
+
+    Vérifier une identité ne blanchit pas un propos : un vrai petit-fils, vérifié
+    par code, qui réclame quand même un virement en urgence garde tout son risque
+    de contenu. On n'abaisse QUE la réputation.
+    """
+    harness, registry = build(
+        analyzer=ScriptedAnalyzer(
+            ContentSignal(risk=0.95, tactics=("urgence", "paiement inhabituel"))
+        ),
+        reputation=FakeReputationChecker(),
+    )
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("il faut un virement tout de suite"))
+    await harness.pipeline.aclose()
+
+    await harness.pipeline.contact_verified("CA1")
+
+    assert session.signals.content is not None
+    assert session.signals.content.risk == 0.95
+    # `llm_high_confidence` plancher 65 : Claude est sûr de lui, et le code lu ne
+    # change rien à ce qu'il a entendu.
+    assert "llm_high_confidence" in harness.of_type("score")[-1].data["breakers_fired"]
+    assert harness.last_score >= 65
+
+
+async def test_la_disculpation_survit_a_une_reconstruction_de_reputation():
+    """Exactement la régression du démenti, dans l'autre sens.
+
+    `_check_reputation` remplace `signals.reputation` par un objet neuf à chaque
+    changement d'identité revendiquée. Une disculpation posée sur cet objet
+    serait effacée au retour suivant de Claude, et le coupe-circuit se
+    réarmerait tout seul après que le vrai Lucas a lu son code.
+    """
+    harness, registry = build(
+        analyzer=ScriptedAnalyzer(
+            ContentSignal(risk=0.4, tactics=("urgence",), claimed_identity="Lucas")
+        ),
+        reputation=CountingReputation(identity_mismatch=True),
+    )
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("mamie c'est Lucas"))
+
+    await harness.pipeline.contact_verified("CA1")
+
+    await harness.pipeline.aclose()
+    assert len(harness.of_type("reputation")) >= 2, "la reconstruction n'a pas eu lieu"
+
+    assert session.signals.reputation is not None
+    assert session.signals.reputation.identity_mismatch is False
+    assert session.signals.reputation.reasons == (IDENTITY_VERIFIED_REASON,)
+
+
+async def test_un_dementi_l_emporte_sur_un_code_correct_arrive_apres():
+    """Les deux faits ne peuvent pas être vrais ensemble.
+
+    Quelqu'un a su lire le bon code sur le téléphone d'un proche qui affirme ne
+    pas appeler. Abaisser le score ici désarmerait la protection sur le seul
+    appel où elle a déjà été réclamée explicitement — c'est la personne qui
+    parle en son nom qui tranche.
+    """
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour"))
+    await harness.pipeline.contact_replied("CA1", denied=True)
+    assert harness.last_score >= 85
+
+    await harness.pipeline.contact_verified("CA1")
+
+    assert session.signals.reputation is not None
+    assert session.signals.reputation.contact_denied is True
+    assert harness.last_score >= 85
+    assert "trusted_contact_denied" in harness.of_type("score")[-1].data["breakers_fired"]
+
+
+async def test_un_dementi_apres_un_code_correct_reprend_la_main():
+    """L'ordre inverse : le code a été lu, puis le proche répond NON au SMS.
+
+    Le démenti est testé AVANT la vérification dans `_with_verdict`, donc il
+    l'emporte quel que soit l'ordre d'arrivée. Sans ça, un usurpateur qui aurait
+    deviné le code serait définitivement blanchi.
+    """
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour"))
+    await harness.pipeline.contact_verified("CA1")
+
+    await harness.pipeline.contact_replied("CA1", denied=True)
+
+    assert session.signals.reputation is not None
+    assert session.signals.reputation.contact_denied is True
+    assert harness.last_score >= 85
+
+
+async def test_la_verification_est_idempotente():
+    """L'app peut cliquer deux fois, et une phrase entendue peut déclencher la
+    même vérification que la touche 1."""
+    harness, registry = build(reputation=FakeReputationChecker())
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour"))
+    reputations = len(harness.of_type("reputation"))
+
+    await harness.pipeline.contact_verified("CA1")
+    apres_la_premiere = len(harness.of_type("reputation"))
+    await harness.pipeline.contact_verified("CA1")
+
+    assert apres_la_premiere == reputations + 1
+    assert len(harness.of_type("reputation")) == apres_la_premiere
+
+
+async def test_une_verification_sur_un_appel_inconnu_ne_publie_rien():
+    harness, _ = build(reputation=FakeReputationChecker())
+    await harness.pipeline.contact_verified("CA_INCONNU")
+    assert harness.of_type("score") == []
+
+
+async def test_une_verification_avant_toute_reputation_fabrique_le_signal():
+    """Le code peut être lu avant qu'aucune vérification de réputation n'ait eu
+    lieu — c'est le cas NORMAL sur un appel de confiance, qui n'a aucun
+    transcript et donc ne déclenche jamais `_check_reputation`."""
+    harness, registry = build(reputation=None)
+    session = await registry.open("CA1", transcribe=False)
+
+    await harness.pipeline.contact_verified("CA1")
+
+    assert session.signals.reputation is not None
+    assert session.signals.reputation.identity_mismatch is False
+    assert session.signals.reputation.in_contacts is True
+    assert session.signals.reputation.reasons == (IDENTITY_VERIFIED_REASON,)
+
+
+async def test_forget_purge_la_disculpation():
+    """Symétrique de la purge du démenti : sans elle, un appel suivant sur le
+    même identifiant naîtrait disculpé — le sens dangereux."""
+    harness, registry = build(reputation=FakeReputationChecker(identity_mismatch=True))
+    session = await registry.open("CA1", caller_number="+33755555555")
+    await session.on_segment(seg("bonjour"))
+    await harness.pipeline.contact_verified("CA1")
+    assert session.signals.reputation is not None
+    assert session.signals.reputation.reasons == (IDENTITY_VERIFIED_REASON,)
+
+    harness.pipeline.forget("CA1")
+    await registry.close("CA1")
+
+    session2 = await registry.open("CA1", caller_number="+33755555555")
+    await session2.on_segment(seg("bonjour"))
+
+    assert session2.signals.reputation is not None
+    assert session2.signals.reputation.reasons != (IDENTITY_VERIFIED_REASON,)
 
 
 # --- Coupe-circuit « fausse autorité + paiement » --------------------------

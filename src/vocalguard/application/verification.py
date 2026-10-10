@@ -29,17 +29,23 @@ réussir la vérification sans jamais avoir eu le téléphone du proche. La rout
 HTTP, elle, le renvoie : c'est l'app de la personne protégée qui la demande, et
 l'affichage du code en grand est la moitié de l'usage.
 
-**3. La baisse du risque après un code correct n'est PAS implémentée.** Elle
-demanderait, côté `application/scoring.py` (hors de ce lot), le symétrique exact
-de `_contact_denied` : un ensemble `_identity_verified` par appel, réinjecté dans
-`ReputationSignal` par `_with_denial` (`identity_mismatch=False`, `risk` plancher
-bas, une raison lisible), puis `_publish_score`. Écrire `session.signals
-.reputation` depuis ici serait un mensonge à retardement : le pipeline reconstruit
-cet objet à chaque vérification de réputation — c'est documenté dans
-`domain/models.py` — donc la baisse serait effacée au segment suivant, et aucun
-score ne serait republié entre-temps (sur un appel de confiance, jamais). Un
-score qui mentirait vaut moins qu'une fonctionnalité manquante : on annonce
-« Code correct. », on émet `identity_verified`, et on le signale.
+**3. La baisse du risque après un code correct passe par le pipeline, et par le
+seul signal de réputation.** `_disculper` appelle
+`ScoringPipeline.contact_verified`, symétrique exact de `contact_replied` : un
+ensemble `_identity_verified` par appel, réinjecté dans `ReputationSignal` par
+`_with_verdict` (`identity_mismatch=False`, donc coupe-circuit « paiement +
+identité » désarmé, et `risk` ramené à `KNOWN_CONTACT_RISK`), puis un score
+republié. Écrire `session.signals.reputation` depuis ici aurait été un mensonge à
+retardement : le pipeline reconstruit cet objet à chaque vérification de
+réputation — c'est documenté dans `domain/models.py` — donc la baisse serait
+effacée au retour suivant de Claude, sans que rien ne le dise.
+
+Ce qui ne bouge PAS, et c'est la partie honnête : les signaux de contenu. Un vrai
+petit-fils vérifié qui réclame quand même un virement en urgence garde son risque
+de contenu, et le score peut rester élevé pour cette raison-là. Vérifier une
+identité ne blanchit pas un propos. Un démenti du proche déjà reçu l'emporte
+d'ailleurs sur un code correct arrivé après : c'est la personne qui parle en son
+nom qui tranche.
 
 Le reste du fichier applique la règle maison : préférer ne rien faire à agir sur
 une information douteuse (cf. `_reply_is_denial` dans `interface/http/webhooks.py`).
@@ -684,8 +690,13 @@ class IdentityVerifier:
                 "ok": True,
             },
         )
-        # La baisse du risque manque ici, volontairement : cf. la décision 3 du
-        # docstring de module. Elle appartient à `application/scoring.py`.
+        # La baisse du risque, par le pipeline et par le signal de réputation :
+        # c'est le pendant exact de `_escalader`, et pour la même raison. Écrire
+        # `session.signals.reputation` depuis ici serait un mensonge à
+        # retardement — `_check_reputation` reconstruit cet objet à neuf au
+        # prochain retour de Claude, et la disculpation disparaîtrait sans que
+        # rien ne le dise.
+        await self._disculper(call_id)
 
     def _arm_expiry(self, call_id: str, pending: _Verification) -> None:
         task = asyncio.create_task(self._expire(call_id, pending))
@@ -892,3 +903,32 @@ class IdentityVerifier:
                 await result
         except Exception:
             logger.exception("escalade impossible après la vérification manquée de %s", call_id)
+
+    async def _disculper(self, call_id: str) -> None:
+        """Code correct : on abaisse le risque, par le pipeline et par lui seul.
+
+        Symétrique d'`_escalader` jusque dans sa prudence. `contact_verified`
+        n'abaisse QUE le signal de réputation : il désarme `identity_mismatch`,
+        donc le coupe-circuit « paiement + identité ». Les signaux de contenu ne
+        bougent pas, et c'est la partie honnête du dispositif — un vrai
+        petit-fils vérifié qui réclame quand même un virement en urgence garde
+        son risque de contenu. Vérifier une identité ne blanchit pas un propos.
+
+        Un pipeline sans ce hook (doublure, rejeu) ne fait pas échouer la
+        vérification : la personne protégée a déjà entendu « Code correct », ce
+        qui est l'essentiel. On nomme la conséquence au lieu de lever.
+        """
+        hook = getattr(self._pipeline, "contact_verified", None)
+        if hook is None:
+            logger.warning(
+                "Pipeline sans `contact_verified` : le code correct de %s rassure "
+                "la personne protégée mais n'abaisse pas le score",
+                call_id,
+            )
+            return
+        try:
+            result = hook(call_id)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            logger.exception("disculpation impossible après le code correct de %s", call_id)

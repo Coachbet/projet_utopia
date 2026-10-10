@@ -37,6 +37,7 @@ from vocalguard.config import Settings, get_settings
 from vocalguard.domain.events import Event, EventType, Speaker
 from vocalguard.domain.models import ReputationSignal, RiskAssessment
 from vocalguard.domain.scoring.engine import assess
+from vocalguard.infrastructure.telephony.reputation import KNOWN_CONTACT_RISK
 
 if TYPE_CHECKING:
     from vocalguard.domain.ports import (
@@ -52,6 +53,17 @@ logger = logging.getLogger(__name__)
 CONTACT_DENIED_REASON = "le vrai contact dit que ce n'est pas lui"
 """Repris mot pour mot par le dashboard : c'est la phrase la plus convaincante
 que l'écran puisse afficher devant le jury."""
+
+IDENTITY_VERIFIED_REASON = "code de vérification lu correctement"
+"""Le pendant exact de `CONTACT_DENIED_REASON`, et il doit s'afficher aussi
+franchement : un appel qu'on vient de disculper mérite de dire pourquoi.
+
+Le risque appliqué est `KNOWN_CONTACT_RISK`, importé de l'adapter de réputation
+et non recopié. Ce module est déjà celui qui câble les adapters de Dev 2
+(`build_pipeline`), et une seconde constante à 0,05 avec un commentaire disant
+« la même valeur que là-bas » est précisément la liste parallèle que ce dépôt a
+déjà payée une fois. Même valeur parce que c'est la même affirmation : avoir lu
+le code prouve au moins autant que figurer au carnet."""
 
 
 class _VoiceTap:
@@ -114,6 +126,13 @@ class ScoringPipeline:
         # sur l'appel, pas sur le numéro.
         self._contact_denied: set[str] = set()
 
+        # Vérifications d'identité réussies, ici pour exactement la même raison
+        # que les démentis : `_check_reputation` remplace `signals.reputation`
+        # par un objet neuf à chaque changement d'identité revendiquée, ce qui
+        # effacerait la disculpation au premier retour de Claude. Avoir lu le bon
+        # code est un fait sur l'appel, pas sur le numéro.
+        self._identity_verified: set[str] = set()
+
         # Les tâches sont groupées par appel : oublier un appel ne doit pas
         # toucher aux analyses d'un autre, et deux appels simultanés arrivent
         # vraiment (cf. `SessionRegistry.by_stream`).
@@ -174,6 +193,7 @@ class ScoringPipeline:
         self._reputation_done.discard(call_id)
         self._claimed_identity.pop(call_id, None)
         self._contact_denied.discard(call_id)
+        self._identity_verified.discard(call_id)
         for task in tuple(self._tasks.get(call_id, ())):
             task.cancel()
 
@@ -301,28 +321,110 @@ class ScoringPipeline:
         await self._apply_reputation(session, session.signals.reputation)
         await self._publish_score(session)
 
-    def _with_denial(
+    async def contact_verified(self, call_id: str) -> None:
+        """Le proche a lu le bon code : l'appelant est bien qui il prétend être.
+
+        Le pendant exact de `contact_replied`, appelé par
+        `application/verification.py` quand le code à 4 chiffres envoyé au numéro
+        du CARNET est prononcé correctement dans l'appel. C'est une preuve forte
+        et d'une nature que nos heuristiques n'atteignent pas : l'interlocuteur
+        tient physiquement le téléphone du proche, ce qu'une usurpation de numéro
+        ne donne pas.
+
+        La disculpation passe par le **signal de réputation** et par lui seul,
+        conformément au contrat : on abaisse son risque et on désarme
+        `identity_mismatch`, donc le coupe-circuit « paiement + identité ». On ne
+        touche NI aux coupe-circuits, NI au score directement, et surtout pas aux
+        signaux de contenu. C'est volontaire et c'est la partie honnête : un vrai
+        petit-fils vérifié qui réclame quand même un virement en urgence garde
+        son risque de contenu, et le score peut rester élevé pour cette raison-là.
+        Vérifier une identité ne blanchit pas un propos.
+
+        Idempotente : l'app peut cliquer deux fois, et une phrase entendue peut
+        déclencher la même vérification que la touche 1.
+        """
+        session = self._registry.get(call_id)
+        if session is None:
+            logger.warning("vérification d'identité pour un appel inconnu : %s", call_id)
+            return
+        if call_id in self._identity_verified:
+            return
+        if call_id in self._contact_denied:
+            # Le démenti l'emporte, et on le dit fort. Les deux faits ne peuvent
+            # pas être vrais ensemble : quelqu'un a lu le bon code sur le
+            # téléphone d'un proche qui affirme ne pas appeler. Abaisser le score
+            # ici désarmerait la protection sur le seul appel où elle a déjà été
+            # réclamée explicitement.
+            logger.warning(
+                "appel %s : code correct APRÈS un démenti du proche — le démenti "
+                "l'emporte, le score n'est pas abaissé",
+                call_id,
+            )
+            return
+
+        self._identity_verified.add(call_id)
+        logger.info("appel %s : identité vérifiée par code, risque de réputation abaissé", call_id)
+        await self._apply_reputation(session, session.signals.reputation)
+        await self._publish_score(session)
+
+    def _with_verdict(
         self, call_id: str, signal: ReputationSignal | None
     ) -> ReputationSignal | None:
-        """Réinjecte le démenti dans un signal de réputation reconstruit."""
-        if call_id not in self._contact_denied:
-            return signal
-        if signal is None:
-            # Le démenti peut arriver avant toute vérification de réputation :
-            # on fabrique alors le signal, sinon le coupe-circuit n'a rien à lire.
-            return ReputationSignal(risk=1.0, contact_denied=True, reasons=(CONTACT_DENIED_REASON,))
-        reasons = signal.reasons
-        if CONTACT_DENIED_REASON not in reasons:
-            reasons = (*reasons, CONTACT_DENIED_REASON)
-        # Risque maximal : aucune heuristique de numéro ne pèse plus que la
-        # personne concernée disant que ce n'est pas elle.
-        return replace(signal, risk=1.0, contact_denied=True, reasons=reasons)
+        """Réinjecte le verdict humain dans un signal de réputation reconstruit.
+
+        Le démenti est testé AVANT la vérification, et l'ordre est la règle :
+        les deux ne peuvent pas être vrais ensemble, et entre « le proche dit que
+        ce n'est pas lui » et « quelqu'un a su lire le code », c'est la personne
+        qui parle en son nom qui tranche.
+        """
+        if call_id in self._contact_denied:
+            if signal is None:
+                # Le démenti peut arriver avant toute vérification de réputation :
+                # on fabrique alors le signal, sinon le coupe-circuit n'a rien à lire.
+                return ReputationSignal(
+                    risk=1.0, contact_denied=True, reasons=(CONTACT_DENIED_REASON,)
+                )
+            reasons = signal.reasons
+            if CONTACT_DENIED_REASON not in reasons:
+                reasons = (*reasons, CONTACT_DENIED_REASON)
+            # Risque maximal : aucune heuristique de numéro ne pèse plus que la
+            # personne concernée disant que ce n'est pas elle.
+            return replace(signal, risk=1.0, contact_denied=True, reasons=reasons)
+
+        if call_id in self._identity_verified:
+            if signal is None:
+                return ReputationSignal(
+                    risk=KNOWN_CONTACT_RISK,
+                    in_contacts=True,
+                    reasons=(IDENTITY_VERIFIED_REASON,),
+                )
+            # `identity_mismatch=False` est l'effet qui compte : c'est lui qui
+            # désarme le coupe-circuit « paiement + identité », donc le plancher
+            # à 85. Le numéro reste peut-être différent de celui du carnet — mais
+            # on ne le déduit plus d'un écart de numéro, on le SAIT par le code.
+            #
+            # Les raisons précédentes sont REMPLACÉES, pas complétées. Toutes
+            # celles que produit `telephony/reputation.py` sont des inférences
+            # sur un numéro inconnu (« numéro inconnu », « ligne VoIP non fixe »,
+            # « numéro différent de celui de Lucas Martin ») : le code lu les
+            # périme toutes. Les garder ferait afficher au dashboard « numéro
+            # différent de celui de Lucas Martin » juste au-dessus de « code de
+            # vérification lu correctement », et l'opérateur, devant un jury,
+            # ne saurait pas laquelle des deux croire.
+            return replace(
+                signal,
+                risk=min(signal.risk, KNOWN_CONTACT_RISK),
+                identity_mismatch=False,
+                reasons=(IDENTITY_VERIFIED_REASON,),
+            )
+
+        return signal
 
     async def _apply_reputation(
         self, session: CallSession, signal: ReputationSignal | None
     ) -> None:
-        """Pose le signal de réputation et le publie, démenti réinjecté."""
-        signal = self._with_denial(session.call_id, signal)
+        """Pose le signal de réputation et le publie, verdict humain réinjecté."""
+        signal = self._with_verdict(session.call_id, signal)
         if signal is None:
             return
         session.signals.reputation = signal
