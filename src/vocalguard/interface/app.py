@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from vocalguard.application.intervention import InterventionRunner
 from vocalguard.application.scoring import ScoringPipeline, build_pipeline
 from vocalguard.application.sessions import CallSession, SessionRegistry
+from vocalguard.application.verification import IdentityVerifier
 from vocalguard.config import Settings, get_settings
 from vocalguard.domain.ports import AudioConsumer, EventSink, Transcriber
 from vocalguard.infrastructure.contacts.book import JsonContactBook
@@ -28,7 +29,7 @@ from vocalguard.infrastructure.fakes.event_sink import ConsoleEventSink, FanOutS
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
 from vocalguard.infrastructure.telephony.announcements import AnnouncementStore
 from vocalguard.infrastructure.telephony.client import TwilioCallController
-from vocalguard.interface.http import control, webhooks
+from vocalguard.interface.http import control, phone_app, webhooks
 from vocalguard.interface.ws import media
 
 log = logging.getLogger(__name__)
@@ -120,6 +121,22 @@ def create_app(
     # `transcript` qui les a provoqués.
     fanout.add(intervention)
     fanout.add(pipeline)
+
+    # La vérification d'identité par code (Lot 2). Construite après le registre
+    # et le pipeline, dont elle a besoin : elle écoute le bus pour entendre le
+    # code sur la piste appelant, et réutilise `contact_replied` du pipeline
+    # quand la vérification échoue, au lieu d'un second coupe-circuit.
+    verifier = IdentityVerifier(
+        registry=registry,
+        controller=controller,
+        contacts=contacts,
+        settings=settings,
+        pipeline=pipeline,
+    )
+    fanout.add(verifier)
+    # Déclencheur complémentaire et NON éprouvé : il n'est pas vérifié que Twilio
+    # remonte les touches avec un `<Stream>` unidirectionnel (Lot 0 §5).
+    registry.dtmf_hook = verifier.on_dtmf
     sink = fanout
 
     @asynccontextmanager
@@ -142,6 +159,8 @@ def create_app(
     app.state.contacts = contacts
     app.state.intervention = intervention
     app.state.pipeline = pipeline
+    # Lu par `POST /control/calls/{id}/verify` et purgé par `lifecycle.release_call`.
+    app.state.verifier = verifier
     # L'annonce vocale passe par cette file : le webhook `announce_url` y lit le
     # texte que le contrôleur a déposé (cf. infrastructure/telephony/client.py).
     app.state.announcements = getattr(controller, "announcements", announcements)
@@ -151,6 +170,8 @@ def create_app(
     # Import direct, pas via `_mount_dashboard` : le panneau de contrôle fait
     # partie de la moitié Dev 1, son absence serait un bug à voir au démarrage.
     app.include_router(control.router)
+    # L'app sur le téléphone de la personne protégée (page + jeton Voice).
+    app.include_router(phone_app.router)
     _mount_dashboard(app)
 
     @app.get("/healthz")

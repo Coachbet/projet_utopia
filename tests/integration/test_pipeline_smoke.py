@@ -5,6 +5,12 @@ produit un transcript, et un score produit les bonnes actions Twilio dans le bon
 ordre. Les adapters externes sont remplacés par les doublures de
 `infrastructure/fakes/`, donc ce test tourne sur n'importe quelle machine — c'est
 le filet de sécurité avant de brancher un vrai numéro.
+
+Les assertions passent par `sink.actions()` et non `sink.by_type(ACTION)` : le
+routage publie ses propres faits (`caller_notice`, `trusted_passthrough`) dans le
+même type d'événement, parce que le contrat figé à H0 ne permet rien d'autre.
+Ici on mesure ce que la politique d'alerte a déclenché, pas ce que le routage a
+constaté — cf. `domain.alerts.ReportedAction`.
 """
 
 from __future__ import annotations
@@ -193,7 +199,7 @@ def test_un_score_d_intervention_met_en_attente_puis_annonce(harness):
     assert "send_sms" in methodes
     assert all(m != "hangup" for m in methodes), "jamais de raccrochage automatique"
 
-    actions = sink.by_type(EventType.ACTION)
+    actions = sink.actions()
     assert {e.data["action"] for e in actions} >= {"hold_caller", "announce_victim", "sms_contact"}
     assert all(e.data["ok"] for e in actions)
     assert app.state.registry.get(CALL_ID).caller_held is True
@@ -211,7 +217,7 @@ def test_un_score_de_vigilance_ne_declenche_rien_d_audible(harness):
     asyncio.run(_scorer(app, score=45, level="watch"))
 
     assert app.state.controller.calls == []
-    assert sink.by_type(EventType.ACTION) == []
+    assert sink.actions() == []
 
 
 async def _scorer(app, *, score: int, level: str) -> None:

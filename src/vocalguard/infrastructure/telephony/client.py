@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlencode
 
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
@@ -200,26 +201,98 @@ class TwilioCallController:
 
     # --- Port CallController ----------------------------------------------
 
-    async def dial_victim(self, call_id: str, *, to_number: str | None = None) -> str | None:
-        """Appelle la victime et la fait entrer dans la conférence de cet appel.
+    async def dial_victim(
+        self,
+        call_id: str,
+        *,
+        to_number: str | None = None,
+        caller_number: str = "",
+        caller_name: str = "",
+    ) -> str | None:
+        """Fait sonner la personne protégée et la fait entrer dans la conférence.
 
         Renvoie le SID de la jambe créée, `None` si l'appel n'a pas pu être passé.
+
+        Deux destinations possibles, dans cet ordre :
+
+          1. **l'app** (`client:<VOICE_CLIENT_IDENTITY>`) dès qu'elle est
+             configurée. C'est le montage « un seul numéro » : la personne
+             protégée renvoie sa ligne vers notre numéro Twilio, donc rappeler
+             son numéro public nous le ferait renvoyer vers Twilio — une boucle
+             facturée à chaque tour. Une jambe `client:` n'a pas ce problème, ne
+             demande pas de seconde SIM, coûte bien moins qu'une minute vers un
+             mobile français, et c'est elle qui permet d'afficher le vrai numéro
+             de l'appelant à l'écran ;
+          2. **le téléphone** (`VICTIM_PHONE_NUMBER`), le comportement d'avant
+             l'app, qui reste le repli indispensable : une page web ne sonne que
+             si elle est ouverte (cf. `interface/http/phone_app.py`).
+
+        `caller_number` et `caller_name` sont optionnels et par défaut vides,
+        pour que les appelants existants — `webhooks.py` n'en passe pas encore —
+        gardent exactement le comportement actuel. Ils voyagent dans la query
+        string de l'URL de la jambe : c'est le seul canal que `calls.create`
+        laisse disponible. La méthode documentée par Twilio pour atteindre
+        `Call.customParameters` côté navigateur est la noun `<Parameter>` de
+        `<Dial><Client>`, que notre jambe n'emprunte pas, et l'API REST ne
+        documente aucun paramètre personnalisé pour `to="client:…"`.
+
+        À quoi ils servent, concrètement, et à quoi ils ne servent PAS : ils
+        laissent une trace dans le journal Twilio et dans le nôtre, et ils sont
+        le point d'accroche d'un futur `<Dial><Client><Parameter>`. Ils ne
+        nourrissent pas l'annonce du repli téléphonique — `voice_join`
+        reconstruit « Appel de Lucas Martin » depuis la session et le carnet, à
+        la demande, exprès pour ne pas créer une seconde source de vérité. Et
+        l'app, elle, lit l'appelant sur `POST /app/incoming`, qui interroge ces
+        mêmes sources. Ne rien câbler dessus sans vérifier d'abord au vrai
+        téléphone que Twilio transmet quelque chose.
         """
         if not self._ready("dial_victim"):
             return None
 
-        destination = to_number or self._settings.victim_phone_number
+        app_target = self._settings.voice_client_target
+        destination = to_number or app_target or self._settings.victim_phone_number
         if not destination:
-            logger.warning("dial_victim ignoré : VICTIM_PHONE_NUMBER vide.")
+            # L'ancien message ne parlait que de `VICTIM_PHONE_NUMBER` : depuis
+            # que l'app existe, il y a deux façons de faire sonner la personne
+            # protégée et une seule suffit. Nommer les deux évite de chercher
+            # pendant dix minutes un numéro dont on n'a plus besoin.
+            logger.warning(
+                "dial_victim ignoré : personne à faire sonner. Renseigner "
+                "VOICE_CLIENT_IDENTITY (l'app sur le téléphone) ou, à défaut, "
+                "VICTIM_PHONE_NUMBER (le repli téléphonique)."
+            )
             return None
 
+        vers_app = not to_number and bool(app_target)
+        if vers_app:
+            logger.info("Jambe victime vers l'app (%s) pour l'appel %s", destination, call_id)
+        else:
+            logger.info(
+                "Jambe victime vers le téléphone (repli) (%s) pour l'appel %s",
+                destination,
+                call_id,
+            )
+
         base = self._settings.public_base_url
+        url = f"{base}/twilio/voice/join/{call_id}"
+        # Query string et non corps POST : c'est Twilio qui vient chercher ce
+        # TwiML, nous ne contrôlons que l'URL. Les valeurs vides sont écartées
+        # pour que l'URL d'un appel sans appelant connu reste celle d'avant —
+        # `?caller_number=` ne veut rien dire de plus que son absence.
+        extras = {
+            cle: valeur
+            for cle, valeur in (("caller_number", caller_number), ("caller_name", caller_name))
+            if valeur
+        }
+        if extras:
+            url = f"{url}?{urlencode(extras)}"
+
         try:
             call = await asyncio.to_thread(
                 lambda: self._client.calls.create(  # type: ignore[union-attr]
                     to=destination,
                     from_=self._settings.twilio_phone_number,
-                    url=f"{base}/twilio/voice/join/{call_id}",
+                    url=url,
                     method="POST",
                     status_callback=f"{base}/twilio/voice/status",
                     status_callback_method="POST",

@@ -1,0 +1,28 @@
+{
+  "lang": "fr",
+  "dir": "ltr",
+  "name": "VocalGuard — protection des appels",
+  "short_name": "VocalGuard",
+  "description": "Votre téléphone sonne ici. VocalGuard vous dit qui appelle et vous prévient si l'appel est suspect.",
+  "start_url": "/app",
+  "scope": "/app",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f9f9f7",
+  "theme_color": "#0f8f62",
+  "categories": ["utilities", "security"],
+  "icons": [
+    {
+      "src": "/app/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/app/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

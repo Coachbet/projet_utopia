@@ -1,11 +1,13 @@
 """Libération de l'état d'un appel : un seul chemin, deux déclencheurs.
 
-L'état d'un appel vit à trois endroits qui ne se connaissent pas : le registre de
-sessions (`SessionRegistry`, qui tient les streams Transcribe), le pipeline de
-score (ses caches `_llm_in_flight` / `_reputation_done` / `_claimed_identity`) et
-le contrôleur Twilio (SID de conférence mémorisé, annonces en attente). Deux
-événements indépendants annoncent la fin de l'appel, et aucun des deux n'est
-fiable seul :
+L'état d'un appel vit à quatre endroits qui ne se connaissent pas : le registre
+de sessions (`SessionRegistry`, qui tient les streams Transcribe), le pipeline de
+score (ses caches `_llm_in_flight` / `_reputation_done` / `_claimed_identity`),
+le contrôleur Twilio (SID de conférence mémorisé, annonces en attente) et le
+service de vérification d'identité (le code à 4 chiffres en cours et son minuteur
+d'expiration — une tâche de fond qui, non annulée, se réveillerait pour parler
+dans une conférence terminée). Deux événements indépendants annoncent la fin de
+l'appel, et aucun des deux n'est fiable seul :
 
   - la fermeture du media stream — toujours émise quand l'appel se termine, mais
     pas si le `<Stream>` n'a jamais démarré ;
@@ -57,7 +59,7 @@ async def release_call(state: Any, call_id: str) -> None:
             log.exception("Fermeture de la session %s en échec", call_id)
 
     freed = ["session"] if known else []
-    for name in ("pipeline", "controller"):
+    for name in ("pipeline", "controller", "verifier"):
         if _forget(getattr(state, name, None), call_id, name):
             freed.append(name)
 

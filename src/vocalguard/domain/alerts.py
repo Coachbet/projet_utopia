@@ -40,6 +40,41 @@ class ActionKind(StrEnum):
     NOTIFY_DASHBOARD = "notify_dashboard"
 
 
+class ReportedAction(StrEnum):
+    """Faits publiés dans un événement `action`, hors politique d'alerte.
+
+    Le contrat d'événement est figé à H0 et n'accepte **aucun nouveau `type`**.
+    Un fait de routage (« cet appel de la famille est passé sans être analysé »)
+    ou de vérification d'identité n'a donc qu'un seul canal : le champ
+    `data.action`. C'est la seule extension que `contracts/event.schema.json`
+    autorise, et ces six valeurs y sont déclarées — les ajouter ici sans les
+    ajouter là-bas rendrait le schéma faux.
+
+    Séparés d'`ActionKind`, et la distinction n'est pas cosmétique. `ActionKind`
+    est un **effet** que `plan_actions` prescrit et qu'`application.intervention`
+    applique via l'API Twilio Participants ; ceux-ci **rapportent** ce que le
+    routage ou la vérification ont constaté. Les confondre a un coût immédiat et
+    déjà payé : un test qui affirme « aucune action audible » après avoir ouvert
+    son appel par le webhook entrant se met à échouer sur l'annonce faite à
+    l'appelant, qui n'a rien à voir avec ce qu'il mesure. D'où
+    `InMemoryEventSink.actions()`, qui s'appuie sur cette liste.
+    """
+
+    TRUSTED_PASSTHROUGH = "trusted_passthrough"
+    """Appel d'un contact de confiance : transmis sans annonce et sans analyse."""
+
+    CALLER_NOTICE = "caller_notice"
+    """L'annonce « cet appel est analysé » a été jouée à l'appelant inconnu.
+    Trace du consentement informé : c'est elle qui date l'information."""
+
+    SPOOF_SIMULATED = "spoof_simulated"
+    """Le `From` a été réécrit par `DEMO_SPOOF_AS`. Jamais en service réel."""
+
+    VERIFY_REQUESTED = "verify_requested"
+    IDENTITY_VERIFIED = "identity_verified"
+    VERIFY_EXPIRED = "verify_expired"
+
+
 @dataclass(frozen=True, slots=True)
 class Thresholds:
     watch: int = 40
@@ -67,6 +102,90 @@ ANNOUNCE_ALERT = (
 )
 
 SMS_VERIFY_CONTACT = "Est-ce toi qui appelles en ce moment ?"
+
+
+# --- Vérification d'identité par code à 4 chiffres (Lot 2) -----------------
+#
+# Un arnaqueur peut usurper le numéro affiché ; il ne peut pas lire un SMS
+# envoyé au VRAI téléphone du proche. Ces textes sont les deux seules sorties du
+# code de vérification : un SMS vers un numéro du carnet, et une annonce
+# entendue de la personne protégée seule. Jamais dans la conférence (l'appelant
+# l'entendrait et le relirait), jamais dans un log, jamais sur le bus
+# d'événements — cf. `application/verification.py`.
+
+DIGIT_PAUSE = "… "
+"""Séparateur entre les chiffres énoncés.
+
+Sans lui, la synthèse vocale lit « quatre mille huit cent vingt et un » : la
+personne protégée entend un montant, pas un code, et ce qu'elle répète ne
+ressemble plus au SMS que le proche a sous les yeux. Constante et non littéral
+en ligne : si le test terrain montre que la voix Twilio avale les points de
+suspension, il n'y a qu'un endroit à corriger."""
+
+
+def say_digits(code: str) -> str:
+    """« 4821 » → « 4… 8… 2… 1 », pour que la voix les énonce un à un."""
+    return DIGIT_PAUSE.join(code)
+
+
+def sms_verify_code(code: str, owner: str = "") -> str:
+    """Le SMS qui part sur le vrai téléphone du proche.
+
+    `owner` est le prénom de la personne protégée, tel que le carnet le déclare.
+    Vide, la phrase se passe de nom : un prénom inventé ferait douter le proche
+    du message entier, alors que c'est le seul message du système dont on a
+    besoin qu'il soit cru immédiatement.
+
+    « Sinon réponds NON » est là pour une raison précise : cette réponse emprunte
+    le chemin existant `/twilio/sms/inbound` → `contact_replied(denied=True)`,
+    donc elle arme le coupe-circuit `trusted_contact_denied` sans une ligne de
+    code de plus. Changer ce mot casserait le lexique de `webhooks.py`.
+    """
+    chez = f" {owner}" if owner else ""
+    return (
+        f"VocalGuard : code {code}. Si c'est bien toi qui appelles{chez} en ce moment, "
+        "lis-lui ce code. Sinon réponds NON."
+    )
+
+
+def announce_verify_code(contact_name: str, code: str) -> str:
+    """Ce que la personne protégée entend, elle seule, quand le code est parti."""
+    return (
+        f"Un code a été envoyé à {contact_name}. Le code est {say_digits(code)}. "
+        "Demandez-lui de vous le lire."
+    )
+
+
+ANNOUNCE_VERIFY_NO_CONTACT = "Je ne peux pas vérifier : cette personne n'est pas dans vos contacts."
+"""Ni le numéro appelant ni l'identité revendiquée ne désignent un contact : on
+n'a aucun vrai téléphone vers qui envoyer le code. On le dit, et on ne fait rien
+d'autre — surtout pas d'SMS vers le numéro de l'appel, qui serait le téléphone
+de l'arnaqueur lui-même."""
+
+ANNOUNCE_VERIFY_SAME_NUMBER = (
+    "Je ne peux pas vérifier : le code partirait sur le téléphone de la personne qui appelle."
+)
+"""Garde-fou : le destinataire retenu est le numéro depuis lequel on appelle,
+alors qu'on y est arrivé par l'identité revendiquée et pas par le carnet. Envoyer
+quand même donnerait le code à vérifier à celui qu'on vérifie."""
+
+ANNOUNCE_VERIFY_SMS_FAILED = "Je n'ai pas réussi à envoyer le code. Vous pouvez réessayer."
+
+ANNOUNCE_VERIFY_OK = "Code correct."
+
+ANNOUNCE_VERIFY_WRONG = "Ce code n'est pas le bon. Faites-le répéter."
+"""Dit dès qu'un code faux est entendu, sans rien conclure : la transcription se
+trompe régulièrement d'un chiffre, et accuser sur une erreur de reconnaissance
+mettrait en attente un vrai petit-fils. On l'informe, elle fait répéter."""
+
+ANNOUNCE_VERIFY_EXPIRED = "Le code n'a pas été lu. L'identité n'est pas vérifiée."
+
+ANNOUNCE_VERIFY_UNHEARD = (
+    "Je n'ai pas pu entendre cet appel. Si cette personne ne vous a pas lu le code, méfiez-vous."
+)
+"""Fin de fenêtre sur un appel qu'on n'écoute pas (contact de confiance : aucun
+`<Stream>`, donc aucun transcript) ou dont la transcription est tombée. On ne
+peut rien affirmer, donc on n'affirme rien et on lui rend la décision."""
 
 
 def announce_intervene(contact_name: str | None) -> str:

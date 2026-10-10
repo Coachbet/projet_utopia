@@ -14,6 +14,13 @@ produit, qui se « corrigent » facilement par erreur :
 
 Même montage que `test_pipeline_smoke.py` : app complète sur les doublures de
 `infrastructure/fakes/`, donc aucun réseau, aucun téléphone, aucun credential.
+
+Les assertions passent par `sink.actions()` et non `sink.by_type(ACTION)` : depuis
+le routage liste blanche, `/twilio/voice/inbound` — par lequel ces tests ouvrent
+leur appel, pour partir du même état que la production — publie son propre fait
+`caller_notice` dans le même type d'événement, le contrat figé à H0 ne permettant
+rien d'autre. Ce qu'on mesure ici est la décision de l'opérateur, pas ce que le
+routage a constaté. Cf. `domain.alerts.ReportedAction`.
 """
 
 from __future__ import annotations
@@ -99,7 +106,7 @@ def test_reprise_rend_la_parole_a_l_appelant(harness):
 
     # La frise du dashboard doit garder la trace de la décision humaine, dans la
     # même forme que les actions automatiques : le contrat d'événement est figé.
-    actions = sink.by_type(EventType.ACTION)
+    actions = sink.actions()
     assert [e.data for e in actions] == [
         {"action": "resume_caller", "target": "caller", "ok": True}
     ]
@@ -116,7 +123,7 @@ def test_appel_inconnu_repond_404_et_n_emet_rien(harness, route):
     # de « Twilio a refusé ».
     assert response.status_code == 404
     assert "CA_jamais_vu" in response.json()["detail"]
-    assert sink.by_type(EventType.ACTION) == []
+    assert sink.actions() == []
     assert app.state.controller.calls == [], "pas d'appel Twilio sur un appel inexistant"
 
 
@@ -135,7 +142,7 @@ def test_echec_twilio_reste_un_200_avec_ok_false(harness):
     # L'état ne suit pas une action ratée : le scammeur écoute encore la musique.
     assert session.caller_held is True
 
-    actions = sink.by_type(EventType.ACTION)
+    actions = sink.actions()
     assert [e.data["ok"] for e in actions] == [False]
     assert actions[0].data["action"] == "resume_caller"
 
@@ -170,7 +177,7 @@ def test_deux_reprises_de_suite_sont_sans_danger(harness):
     assert session.caller_held is False
     # Un seul événement, pas deux : le second clic n'a rien changé à l'appel, et
     # deux points de frise pour une seule décision mentiraient à l'opérateur.
-    assert len(sink.by_type(EventType.ACTION)) == 1
+    assert len(sink.actions()) == 1
 
 
 # --- `POST /control/calls/{id}/hold` : le retour arrière ---------------------
@@ -194,7 +201,7 @@ def test_la_mise_en_attente_manuelle_coupe_la_parole_a_l_appelant(harness):
 
     # Même forme d'événement que l'action automatique d'`InterventionRunner` :
     # le contrat est figé, le dashboard ne distingue pas les deux origines.
-    actions = sink.by_type(EventType.ACTION)
+    actions = sink.actions()
     assert [e.data for e in actions] == [{"action": "hold_caller", "target": "caller", "ok": True}]
     assert actions[0].call_id == CALL_ID
 
@@ -212,7 +219,7 @@ def test_un_echec_twilio_sur_la_mise_en_attente_reste_un_200(harness):
     assert session.caller_held is False
     assert ("hold_caller", CALL_ID) in app.state.controller.calls
 
-    actions = sink.by_type(EventType.ACTION)
+    actions = sink.actions()
     assert [e.data for e in actions] == [{"action": "hold_caller", "target": "caller", "ok": False}]
 
 
@@ -250,7 +257,7 @@ def test_hold_rend_la_protection_apres_une_reprise_definitive(harness):
 
     assert session.caller_held is True
     assert session.acted_level is AlertLevel.INTERVENE
-    assert [e.data["action"] for e in sink.by_type(EventType.ACTION)] == [
+    assert [e.data["action"] for e in sink.actions()] == [
         "resume_caller",
         "hold_caller",
     ]
@@ -276,7 +283,7 @@ def test_reprendre_un_appel_jamais_mis_en_attente_n_appelle_pas_twilio(harness):
     assert response.json() == {"ok": True, "call_id": CALL_ID, "caller_held": False}
     assert session.caller_held is False
     assert app.state.controller.calls == [], "pas d'appel Twilio pour un état déjà atteint"
-    assert sink.by_type(EventType.ACTION) == []
+    assert sink.actions() == []
 
 
 def test_mettre_en_attente_un_appel_deja_tenu_n_appelle_pas_twilio(harness):
@@ -290,7 +297,7 @@ def test_mettre_en_attente_un_appel_deja_tenu_n_appelle_pas_twilio(harness):
     assert response.json() == {"ok": True, "call_id": CALL_ID, "caller_held": True}
     assert session.caller_held is True
     assert app.state.controller.calls == []
-    assert sink.by_type(EventType.ACTION) == []
+    assert sink.actions() == []
 
 
 # --- Le démenti du proche, saisi à la main -----------------------------------
@@ -318,7 +325,7 @@ def test_le_dementi_du_proche_fait_monter_le_score_a_l_intervention(harness):
     assert "trusted_contact_denied" in scores[-1]["breakers_fired"]
 
     # Et l'intervention a bien suivi : l'appelant est en attente.
-    actions = [e.data["action"] for e in sink.by_type(EventType.ACTION)]
+    actions = [e.data["action"] for e in sink.actions()]
     assert "hold_caller" in actions
     assert session.caller_held is True
 

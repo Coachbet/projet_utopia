@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img"
+     aria-labelledby="t">
+  <title id="t">VocalGuard — un bouclier sur une voix</title>
+  <!-- Icône de l'écran d'accueil. Deux contraintes, pas de décoration :
+
+       1. Le fond couvre TOUTE la surface. Android découpe l'icône « maskable »
+          en cercle, en losange ou en goutte selon le lanceur : un fond
+          transparent donnerait une pastille blanche aux bords sales.
+       2. Le dessin tient dans le cercle central de rayon 40 % (205 px ici),
+          la « zone sûre » du découpage. Un bouclier plus large se ferait
+          rogner la pointe sur un lanceur en cercle.
+
+       Un bouclier et une voix (les barres), pas un combiné : l'icône doit se
+       lire à 48 px sur l'écran d'une personne qui voit mal. -->
+  <rect width="512" height="512" fill="#0f8f62"/>
+  <path d="M256 112 L382 154 V270 C382 330 328 374 256 400 C184 374 130 330 130 270 V154 Z"
+        fill="#ffffff"/>
+  <g fill="#0f8f62">
+    <rect x="182" y="230" width="20" height="44"  rx="10"/>
+    <rect x="214" y="212" width="20" height="80"  rx="10"/>
+    <rect x="246" y="196" width="20" height="112" rx="10"/>
+    <rect x="278" y="212" width="20" height="80"  rx="10"/>
+    <rect x="310" y="230" width="20" height="44"  rx="10"/>
+  </g>
+</svg>

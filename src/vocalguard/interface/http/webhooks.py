@@ -10,6 +10,11 @@ jamais passé dans l'URL).
 Les formulaires sont lus via `request.form()` : Twilio poste en
 `application/x-www-form-urlencoded`, que Starlette décode sans `python-multipart`.
 
+`/twilio/voice/inbound` porte en plus la décision la plus visible du produit —
+transmettre ou analyser. La ligne protégée étant renvoyée ici, c'est la seule
+route que TOUS les appels traversent, y compris ceux de la famille : voir sa
+docstring pour l'ordre des étapes, qui n'est pas négociable.
+
 Une route de ce module ne sert pas de la voix : `/twilio/sms/inbound` reçoit la
 RÉPONSE du proche au SMS de vérification (`domain.alerts.SMS_VERIFY_CONTACT`).
 Elle vit ici parce que c'est le même émetteur, le même format de formulaire et la
@@ -22,21 +27,32 @@ import asyncio
 import inspect
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from twilio.request_validator import RequestValidator
 
+from vocalguard.domain.alerts import ReportedAction
+from vocalguard.domain.events import EventType
 from vocalguard.infrastructure.contacts.book import normalize_number
 from vocalguard.infrastructure.keywords.detector import normalize as fold_text
 from vocalguard.infrastructure.telephony.twiml import (
+    STREAM_TRACK_BOTH,
+    STREAM_TRACK_VICTIM_ONLY,
     announce_twiml,
     empty_twiml,
     hold_music_twiml,
     inbound_call_twiml,
     join_conference_twiml,
+    refusal_twiml,
 )
 from vocalguard.interface.lifecycle import release_call
+
+if TYPE_CHECKING:
+    from starlette.datastructures import QueryParams
+
+    from vocalguard.config import Settings
+    from vocalguard.domain.models import Contact
 
 log = logging.getLogger(__name__)
 
@@ -130,6 +146,35 @@ ramassée par le GC avant de s'être exécutée, et l'appel de la victime ne par
 jamais."""
 
 
+# --- Routage de l'appel entrant : liste blanche vs analyse ------------------
+
+LOOP_REFUSAL_TEXT = "Cet appel ne peut pas aboutir."
+"""Phrase servie à un appel refusé par la garde anti-boucle. Volontairement muette
+sur la cause : l'appelant est soit nous-mêmes, soit la personne protégée qui a
+composé son propre numéro renvoyé — dans les deux cas, expliquer le montage ne
+sert personne, et le dire à un tiers renseignerait sur notre infrastructure."""
+
+VICTIM_NOTICE_UNKNOWN = "Appel d'un numéro inconnu, appel protégé."
+"""Ce que la personne protégée entend, elle seule, quand l'appelant n'est pas au
+carnet. « Appel protégé » est là pour qu'elle sache que l'analyse tourne : c'est
+la contrepartie rassurante de l'annonce faite à l'appelant."""
+
+_MASKED_CALLER_IDS = frozenset({"anonymous", "restricted", "unknown"})
+"""Identifiants d'appelant que Twilio substitue au numéro quand il n'y en a pas.
+
+Le test est explicite alors qu'il serait presque redondant — aucun de ces mots ne
+se normalise en numéro, donc aucun ne peut être trouvé au carnet. Il sert à deux
+choses : dire « appel masqué » dans le journal plutôt que « numéro absent du
+carnet », et rendre impossible qu'un carnet un jour mal indexé fasse d'un appel
+masqué un contact de confiance. C'est la seule erreur de ce routage qui serait
+grave : accorder le silence à quelqu'un qui cache son numéro."""
+
+_DEMO_OUTBOUND_TRUE = frozenset({"1", "true", "yes", "oui"})
+"""Valeurs acceptées pour `?demo_outbound=` : le drapeau est écrit à la main dans
+une URL, et un `demo_outbound=true` silencieusement ignoré ferait échouer la démo
+par la garde anti-boucle, c'est-à-dire de la façon la plus déroutante possible."""
+
+
 # --- Lexique des réponses au SMS de vérification ----------------------------
 #
 # Le proche répond d'un pouce, sous stress, depuis un clavier de téléphone :
@@ -204,11 +249,28 @@ def _xml(body: str) -> Response:
 
 @router.post("/voice/inbound")
 async def voice_inbound(request: Request) -> Response:
-    """Entrée de l'appel du scammeur : on branche l'écoute, puis la conférence.
+    """Entrée de l'appel : on décide d'abord s'il se transmet ou s'il s'analyse.
 
-    `<Start><Stream>` est unidirectionnel et compatible avec `<Dial><Conference>`,
-    ce qui nous permet d'écouter les deux pistes tout en gardant la main sur
-    chaque participant.
+    La personne protégée garde son numéro et renvoie sa ligne ici : TOUS ses
+    appels passent donc par cette route, y compris ceux de sa famille. D'où
+    l'ordre ci-dessous, qui est le produit lui-même et non de la plomberie :
+
+    1. pas de `CallSid` → rien à faire, on accuse réception ;
+    2. réécritures de DÉMO du `From` (jambe sortante du script, puis
+       `DEMO_SPOOF_AS`), toujours loguées ;
+    3. garde anti-boucle : un appel venant d'un de nos propres numéros ne doit
+       surtout pas déclencher un rappel ;
+    4. résolution de l'appelant dans le carnet ;
+    5. **contact de confiance** → `<Dial><Conference>` nu : aucune annonce,
+       aucun `<Stream>`, aucune transcription. La famille n'est pas écoutée, et
+       c'est la promesse du produit, pas un réglage ;
+    6. **inconnu / masqué / mode `analyze`** → `<Say>` à l'appelant, PUIS
+       `<Start><Stream>`, PUIS la conférence. Cet ordre est le montage
+       juridique : on n'analyse que ce qui suit l'information de l'appelant.
+
+    Dans les deux cas une session est ouverte et la victime est rappelée : c'est
+    la session que retrouvent les routes de contrôle et le dashboard, même pour
+    un appel dont on ne captera pas un octet.
     """
     form = await request.form()
     call_sid = str(form.get("CallSid") or "")
@@ -217,38 +279,268 @@ async def voice_inbound(request: Request) -> Response:
     settings = request.app.state.settings
     registry = request.app.state.registry
     controller = request.app.state.controller
+    contacts = request.app.state.contacts
 
     if not call_sid:
         log.warning("Webhook inbound sans CallSid — appel ignoré")
         return _xml(empty_twiml())
 
-    # `open()` est idempotent et démarre les transcriptions : Twilio rejoue ce
-    # webhook en cas de timeout, et deux sessions pour un appel dédoubleraient
-    # transcript et score.
-    await registry.open(
+    # --- 2. Ce que l'appelant PRÉTEND être (démo seulement) ----------------
+    #
+    # Les deux réécritures se chaînent exprès : le script de démo déclare « c'est
+    # le téléphone de l'arnaqueur qui parle », et `DEMO_SPOOF_AS` fait ensuite
+    # croire que ce téléphone est celui de Lucas. C'est le scénario fort du pitch,
+    # joué sans qu'aucun appel international ne soit payé — et sans que le chemin
+    # de code diffère de celui d'un vrai appel entrant.
+    numero_reel = from_number
+    jambe_de_demo = _jambe_de_demo(request.query_params)
+    if jambe_de_demo:
+        from_number = _identite_presentee(request.query_params, from_number)
+    from_number, usurpation_simulee = _usurpation_simulee(settings, from_number)
+
+    # --- 3. Garde anti-boucle ---------------------------------------------
+    if _boucle_de_renvoi(settings, from_number) and not jambe_de_demo:
+        # ERROR et pas WARNING : c'est la panne qui se paie en argent. La ligne
+        # protégée est renvoyée vers notre numéro Twilio, donc rappeler ce
+        # numéro-là nous ferait rappeler nous-mêmes, à deux jambes facturées par
+        # tour, jusqu'à épuisement du crédit. On refuse l'appel sans rien tenter.
+        log.error(
+            "APPEL REFUSÉ (boucle de renvoi) : %s est un de nos propres numéros "
+            "(PROTECTED/VICTIM/TWILIO_PHONE_NUMBER). La victime n'est PAS rappelée : "
+            "chaque tour de boucle coûterait deux jambes facturées. Si c'est la démo "
+            "sortante, l'URL du webhook doit porter « ?demo_outbound=1 » "
+            "(cf. scripts/lancer_appel_demo.py).",
+            from_number,
+        )
+        return _xml(refusal_twiml(LOOP_REFUSAL_TEXT))
+
+    # --- 4. Qui appelle ? --------------------------------------------------
+    masque = _numero_masque(from_number)
+    contact = None if masque else contacts.by_number(from_number)
+    # Deux notions distinctes, deux variables : `contact` dit « on sait le
+    # nommer », `confiance` dit « on lui doit le silence ». Une entrée en mode
+    # `analyze` est au carnet — on l'annoncera par son nom à la personne
+    # protégée — sans pour autant échapper à l'analyse. Les confondre serait
+    # l'erreur dangereuse de ce routage : lire « connu » comme « de confiance ».
+    confiance = contact if contact is not None and contact.is_trusted else None
+
+    # Une session dans tous les cas, mais une ÉCOUTE seulement si l'appel
+    # s'analyse. `transcribe=False` n'ouvre aucune piste Transcribe : l'appel de
+    # confiance ne porte de toute façon aucun `<Stream>`, et deux connexions AWS
+    # facturées pour une piste muette seraient payées pour rien.
+    ecoute = confiance is None or settings.trusted_victim_only_analysis
+
+    # `open()` est idempotent : Twilio rejoue ce webhook en cas de timeout, et
+    # deux sessions pour un appel dédoubleraient transcript et score.
+    session = await registry.open(
         call_sid,
         caller_number=from_number,
         victim_number=settings.victim_phone_number,
+        transcribe=ecoute,
     )
 
     # L'appel de la victime part en tâche de fond : Twilio attend ce TwiML pour
     # placer l'appelant dans la conférence, et un aller-retour REST ici coûterait
-    # une seconde d'attente côté scammeur — assez pour qu'il raccroche.
+    # une seconde d'attente côté scammeur — assez pour qu'il raccroche. Il part
+    # aussi pour un appel de confiance : c'est un appel à transmettre, pas à
+    # ignorer. Seule la boucle (ci-dessus) n'y a pas droit.
     task = asyncio.create_task(_dial_victim(controller, call_sid))
     _background.add(task)
     task.add_done_callback(_background.discard)
 
+    if usurpation_simulee:
+        # Le dashboard doit MONTRER le mensonge, pas seulement le journal : devant
+        # un jury, « le serveur croit que c'est Lucas » est exactement ce qu'on
+        # démontre, et un réglage qui ment sur l'identité ne doit laisser aucun
+        # écran dans l'ignorance.
+        await session.emit(
+            EventType.ACTION,
+            {
+                "action": ReportedAction.SPOOF_SIMULATED.value,
+                "target": "caller",
+                # `ok` sur un fait de routage : aucune API n'a été appelée, mais
+                # TOUS les événements `action` du système en portent un, et des
+                # consommateurs lisent `data["ok"]` sans détour. L'omettre les
+                # ferait tomber sur un `KeyError` au moment le plus bruyant de la
+                # démo. Vrai, donc, au sens « la décision a bien été appliquée ».
+                "ok": True,
+                "real_from": numero_reel,
+                "presented_as": from_number,
+                "message": (
+                    f"Usurpation SIMULÉE (mode démo) : l'appel vient de {numero_reel}, "
+                    f"il est traité comme venant de {from_number}."
+                ),
+            },
+        )
+
+    conference_status = f"{settings.public_base_url}/twilio/conference/status"
+
+    if confiance is not None:
+        log.info(
+            "Appel %s de %s (%s) : contact de confiance, transmis sans annonce — %s",
+            call_sid,
+            confiance.name,
+            from_number,
+            "piste de la personne protégée seule (Lot 3)"
+            if ecoute
+            else "aucun flux audio, aucune transcription",
+        )
+        await session.emit(
+            EventType.ACTION,
+            {
+                "action": ReportedAction.TRUSTED_PASSTHROUGH.value,
+                "target": "caller",
+                "ok": True,
+                "contact": confiance.name,
+                "message": f"Appel de {confiance.name} : transmis sans annonce ni analyse.",
+            },
+        )
+        return _xml(
+            inbound_call_twiml(
+                stream_url=settings.media_stream_url,
+                conference_name=settings.conference_name_for(call_sid),
+                conference_status_callback=conference_status,
+                caller_number=from_number,
+                # Aucune annonce : l'appelant de confiance ne doit rien entendre
+                # qui lui apprenne qu'il a été reconnu — ni qu'un service existe.
+                track=STREAM_TRACK_VICTIM_ONLY if ecoute else None,
+            )
+        )
+
+    log.info(
+        "Appel %s : %s — annonce à l'appelant puis analyse",
+        call_sid,
+        _motif_inconnu(contact, from_number, masque=masque),
+    )
+    await session.emit(
+        EventType.ACTION,
+        {
+            "action": ReportedAction.CALLER_NOTICE.value,
+            "target": "caller",
+            "ok": True,
+            # La phrase exacte qui a été dite, pas un résumé : c'est la pièce
+            # qu'on produirait pour justifier l'analyse de cet appel.
+            "message": settings.caller_notice_text,
+        },
+    )
     return _xml(
         inbound_call_twiml(
             stream_url=settings.media_stream_url,
             conference_name=settings.conference_name_for(call_sid),
-            conference_status_callback=f"{settings.public_base_url}/twilio/conference/status",
+            conference_status_callback=conference_status,
             # Transporté jusqu'au `<Stream>` parce que la trame `start` ne porte
             # pas le `From` : c'est la seule façon pour `/ws/media` de connaître
             # le numéro appelant si ce webhook n'est pas passé le premier.
             caller_number=from_number,
+            caller_notice=settings.caller_notice_text,
+            track=STREAM_TRACK_BOTH,
         )
     )
+
+
+def _jambe_de_demo(params: QueryParams) -> bool:
+    """L'URL porte-t-elle `?demo_outbound=1` ?
+
+    Le piège que ce drapeau existe pour désamorcer : `scripts/lancer_appel_demo.py`
+    inverse le sens de l'appel (Twilio appelle le téléphone de l'arnaqueur, pour
+    que la France ne facture rien) et branche la jambe SORTANTE sur cette route.
+    Dans ce sens, `From` vaut notre propre `TWILIO_PHONE_NUMBER` — la garde
+    anti-boucle reconnaîtrait donc la démo comme une boucle et la refuserait.
+
+    Pourquoi un paramètre d'URL et non un réglage `.env` : le drapeau appartient à
+    UN appel, celui que le script vient de créer, pas à la configuration du
+    service. Un `DEMO_MODE=true` oublié dans un `.env` désarmerait la garde pour
+    tous les appels, y compris les vrais — c'est précisément la boucle à deux
+    jambes facturées par tour qu'on refuse de rendre possible.
+    """
+    return (params.get("demo_outbound") or "").strip().casefold() in _DEMO_OUTBOUND_TRUE
+
+
+def _identite_presentee(params: QueryParams, defaut: str) -> str:
+    """Identité à présenter pour la jambe sortante de démo (`?presented_from=`).
+
+    Sans elle, l'appel de démo s'annoncerait avec notre numéro Twilio : inconnu du
+    carnet, donc analysé — ce qui marche, mais ne démontre ni la liste blanche ni
+    l'usurpation. Avec elle, le script dit la vérité du plateau (« c'est le
+    téléphone de l'arnaqueur qui parle »), et `DEMO_SPOOF_AS` peut ensuite jouer
+    son rôle par-dessus, exactement comme sur un appel entrant.
+    """
+    presentee = (params.get("presented_from") or "").strip()
+    if not presentee:
+        return defaut
+    log.warning(
+        "IDENTITÉ DE DÉMO (presented_from) : la jambe sortante %s est traitée comme "
+        "un appel entrant de %s. Garde anti-boucle désarmée pour cet appel seul.",
+        defaut or "(sans numéro)",
+        presentee,
+    )
+    return presentee
+
+
+def _usurpation_simulee(settings: Settings, from_number: str) -> tuple[str, bool]:
+    """Fait comme si l'appel du téléphone « arnaqueur » venait de `DEMO_SPOOF_AS`.
+
+    Twilio interdit d'usurper un numéro qu'on ne possède pas — à raison — donc le
+    moment fort du pitch (« Lucas » appelle depuis le numéro de Lucas, mais ce
+    n'est pas lui) serait indémontrable. On simule la seule chose qui compte pour
+    la démonstration : ce que notre serveur CROIT du `From`.
+
+    Tout le reste du chemin ignore cette réécriture, et c'est voulu — on démontre
+    le vrai routage, pas une maquette.
+
+    Chaque usage est logué en MAJUSCULES et publié sur le bus. Un réglage qui ment
+    sur l'identité de l'appelant ne doit jamais pouvoir agir en silence : un
+    `.env` oublié après la démo ferait passer un inconnu pour un proche, donc
+    accorderait le silence à l'appel qu'il fallait analyser.
+    """
+    if not settings.demo_spoof_active:
+        return from_number, False
+    # `normalize_number` des deux côtés : le `.env` est saisi à la main et Twilio
+    # répond en E.164 strict — une comparaison brute raterait le bon numéro et la
+    # démo ne montrerait rien, sans qu'aucune erreur ne l'explique.
+    if normalize_number(from_number) != normalize_number(settings.scammer_phone_number):
+        return from_number, False
+    log.warning(
+        "USURPATION SIMULÉE (DEMO_SPOOF_AS) : l'appel de %s est traité comme venant "
+        "de %s. Réglage de DÉMO — aucun service réel ne doit tourner avec.",
+        from_number or "(sans numéro)",
+        settings.demo_spoof_as,
+    )
+    return settings.demo_spoof_as, True
+
+
+def _boucle_de_renvoi(settings: Settings, from_number: str) -> bool:
+    """Le `From` est-il un de nos propres numéros ?
+
+    Comparaison normalisée des deux côtés (cf. `Settings.loop_guard_numbers`, qui
+    les renvoie bruts et écarte les vides). Un `From` absent n'est jamais une
+    boucle : normalisés, deux numéros vides seraient égaux, et un appel masqué —
+    exactement celui qu'on veut analyser — serait refusé.
+    """
+    numero = normalize_number(from_number)
+    if not numero:
+        return False
+    return any(numero == normalize_number(mien) for mien in settings.loop_guard_numbers)
+
+
+def _numero_masque(from_number: str) -> bool:
+    """Appel sans numéro présentable : champ vide ou mot-clé Twilio."""
+    return not from_number.strip() or from_number.strip().casefold() in _MASKED_CALLER_IDS
+
+
+def _motif_inconnu(contact: Contact | None, from_number: str, *, masque: bool) -> str:
+    """Pourquoi cet appel est analysé, en une phrase, pour le journal.
+
+    Les quatre motifs se ressemblent à l'écran et se déboguent très différemment :
+    « masqué » est normal, « absent du carnet » peut être un contact à ajouter, et
+    « mode analyze » est une décision prise exprès qu'il ne faut pas chercher à
+    corriger comme un oubli.
+    """
+    if contact is not None:
+        return f"contact {contact.name} en mode « analyze », traité comme un inconnu"
+    if masque:
+        return f"appel masqué ({from_number.strip() or 'numéro absent'})"
+    return f"numéro {from_number} absent du carnet"
 
 
 async def _dial_victim(controller, call_id: str) -> None:
@@ -267,14 +559,53 @@ async def _dial_victim(controller, call_id: str) -> None:
 
 @router.api_route("/voice/join/{call_id}", methods=["GET", "POST"])
 async def voice_join(call_id: str, request: Request) -> Response:
-    """TwiML de la jambe sortante : la victime rejoint la conférence de l'appel."""
-    settings = request.app.state.settings
+    """TwiML de la jambe sortante : la victime rejoint la conférence de l'appel.
+
+    Le `<Say>` qui précède la conférence est le REPLI téléphonique, et il faut le
+    lire comme tel : avec l'app du Lot 1 bis (jambe `client:`), l'identité de
+    l'appelant s'affiche à l'écran et cette phrase devient inutile. Sur un
+    téléphone ordinaire, elle est notre seule réponse au problème d'affichage —
+    l'écran de la personne protégée montre notre numéro Twilio, jamais celui de
+    l'appelant, ce qui rendrait la liste blanche invisible pour elle.
+    """
+    state = request.app.state
+    settings = state.settings
     return _xml(
         join_conference_twiml(
             conference_name=settings.conference_name_for(call_id),
             conference_status_callback=f"{settings.public_base_url}/twilio/conference/status",
+            victim_notice=_annonce_appelant(state, call_id),
         )
     )
+
+
+def _annonce_appelant(state: Any, call_id: str) -> str:
+    """« Appel de Lucas Martin. » ou « Appel d'un numéro inconnu, appel protégé. »
+
+    Reconstruit à la demande depuis la session et le carnet, et SURTOUT pas
+    mémorisé au moment du routage : un état par appel de plus devrait être purgé
+    dans `lifecycle.release_call`, et un état qu'on oublie d'y purger fuit d'un
+    appel au suivant — la personne protégée entendrait le nom de l'appelant
+    précédent.
+
+    Session introuvable → aucune annonce. Dire « numéro inconnu » quand on ne
+    sait pas serait une annonce FAUSSE, donc pire que le silence : elle vaudrait
+    exactement le contraire de sa valeur pour un appel de confiance mal retrouvé.
+    """
+    session = state.registry.get(call_id)
+    if session is None:
+        log.warning(
+            "Jambe victime de %s : session inconnue, aucune annonce plutôt qu'une annonce fausse",
+            call_id,
+        )
+        return ""
+    contact = state.contacts.by_number(session.caller_number) if session.caller_number else None
+    # Le nom, même si le contact est en mode `analyze` : la personne protégée a
+    # le droit de savoir qui appelle, et c'est une question d'affichage, pas la
+    # décision de confiance (qui s'est prise, elle, dans `voice_inbound`).
+    if contact is not None:
+        return f"Appel de {contact.name}."
+    return VICTIM_NOTICE_UNKNOWN
 
 
 @router.api_route("/voice/announce/{call_id}", methods=["GET", "POST"])

@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from vocalguard.config import Settings
@@ -24,6 +24,7 @@ from vocalguard.domain.alerts import ActionKind, AlertLevel
 from vocalguard.domain.events import Event, EventType, Speaker
 from vocalguard.domain.models import SignalSet, TranscriptSegment
 from vocalguard.infrastructure.telephony.media_stream import (
+    Dtmf,
     MediaChunk,
     StreamStart,
     StreamStop,
@@ -111,6 +112,18 @@ class CallSession:
         """Point de branchement de la détection de voix synthétique (Dev 2).
         Publique et modifiable après coup : le détecteur a parfois besoin de la
         session elle-même pour se construire."""
+        self.dtmf_hook: Callable[[str, str], Awaitable[None]] | None = None
+        """Point de branchement de la vérification d'identité par touche (Lot 2).
+
+        Posé par `SessionRegistry.open` depuis `SessionRegistry.dtmf_hook`, pour
+        que la session n'ait pas à connaître le service de vérification. Appelé
+        avec `(call_id, digit)`.
+
+        Non éprouvé, et c'est à dire explicitement : `<Start><Stream>` est
+        unidirectionnel, et il n'est PAS vérifié que Twilio remonte par ce canal
+        une touche pressée pendant l'appel (question ouverte du Lot 0 §5). Le
+        câblage est là parce qu'il ne coûte rien ; le déclencheur sur lequel on
+        compte reste `POST /control/calls/{id}/verify`."""
 
         self._transcriber = transcriber
         self._sink = sink
@@ -188,9 +201,26 @@ class CallSession:
                 await self.on_media(frame)
             case StreamStop():
                 await self.aclose()
+            case Dtmf():
+                await self._on_dtmf(frame.digit)
             case _:
-                # connected / mark / dtmf : rien à faire au niveau de la session.
+                # connected / mark : rien à faire au niveau de la session.
                 pass
+
+    async def _on_dtmf(self, digit: str) -> None:
+        """Route la touche vers `dtmf_hook`, sans jamais faire échouer l'appel.
+
+        Même règle que partout ici : perdre un signal est acceptable, perdre
+        l'appel ne l'est pas. Un service de vérification en panne ne doit pas
+        interrompre la boucle média pour une touche pressée par curiosité.
+        """
+        hook = self.dtmf_hook
+        if hook is None:
+            return
+        try:
+            await hook(self.call_id, digit)
+        except Exception:
+            logger.warning("touche %r non traitée sur %s", digit, self.call_id, exc_info=True)
 
     async def on_media(self, chunk: MediaChunk) -> None:
         speaker = chunk.speaker
@@ -311,6 +341,13 @@ class SessionRegistry:
         self._audio_tap_factory = audio_tap_factory
         self._clock = clock
         self._sessions: dict[str, CallSession] = {}
+        self.dtmf_hook: Callable[[str, str], Awaitable[None]] | None = None
+        """Hook recopié dans chaque session ouverte (cf. `CallSession.dtmf_hook`).
+
+        Attribut public plutôt qu'argument du constructeur : le service de
+        vérification a besoin du registre pour exister, donc il est construit
+        APRÈS lui (le même câblage circulaire que le pipeline de score et son
+        `audio_tap`). `create_app` le pose dès que le service existe."""
 
     async def open(
         self,
@@ -350,6 +387,7 @@ class SessionRegistry:
         )
         if self._audio_tap_factory is not None:
             session.audio_tap = self._audio_tap_factory(session)
+        session.dtmf_hook = self.dtmf_hook
         # Enregistrée AVANT `start()`, qui suspend désormais (les deux
         # transcriptions s'ouvrent en parallèle) : sans ça, deux webhooks Twilio
         # rejoués en concurrence passeraient tous les deux le test d'existence

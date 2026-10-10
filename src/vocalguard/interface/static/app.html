@@ -1,0 +1,982 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<!-- `viewport-fit=cover` + `env(safe-area-inset-*)` plus bas : sans ça, le
+     bouton « Décrocher » passe sous la barre de gestes de l'iPhone et devient
+     intouchable au moment précis où il faut appuyer dessus. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f8f62">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="VocalGuard">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="/app/manifest.webmanifest">
+<link rel="icon" href="/app/icon.svg" type="image/svg+xml">
+<!-- iOS ignore les icônes du manifeste ET refuse le SVG ici : l'icône de
+     l'écran d'accueil sera une capture de la page sur iPhone. Limite connue,
+     sans effet sur le fonctionnement. -->
+<link rel="apple-touch-icon" href="/app/icon.svg">
+<title>VocalGuard</title>
+
+<style>
+/* ------------------------------------------------------------------------
+   Un écran de téléphone, tenu par une personne âgée, dans un salon.
+   Trois règles qui expliquent tout le reste : gros (18 px de corps, 30 px pour
+   l'appelant), fort contraste, et JAMAIS de couleur seule — chaque état porte
+   une icône et un mot, parce qu'un daltonien ou un écran délavé par le soleil
+   ne doit rien perdre.
+
+   Palette reprise telle quelle de `static/dashboard.html` : ses quatre slots
+   catégoriels et sa palette de statut y sont déjà validés (5/5 PASS). Les
+   couleurs de statut restent réservées à l'état du risque, jamais décoratives.
+
+   Un seul thème, clair, volontairement : un thème sombre se CHOISIT (il se
+   re-valide contre sa propre surface), il ne se déduit pas en inversant le
+   clair. Et sur un téléphone en plein jour, le fond clair se lit mieux.
+   ------------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --plane:          #f9f9f7;
+  --surface-1:      #fcfcfb;
+  --text-primary:   #0b0b0b;  /* 18,7:1 sur --plane */
+  --text-secondary: #52514e;  /*  7,5:1 sur --plane */
+  --gridline:       #e1e0d9;
+  --border:         rgba(11,11,11,0.18);
+
+  --brand:          #0f8f62;
+
+  /* Statut. Fonds de jauge uniquement : le texte reste en encre. */
+  --status-good:     #0ca30c;
+  --status-warning:  #fab219;
+  --status-serious:  #ec835a;
+  --status-critical: #d03b3b;
+
+  /* Fonds de boutons assez sombres pour porter du texte blanc :
+     6,6:1 pour le vert, 7,3:1 pour le rouge. Les teintes de statut
+     ci-dessus ne passeraient pas (3,3:1 et 4,8:1). */
+  --accept-bg: #0b6b34;
+  --reject-bg: #a52424;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 18px;
+  line-height: 1.45;
+  background: var(--plane);
+  color: var(--text-primary);
+  /* Un appui long sur un gros bouton ne doit pas sélectionner son texte ni
+     ouvrir le menu de copie : pendant un appel, c'est un faux « rien ne se
+     passe ». */
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+main {
+  min-height: 100%;
+  padding: calc(18px + env(safe-area-inset-top)) 20px
+           calc(22px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 18px;
+}
+
+h1 { font-size: 27px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+h1 .mark { color: var(--brand); }
+p { margin: 0; }
+.aide { color: var(--text-secondary); font-size: 17px; }
+
+/* --- boutons : 64 px de haut minimum, la cible du pouce d'une main qui
+       tremble. Pas de `hover`, un téléphone n'en a pas. ------------------- */
+button {
+  font: inherit; font-size: 22px; font-weight: 650;
+  width: 100%; min-height: 64px; padding: 14px 18px;
+  border-radius: 14px; border: 2px solid var(--border);
+  background: var(--surface-1); color: var(--text-primary);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.5; }
+button:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+button.principal { font-size: 25px; min-height: 76px; border-color: transparent; }
+button.accepter { background: var(--accept-bg); color: #fff; }
+button.refuser  { background: var(--reject-bg); color: #fff; }
+button svg { width: 26px; height: 26px; flex: none; fill: currentColor; }
+/* Trois boutons empilés pleine largeur pendant l'appel, et non deux côte à
+   côte : à 390 px, « Mettre en attente » se cassait sur trois lignes dans une
+   demi-colonne. Une cible plus large vaut mieux qu'un écran plus court pour une
+   main qui tremble. */
+.pile > button + button { margin-top: 12px; }
+
+.carte {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 16px; padding: 18px;
+}
+
+/* --- écran du code d'accès -------------------------------------------- */
+input#pin {
+  font: inherit; font-size: 32px; font-weight: 700; text-align: center;
+  letter-spacing: 0.3em; width: 100%; min-height: 64px; padding: 12px;
+  border-radius: 14px; border: 2px solid var(--border);
+  background: var(--surface-1); color: var(--text-primary);
+  -webkit-user-select: text; user-select: text;
+}
+.erreur {
+  color: #8f1f1f; font-weight: 600;
+  border-left: 5px solid var(--status-critical); padding-left: 12px;
+}
+
+/* --- écran d'attente -------------------------------------------------- */
+.veille { text-align: center; padding: 26px 18px; }
+.veille .pastille {
+  width: 86px; height: 86px; margin: 0 auto 16px; border-radius: 50%;
+  background: var(--brand); display: grid; place-items: center;
+}
+.veille .pastille svg { width: 48px; height: 48px; fill: #fff; }
+.veille .titre { font-size: 26px; font-weight: 700; }
+/* `flex-start` + le décalage de la puce : sur deux lignes de texte, une puce
+   centrée verticalement ne désigne plus rien. Elle doit viser la PREMIÈRE
+   ligne, comme un vrai point de liste. */
+.etat-ligne {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 17px; color: var(--text-secondary); padding: 4px 0;
+}
+.etat-ligne .puce {
+  width: 12px; height: 12px; margin-top: 7px; border-radius: 50%;
+  background: var(--gridline); flex: none;
+}
+.etat-ligne[data-ok="1"] .puce { background: var(--status-good); }
+.etat-ligne[data-ok="0"] .puce { background: var(--status-critical); }
+
+/* --- écran d'appel ---------------------------------------------------- */
+.appelant { text-align: center; }
+.appelant .nom {
+  font-size: 30px; font-weight: 700; line-height: 1.2;
+  word-break: break-word; -webkit-user-select: text; user-select: text;
+}
+.appelant .numero {
+  font-size: 21px; color: var(--text-secondary);
+  font-variant-numeric: tabular-nums; margin-top: 4px;
+}
+.badge {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 12px;
+  font-size: 18px; font-weight: 650; padding: 8px 14px; border-radius: 999px;
+  border: 2px solid var(--border); background: var(--surface-1);
+}
+.badge svg { width: 22px; height: 22px; fill: currentColor; }
+.badge[data-confiance="1"] { border-color: var(--status-good); }
+.badge[data-confiance="0"] { border-color: var(--status-serious); }
+
+/* Jauge de risque : barre fine ancrée à gauche, bout arrondi de 4 px, et
+   TOUJOURS accompagnée de son mot et de son icône. */
+.risque .entete { display: flex; align-items: center; gap: 10px; font-weight: 650; }
+.risque .entete svg { width: 24px; height: 24px; flex: none; fill: currentColor; }
+.risque .valeur {
+  margin-left: auto; white-space: nowrap;
+  font-variant-numeric: tabular-nums; color: var(--text-secondary);
+}
+.jauge {
+  height: 14px; margin-top: 12px; border-radius: 7px;
+  background: var(--gridline); overflow: hidden;
+}
+.jauge > span {
+  display: block; height: 100%; width: 0;
+  border-radius: 0 4px 4px 0; background: var(--status-good);
+  transition: width 240ms ease;
+}
+.risque[data-niveau="watch"]     .jauge > span { background: var(--status-warning); }
+.risque[data-niveau="alert"]     .jauge > span { background: var(--status-serious); }
+.risque[data-niveau="intervene"] .jauge > span { background: var(--status-critical); }
+
+.alerte {
+  background: var(--status-critical); color: #fff;
+  border-radius: 16px; padding: 18px; font-size: 24px; font-weight: 700;
+}
+.alerte .detail { font-size: 18px; font-weight: 500; margin-top: 6px; }
+
+/* Le code de vérification : la seule chose qu'il faut pouvoir lire de loin. */
+.code { text-align: center; border: 3px solid var(--brand); }
+.code .chiffres {
+  font-size: 54px; font-weight: 800; letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums; margin: 6px 0;
+  -webkit-user-select: text; user-select: text;
+}
+.code .reste { font-size: 19px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.pied { margin-top: auto; }
+.note { font-size: 16px; color: var(--text-secondary); }
+</style>
+</head>
+
+<body>
+<!-- Sprite d'icônes en ligne : aucune dépendance réseau. Les icônes portent le
+     sens à côté du mot, pour que l'état ne tienne jamais à la seule couleur. -->
+<svg hidden aria-hidden="true">
+  <symbol id="i-bouclier" viewBox="0 0 24 24"><path d="M12 2l8 2.7v6.1c0 4.6-3.3 8.3-8 11-4.7-2.7-8-6.4-8-11V4.7L12 2zm-1.2 13.2l5-5-1.5-1.4-3.5 3.5-1.8-1.8L7.5 12l3.3 3.2z"/></symbol>
+  <symbol id="i-telephone" viewBox="0 0 24 24"><path d="M6.6 2.5l2.6-.4c.6-.1 1.2.3 1.3.9l.8 3.6c.1.5-.1 1-.6 1.3l-1.9 1c.6 2 2.2 3.9 4.3 5.1l1.3-1.6c.3-.4.9-.6 1.4-.4l3.4 1.4c.5.2.8.9.6 1.4l-1 2.5c-.2.6-.9 1-1.5.8C11.4 16.9 6.1 11.8 4.6 5.3c-.2-.7.2-1.4.9-1.6.4-.1.7-.2 1.1-.2z"/></symbol>
+  <symbol id="i-raccrocher" viewBox="0 0 24 24"><path d="M12 6c-3 0-5.9.7-8.4 2.1-.9.5-1.3 1.6-1 2.6l.7 2.1c.2.7 1 1.1 1.7.9l2.8-.9c.6-.2 1-.8 1-1.4v-1.2c2.1-.6 4.3-.6 6.4 0v1.2c0 .6.4 1.2 1 1.4l2.8.9c.7.2 1.5-.2 1.7-.9l.7-2.1c.3-1-.1-2.1-1-2.6C17.9 6.7 15 6 12 6z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h4v16H7zM13 4h4v16h-4z"/></symbol>
+  <symbol id="i-reprendre" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+  <symbol id="i-cle" viewBox="0 0 24 24"><path d="M14 2a7 7 0 00-6.7 9L2 16.3V22h5.7l1.4-1.4V18h2.3l1.4-1.4v-2.3h1.6A7 7 0 1014 2zm2.5 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm-1.3 14.6l-4-4 1.6-1.6 2.4 2.4 5.1-5.1 1.6 1.6-6.7 6.7z"/></symbol>
+  <symbol id="i-oeil" viewBox="0 0 24 24"><path d="M12 5C7 5 2.9 8.1 1 12c1.9 3.9 6 7 11 7s9.1-3.1 11-7c-1.9-3.9-6-7-11-7zm0 11a4 4 0 110-8 4 4 0 010 8zm0-2a2 2 0 100-4 2 2 0 000 4z"/></symbol>
+  <symbol id="i-attention" viewBox="0 0 24 24"><path d="M12 2.5L23 21H1L12 2.5zM11 9v6h2V9h-2zm0 8v2h2v-2h-2z"/></symbol>
+  <symbol id="i-danger" viewBox="0 0 24 24"><path d="M8.3 2h7.4L22 8.3v7.4L15.7 22H8.3L2 15.7V8.3L8.3 2zM11 7v7h2V7h-2zm0 9v2h2v-2h-2z"/></symbol>
+  <symbol id="i-inconnu" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2v2zm1.8-6.2l-.9.9c-.6.6-.9 1.1-.9 2.3h-2v-.5c0-.9.4-1.7 1-2.3l1.2-1.3c.4-.3.6-.8.6-1.4a2 2 0 10-4 0H8a4 4 0 118 0c0 .9-.4 1.6-1.2 2.3z"/></symbol>
+</svg>
+
+<main>
+
+  <!-- =================================================================
+       1. Le code d'accès. Il protège `POST /app/token`, et donc l'appel
+       lui-même : un jeton Voice permet de DÉCROCHER les appels de la
+       personne protégée, et l'URL ngrok est publique.
+       ================================================================= -->
+  <section id="ecran-pin">
+    <h1>Vocal<span class="mark">Guard</span></h1>
+    <p class="aide" style="margin-top:10px">
+      Entrez votre code pour activer la protection de vos appels.
+    </p>
+
+    <div class="carte" style="margin-top:18px">
+      <label for="pin" style="font-weight:650">Votre code</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off"
+             enterkeyhint="go" aria-describedby="aide-micro" style="margin-top:10px">
+      <button id="btn-activer" class="principal accepter" style="margin-top:14px">
+        <svg aria-hidden="true"><use href="#i-bouclier"/></svg>
+        Activer la protection
+      </button>
+      <p id="erreur-pin" class="erreur" style="margin-top:14px" hidden></p>
+    </div>
+
+    <p id="aide-micro" class="aide" style="margin-top:18px">
+      Votre téléphone va demander l'autorisation d'utiliser le micro.
+      <strong>Si vous refusez</strong>, vous verrez qui appelle mais vous ne
+      pourrez pas parler depuis cette application : l'appel devra être pris sur
+      votre téléphone habituel.
+    </p>
+    <p id="erreur-sdk" class="erreur" style="margin-top:18px" hidden></p>
+  </section>
+
+  <!-- =================================================================
+       2. L'attente. Le message central n'est pas décoratif : une page web
+       ne sonne QUE si elle est ouverte à l'écran (iOS suspend les pages en
+       arrière-plan, et il n'existe pas de push VoIP sans application
+       native). Le promettre autrement serait mentir à l'utilisateur.
+       ================================================================= -->
+  <section id="ecran-attente" hidden>
+    <h1>Vocal<span class="mark">Guard</span></h1>
+
+    <div class="carte veille" style="margin-top:18px">
+      <div class="pastille"><svg aria-hidden="true"><use href="#i-bouclier"/></svg></div>
+      <p class="titre" id="titre-attente">Protection active</p>
+      <p class="aide" style="margin-top:8px">
+        Vos appels passent par VocalGuard. Vous verrez ici qui vous appelle.
+      </p>
+    </div>
+
+    <div class="carte" style="margin-top:14px">
+      <p class="etat-ligne" id="etat-ligne" data-ok=""><span class="puce"></span>
+        <span id="etat-texte">Connexion…</span></p>
+      <p class="etat-ligne" id="etat-micro" data-ok=""><span class="puce"></span>
+        <span id="etat-micro-texte">Micro : non vérifié</span></p>
+    </div>
+
+    <p class="note pied" style="margin-top:18px">
+      <strong>Laissez cette page ouverte et l'écran allumé.</strong>
+      Si vous fermez l'application ou verrouillez votre téléphone, elle ne
+      sonnera pas : l'appel basculera sur votre ligne de secours, si vous en
+      avez configuré une.
+    </p>
+  </section>
+
+  <!-- =================================================================
+       3. L'appel. Même écran avant et après le décrochage : la personne
+       protégée n'a pas à comprendre qu'elle a changé de page.
+       ================================================================= -->
+  <section id="ecran-appel" hidden>
+    <div class="carte appelant">
+      <p class="nom" id="appel-nom">Appel entrant</p>
+      <p class="numero" id="appel-numero"></p>
+      <p><span class="badge" id="appel-badge" data-confiance="">
+        <svg aria-hidden="true"><use id="appel-badge-icone" href="#i-inconnu"/></svg>
+        <span id="appel-badge-texte">Appel en cours d'identification</span>
+      </span></p>
+    </div>
+
+    <div id="appel-alerte" class="alerte" hidden>
+      <span id="appel-alerte-titre"></span>
+      <div class="detail" id="appel-alerte-detail"></div>
+    </div>
+
+    <div class="carte code" id="appel-code" hidden>
+      <p style="font-weight:650">Code à faire lire par votre proche</p>
+      <p class="chiffres" id="appel-code-chiffres">— — — —</p>
+      <p class="reste" id="appel-code-reste"></p>
+      <p class="aide" id="appel-code-cible" style="margin-top:8px"></p>
+    </div>
+
+    <!-- La jauge n'apparaît que sur un appel analysé : sur un appel de la
+         famille, rien n'est écouté, donc il n'y a aucun risque à afficher et
+         une jauge à zéro laisserait croire le contraire. -->
+    <div class="carte risque" id="appel-risque" data-niveau="none" hidden>
+      <p class="entete">
+        <svg aria-hidden="true"><use id="appel-risque-icone" href="#i-ok"/></svg>
+        <span id="appel-risque-texte">Aucun signe suspect</span>
+        <span class="valeur" id="appel-risque-valeur"></span>
+      </p>
+      <div class="jauge"><span id="appel-risque-barre"></span></div>
+    </div>
+
+    <!-- Avant le décrochage -->
+    <div id="appel-boutons-entrant">
+      <button id="btn-decrocher" class="principal accepter">
+        <svg aria-hidden="true"><use href="#i-telephone"/></svg> Décrocher
+      </button>
+      <button id="btn-refuser" class="principal refuser" style="margin-top:12px">
+        <svg aria-hidden="true"><use href="#i-raccrocher"/></svg> Refuser
+      </button>
+    </div>
+
+    <!-- Pendant l'appel -->
+    <div id="appel-boutons-encours" class="pile" hidden>
+      <button id="btn-verifier">
+        <svg aria-hidden="true"><use href="#i-cle"/></svg> Vérifier son identité
+      </button>
+      <button id="btn-attente">
+        <svg aria-hidden="true"><use id="btn-attente-icone" href="#i-pause"/></svg>
+        <span id="btn-attente-texte">Mettre en attente</span>
+      </button>
+      <button id="btn-raccrocher" class="refuser">
+        <svg aria-hidden="true"><use href="#i-raccrocher"/></svg> Raccrocher
+      </button>
+    </div>
+
+    <p id="appel-message" class="aide" style="margin-top:14px" hidden></p>
+  </section>
+
+</main>
+
+<!-- ------------------------------------------------------------------------
+     SDK Voice de Twilio, version EXACTE épinglée (2.18.5) et empreinte SRI :
+     une version flottante changerait de comportement entre la répétition et la
+     démo, et sans `integrity` on exécuterait ce que le CDN voudra bien servir.
+
+     LIMITE CONNUE ET ASSUMÉE : c'est la seule dépendance réseau de cette page.
+     Si le réseau du lieu bloque jsdelivr, le SDK ne charge pas et l'app reste
+     INERTE — elle le dit à l'écran au lieu de rester muette. Le dashboard, lui,
+     est volontairement sans aucun CDN ; ici il n'y a pas le choix, le SDK Voice
+     de Twilio n'existe qu'en JavaScript et nous ne le recopions pas dans le
+     dépôt. Repli en cas de blocage : télécharger
+     https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.18.5/dist/twilio.min.js
+     dans `interface/static/` et changer le `src` ci-dessous.
+     ------------------------------------------------------------------------ -->
+<script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.18.5/dist/twilio.min.js"
+        integrity="sha384-LUG7DmzDPWNKRYoqyGpV4d/IByMLiya/oUhMSc/4/6hi0wbzO/8PffM4lzeFEYS8"
+        crossorigin="anonymous"></script>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+   État de l'app. Tout ce qui est vrai « en ce moment », à un seul endroit :
+   trois sources d'événements asynchrones (le SDK Voice, nos routes HTTP, le
+   WebSocket du dashboard) écrivent ici, et l'affichage est recalculé depuis
+   cet objet. Sans ça, le bouton « Reprendre » et l'événement `resume_caller`
+   du bus se contredisent dès qu'ils arrivent dans le mauvais ordre.
+   ========================================================================== */
+const etat = {
+  pin: "",          /* gardé en mémoire seulement : jamais dans localStorage,
+                       où il survivrait à la démo sur un téléphone prêté. */
+  device: null,
+  appel: null,      /* l'objet Call du SDK */
+  callId: null,     /* le CallSid de la jambe D'ORIGINE, celui des routes /control */
+  decroche: false,
+  enAttente: false,
+  niveau: "none",
+  analyse: false,   /* faux sur un appel de confiance : rien n'est écouté */
+  minuteurCode: null,
+};
+
+const NIVEAUX = {
+  none:      { mot: "Aucun signe suspect",       icone: "#i-ok" },
+  watch:     { mot: "À surveiller",              icone: "#i-oeil" },
+  alert:     { mot: "Appel suspect",             icone: "#i-attention" },
+  /* Mot court : la consigne (« ne donnez aucun code ») est portée par la
+     bannière juste au-dessus, la jauge n'a qu'à nommer le niveau. */
+  intervene: { mot: "Danger",                    icone: "#i-danger" },
+};
+
+/* Les `reason` de `POST /control/calls/{id}/verify`, traduites une fois ici.
+   Des codes machine côté serveur et des phrases côté écran : une personne de 80
+   ans ne doit jamais lire « contact_inconnu ». */
+const RAISONS = {
+  contact_inconnu: "Je ne peux pas vérifier : cette personne n'est pas dans vos contacts.",
+  sms_refuse: "Le code n'a pas pu être envoyé à votre proche par SMS.",
+  verification_indisponible: "La vérification par code n'est pas disponible sur ce serveur.",
+  erreur_interne: "Une erreur est survenue. Vous pouvez réessayer.",
+  _defaut: "La vérification n'a pas pu être lancée.",
+};
+
+const $ = (id) => document.getElementById(id);
+const txt = (id, valeur) => { $(id).textContent = valeur; };
+const voir = (id, visible) => { $(id).hidden = !visible; };
+
+function montrer(ecran) {
+  voir("ecran-pin", ecran === "pin");
+  voir("ecran-attente", ecran === "attente");
+  voir("ecran-appel", ecran === "appel");
+  window.scrollTo(0, 0);
+}
+
+/* ==========================================================================
+   La sonnerie. En WebAudio et non en `<audio src=…>` : un fichier de plus à
+   servir, et surtout un fichier qui ne jouerait pas sur iOS sans geste de
+   l'utilisateur. L'AudioContext, lui, est créé pendant l'appui sur « Activer
+   la protection » — le seul geste dont on soit sûr — puis réutilisé. Un
+   contexte créé au moment où le téléphone sonne resterait « suspended » et
+   l'appel arriverait en silence.
+   ========================================================================== */
+const sonnerie = (() => {
+  let ctx = null;
+  let minuteur = null;
+
+  const bip = (retard, frequence) => {
+    const t0 = ctx.currentTime + retard;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = frequence;
+    /* Enveloppe douce : un créneau carré « claque » dans un haut-parleur de
+       téléphone et s'entend comme un défaut. */
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.32, t0 + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.45);
+  };
+
+  return {
+    preparer() {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!ctx) { try { ctx = new Ctx(); } catch (e) { ctx = null; } }
+      if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+    },
+    demarrer() {
+      this.preparer();
+      if (!ctx || minuteur) return;
+      const motif = () => {
+        try { bip(0, 440); bip(0.55, 480); } catch (e) { /* contexte fermé */ }
+        if (navigator.vibrate) navigator.vibrate([450, 250, 450]);
+      };
+      motif();
+      minuteur = setInterval(motif, 2400);
+    },
+    arreter() {
+      if (minuteur) { clearInterval(minuteur); minuteur = null; }
+      if (navigator.vibrate) navigator.vibrate(0);
+    },
+  };
+})();
+
+/* ==========================================================================
+   Appels à notre serveur. Les deux routes protégées reçoivent le code dans le
+   corps JSON ; les routes /control n'en demandent pas (elles existaient avant
+   l'app, pour le dashboard).
+   ========================================================================== */
+async function poster(chemin, corps) {
+  const reponse = await fetch(chemin, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(corps || {}),
+  });
+  let charge = null;
+  try { charge = await reponse.json(); } catch (e) { /* corps vide ou non JSON */ }
+  if (!reponse.ok) {
+    const detail = charge && typeof charge.detail === "string" ? charge.detail : "";
+    const erreur = new Error(detail || ("Le serveur a répondu " + reponse.status + "."));
+    erreur.statut = reponse.status;
+    throw erreur;
+  }
+  return charge || {};
+}
+
+const posterProtege = (chemin) => poster(chemin, { pin: etat.pin });
+
+/* ==========================================================================
+   Démarrage : code d'accès -> micro -> jeton -> Device -> register.
+   ========================================================================== */
+async function activer() {
+  const pin = $("pin").value.trim();
+  voir("erreur-pin", false);
+  if (!pin) { return erreurPin("Entrez votre code."); }
+  if (!window.Twilio || !window.Twilio.Device) {
+    return erreurPin(
+      "L'application ne peut pas démarrer : le composant d'appel n'a pas pu " +
+      "être téléchargé. Vérifiez la connexion Internet puis rechargez la page."
+    );
+  }
+
+  /* Dans le geste de l'utilisateur, donc avant tout `await` : iOS n'autorise la
+     création d'un AudioContext que là. */
+  sonnerie.preparer();
+
+  $("btn-activer").disabled = true;
+  try {
+    await autoriserMicro();
+    etat.pin = pin;
+    const jeton = await posterProtege("/app/token");
+    $("pin").value = "";
+    txt("titre-attente", jeton.owner ? "Protection active — " + jeton.owner : "Protection active");
+    demarrerDevice(jeton.token);
+    ecouterLeBus();
+    montrer("attente");
+  } catch (erreur) {
+    etat.pin = "";
+    erreurPin(erreur.message);
+  } finally {
+    $("btn-activer").disabled = false;
+  }
+}
+
+function erreurPin(message) {
+  txt("erreur-pin", message);
+  voir("erreur-pin", true);
+}
+
+async function autoriserMicro() {
+  /* Demandée explicitement, et AVANT le premier appel : la demander au moment
+     où le téléphone sonne ferait apparaître une boîte de dialogue par-dessus le
+     bouton « Décrocher », et l'appel serait perdu pendant qu'on cherche à
+     comprendre. Un refus n'empêche pas la suite : voir qui appelle a déjà de la
+     valeur, et l'écran dit alors ce qui ne marchera pas. */
+  const etatMicro = (ok, message) => {
+    $("etat-micro").dataset.ok = ok ? "1" : "0";
+    txt("etat-micro-texte", message);
+  };
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    etatMicro(false, "Micro indisponible : il faut ouvrir cette page en HTTPS.");
+    return;
+  }
+  try {
+    const flux = await navigator.mediaDevices.getUserMedia({ audio: true });
+    /* On relâche tout de suite : garder le micro ouvert allume le voyant
+       d'enregistrement pendant toute la veille, ce qui est à la fois inquiétant
+       et faux — on n'enregistre rien. L'autorisation, elle, reste acquise. */
+    flux.getTracks().forEach((piste) => piste.stop());
+    etatMicro(true, "Micro autorisé : vous pourrez parler depuis l'application.");
+  } catch (erreur) {
+    etatMicro(false, "Micro refusé : vous verrez qui appelle, mais vous ne pourrez pas parler ici.");
+  }
+}
+
+function demarrerDevice(jeton) {
+  const device = new Twilio.Device(jeton, {
+    logLevel: "error",
+    /* Opus d'abord pour la qualité, PCMU en repli : c'est le codec que Twilio
+       utilise de toute façon vers la conférence. */
+    codecPreferences: ["opus", "pcmu"],
+  });
+  etat.device = device;
+
+  try {
+    /* On coupe les sons du SDK pour ne pas sonner deux fois : notre sonnerie
+       est jouée localement, la sienne est téléchargée depuis sdk.twilio.com —
+       donc muette exactement là où le réseau est filtré. */
+    device.audio.incoming(false);
+    device.audio.disconnect(false);
+  } catch (e) { /* AudioHelper absent : la sonnerie du SDK jouera, sans gravité */ }
+
+  device.on("registered", () => etatLigne(true, "Protection active"));
+  device.on("unregistered", () => etatLigne(false, "Déconnecté — rechargez la page"));
+  device.on("error", (erreur) => {
+    etatLigne(false, "Problème de connexion (" + (erreur && erreur.code ? erreur.code : "?") + ")");
+  });
+  device.on("incoming", surAppelEntrant);
+  device.on("tokenWillExpire", async () => {
+    /* Le jeton vit une heure (APP_TOKEN_TTL_SECONDS) et l'app doit pouvoir
+       rester ouverte plus longtemps sans que la personne protégée resaisisse son
+       code. On le renouvelle avec le code gardé en mémoire. */
+    try {
+      const frais = await posterProtege("/app/token");
+      etat.device.updateToken(frais.token);
+    } catch (e) {
+      etatLigne(false, "Session expirée — rechargez la page et entrez votre code");
+    }
+  });
+
+  device.register();
+}
+
+function etatLigne(ok, message) {
+  $("etat-ligne").dataset.ok = ok ? "1" : "0";
+  txt("etat-texte", message);
+}
+
+/* ==========================================================================
+   Un appel arrive.
+   ========================================================================== */
+function surAppelEntrant(appel) {
+  etat.appel = appel;
+  etat.callId = null;
+  etat.decroche = false;
+  etat.enAttente = false;
+  etat.niveau = "none";
+  etat.analyse = false;
+  reinitialiserEcranAppel();
+  montrer("appel");
+  sonnerie.demarrer();
+
+  /* 1. Les paramètres personnalisés du SDK, s'il y en a. La méthode documentée
+     par Twilio pour les remplir est la noun `<Parameter>` de `<Dial><Client>` ;
+     notre jambe victime est créée par `calls.create(to="client:…")`, qui n'a pas
+     de canal documenté. On lit donc ce qui est là — gratuit, et correct le jour
+     où la jambe passera par un `<Dial><Client>` — sans compter dessus. */
+  appliquerContexte(contexteDuSdk(appel));
+  /* 2. La source qui marche aujourd'hui : notre serveur, qui connaît le carnet
+     d'adresses et le registre des appels. */
+  demanderContexte(0);
+
+  appel.on("accept", () => { sonnerie.arreter(); });
+  appel.on("disconnect", terminerAppel);
+  appel.on("cancel", terminerAppel);
+  appel.on("reject", terminerAppel);
+  appel.on("error", () => {
+    message("La communication a échoué. Reprenez l'appel sur votre téléphone habituel.");
+    terminerAppel();
+  });
+}
+
+function contexteDuSdk(appel) {
+  const parametres = appel && appel.customParameters;
+  if (!parametres || typeof parametres.get !== "function") return null;
+  const lire = (nom) => parametres.get(nom) || "";
+  const callId = lire("call_id");
+  if (!callId) return null;
+  return {
+    call_id: callId,
+    caller_number: lire("caller_number"),
+    caller_name: lire("caller_name"),
+    trusted: lire("trusted") === "true",
+    ambiguous: false,
+  };
+}
+
+async function demanderContexte(essai) {
+  if (!etat.appel) return;
+  try {
+    const contexte = await posterProtege("/app/incoming");
+    if (contexte && contexte.call_id) { appliquerContexte(contexte); return; }
+  } catch (e) { /* on retente, puis on laisse l'écran en « identification » */ }
+  /* Course normale et non une panne : le SDK peut sonner avant que le webhook
+     entrant ait ouvert la session côté serveur. Deux tentatives espacées, puis
+     on arrête — l'écran reste utilisable, il manque juste le nom. */
+  if (essai < 2) setTimeout(() => demanderContexte(essai + 1), 1200);
+}
+
+function appliquerContexte(contexte) {
+  if (!contexte || !contexte.call_id) return;
+  etat.callId = contexte.call_id;
+  etat.enAttente = Boolean(contexte.caller_held);
+  etat.analyse = !contexte.trusted;
+
+  const numero = contexte.caller_number || "";
+  const nom = contexte.caller_name || "";
+  txt("appel-nom", nom || (numero ? numero : "Numéro masqué"));
+  txt("appel-numero", nom && numero ? numero : "");
+
+  const badge = $("appel-badge");
+  if (contexte.trusted) {
+    badge.dataset.confiance = "1";
+    $("appel-badge-icone").setAttribute("href", "#i-ok");
+    txt("appel-badge-texte", contexte.relation
+      ? "Contact de confiance · " + contexte.relation
+      : "Contact de confiance");
+  } else {
+    badge.dataset.confiance = "0";
+    $("appel-badge-icone").setAttribute("href", "#i-inconnu");
+    txt("appel-badge-texte", contexte.ambiguous
+      ? "Inconnu — appel analysé (plusieurs appels en cours)"
+      : "Inconnu — appel analysé");
+  }
+
+  /* Pas de jauge sur un appel de confiance : rien n'est écouté, donc il n'y a
+     rien à mesurer, et un « 0 » laisserait croire qu'on surveille. */
+  voir("appel-risque", etat.analyse);
+  rendreAttente();
+}
+
+function reinitialiserEcranAppel() {
+  txt("appel-nom", "Appel entrant");
+  txt("appel-numero", "");
+  $("appel-badge").dataset.confiance = "";
+  $("appel-badge-icone").setAttribute("href", "#i-inconnu");
+  txt("appel-badge-texte", "Appel en cours d'identification");
+  voir("appel-alerte", false);
+  voir("appel-risque", false);
+  voir("appel-message", false);
+  cacherCode();
+  rendreRisque(0, "none");
+  voir("appel-boutons-entrant", true);
+  voir("appel-boutons-encours", false);
+}
+
+function decrocher() {
+  if (!etat.appel) return;
+  sonnerie.arreter();
+  etat.decroche = true;
+  voir("appel-boutons-entrant", false);
+  voir("appel-boutons-encours", true);
+  try { etat.appel.accept(); }
+  catch (e) { message("Impossible de décrocher dans l'application."); }
+}
+
+function refuser() {
+  sonnerie.arreter();
+  if (etat.appel) { try { etat.appel.reject(); } catch (e) { /* déjà parti */ } }
+  terminerAppel();
+}
+
+function raccrocher() {
+  /* Le raccrochage par la personne protégée, à la main. Le système, lui, ne
+     raccroche JAMAIS tout seul (cf. domain/alerts.py) : un faux positif sur un
+     vrai appel d'urgence serait grave. */
+  if (etat.appel) { try { etat.appel.disconnect(); } catch (e) { /* déjà parti */ } }
+  terminerAppel();
+}
+
+function terminerAppel() {
+  sonnerie.arreter();
+  cacherCode();
+  etat.appel = null;
+  etat.callId = null;
+  etat.decroche = false;
+  montrer("attente");
+}
+
+/* ==========================================================================
+   Les boutons qui agissent sur l'appel, via les routes /control existantes.
+   ========================================================================== */
+async function basculerAttente() {
+  if (!etat.callId) return message("Appel pas encore identifié, réessayez dans une seconde.");
+  const chemin = etat.enAttente ? "resume" : "hold";
+  $("btn-attente").disabled = true;
+  try {
+    const reponse = await poster("/control/calls/" + encodeURIComponent(etat.callId) + "/" + chemin);
+    /* `control.py` répond toujours 200 avec `caller_held` : c'est lui la source
+       de vérité, pas le bouton qu'on vient d'appuyer. `ok: false` veut dire que
+       Twilio a refusé, et dans ce cas `caller_held` n'a pas bougé. */
+    etat.enAttente = Boolean(reponse.caller_held);
+    rendreAttente();
+    if (reponse.ok === false) {
+      message("L'opérateur a refusé l'action. L'appel n'a pas changé d'état.");
+    } else { voir("appel-message", false); }
+  } catch (erreur) {
+    message(erreur.statut === 404
+      ? "Cet appel est terminé."
+      : "Action impossible pour le moment.");
+  } finally {
+    $("btn-attente").disabled = false;
+  }
+}
+
+function rendreAttente() {
+  txt("btn-attente-texte", etat.enAttente ? "Reprendre l'appel" : "Mettre en attente");
+  $("btn-attente-icone").setAttribute("href", etat.enAttente ? "#i-reprendre" : "#i-pause");
+}
+
+async function verifierIdentite() {
+  if (!etat.callId) return message("Appel pas encore identifié, réessayez dans une seconde.");
+  $("btn-verifier").disabled = true;
+  voir("appel-message", false);
+  try {
+    const reponse = await poster("/control/calls/" + encodeURIComponent(etat.callId) + "/verify");
+    /* Forme annoncée par `control.py` : {ok, call_id, code, sent_to,
+       expires_in, reason}. `reason` est renseigné même quand `ok` est vrai —
+       une seconde demande répond `deja_actif` avec le code déjà en vol, puisqu'un
+       appel n'a jamais qu'un seul code à la fois. */
+    const code = reponse.code || "";
+    const secondes = Number(reponse.expires_in || 120);
+    if (reponse.ok === false || !code) {
+      message(RAISONS[reponse.reason] || RAISONS._defaut);
+      return;
+    }
+    afficherCode(String(code), secondes, reponse.sent_to || "");
+  } catch (erreur) {
+    /* Deux 404 très différents : l'appel est terminé (c'est `control.py` qui
+       répond, son `detail` nomme l'appel), ou la route n'existe pas encore sur
+       ce serveur (FastAPI répond « Not Found »). Les confondre enverrait
+       l'utilisateur chercher une panne qui n'en est pas une. */
+    const routeAbsente =
+      erreur.statut === 501 || erreur.statut === 405 ||
+      (erreur.statut === 404 && etat.callId && erreur.message.indexOf(etat.callId) < 0);
+    message(routeAbsente
+      ? "La vérification par code n'est pas encore disponible sur ce serveur."
+      : (erreur.statut === 404 ? "Cet appel est terminé." : erreur.message));
+  } finally {
+    $("btn-verifier").disabled = false;
+  }
+}
+
+function afficherCode(code, secondes, cible) {
+  cacherCode();
+  txt("appel-code-chiffres", code.split("").join(" "));
+  txt("appel-code-cible", cible
+    ? "Envoyé par SMS à " + cible + ". Demandez-lui de vous le lire."
+    : "Envoyé par SMS à votre proche. Demandez-lui de vous le lire.");
+  voir("appel-code", true);
+
+  let reste = Math.max(0, Math.round(secondes));
+  const tic = () => {
+    txt("appel-code-reste", reste > 0
+      ? "Valable encore " + reste + " seconde" + (reste > 1 ? "s" : "")
+      : "Code expiré.");
+    if (reste <= 0) { clearInterval(etat.minuteurCode); etat.minuteurCode = null; return; }
+    reste -= 1;
+  };
+  tic();
+  etat.minuteurCode = setInterval(tic, 1000);
+}
+
+function cacherCode() {
+  if (etat.minuteurCode) { clearInterval(etat.minuteurCode); etat.minuteurCode = null; }
+  voir("appel-code", false);
+  txt("appel-code-chiffres", "— — — —");
+  txt("appel-code-reste", "");
+}
+
+function message(texte) {
+  txt("appel-message", texte);
+  voir("appel-message", true);
+}
+
+/* ==========================================================================
+   Le risque en direct : on s'abonne au WebSocket du dashboard, déjà existant,
+   et on FILTRE sur l'appel en cours. Sans ce filtre, un appel de démo joué sur
+   le portable du voisin ferait clignoter « Danger » sur le téléphone de la
+   personne protégée.
+   ========================================================================== */
+function ecouterLeBus() {
+  let delai = 500;
+  let ws = null;
+
+  const ouvrir = () => {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    try { ws = new WebSocket(proto + "//" + location.host + "/ws/dashboard"); }
+    catch (e) { return replanifier(); }
+
+    ws.onopen = () => { delai = 500; };
+    ws.onmessage = (brut) => {
+      let charge;
+      try { charge = JSON.parse(brut.data); } catch (e) { return; }
+      /* Le hub renvoie d'abord l'historique de l'appel en cours : une app
+         ouverte en plein appel doit rattraper le score déjà atteint. */
+      if (charge && charge.type === "__replay__" && Array.isArray(charge.events)) {
+        charge.events.forEach(appliquerEvenement);
+        return;
+      }
+      appliquerEvenement(charge);
+    };
+    ws.onclose = () => replanifier();
+    ws.onerror = () => { try { ws.close(); } catch (e) { /* onclose suit */ } };
+  };
+
+  const replanifier = () => {
+    setTimeout(ouvrir, delai);
+    delai = Math.min(8000, Math.round(delai * 1.6));
+  };
+
+  ouvrir();
+}
+
+function appliquerEvenement(ev) {
+  if (!ev || typeof ev !== "object" || !ev.type) return;
+  if (!etat.callId || ev.call_id !== etat.callId) return;
+  const d = ev.data || {};
+
+  if (ev.type === "score") {
+    rendreRisque(Number(d.score) || 0, NIVEAUX[d.level] ? d.level : "none");
+    return;
+  }
+
+  if (ev.type === "action") {
+    if (d.ok === false) return;
+    if (d.action === "hold_caller") { etat.enAttente = true; rendreAttente(); }
+    if (d.action === "resume_caller") { etat.enAttente = false; rendreAttente(); }
+    if (d.action === "identity_verified") {
+      /* Le code a été reconnu : on retire l'affichage, il ne sert plus et il
+         prend toute la place. */
+      cacherCode();
+      message("Identité confirmée.");
+    }
+    if (d.action === "verify_expired") {
+      cacherCode();
+      message("Le code n'a pas été donné à temps.");
+    }
+    return;
+  }
+
+  if (ev.type === "llm" && d.explanation && etat.niveau !== "none") {
+    /* La phrase d'explication de Claude : ce que l'appelant est en train de
+       faire, en français, écrit en grand sous l'alerte. */
+    txt("appel-alerte-detail", String(d.explanation));
+  }
+}
+
+function rendreRisque(score, niveau) {
+  etat.niveau = niveau;
+  const bloc = $("appel-risque");
+  bloc.dataset.niveau = niveau;
+  const def = NIVEAUX[niveau] || NIVEAUX.none;
+  txt("appel-risque-texte", def.mot);
+  $("appel-risque-icone").setAttribute("href", def.icone);
+  txt("appel-risque-valeur", score + " / 100");
+  $("appel-risque-barre").style.width = Math.max(0, Math.min(100, score)) + "%";
+
+  /* L'alerte en grand n'apparaît qu'à partir de « suspect » : affichée dès le
+     premier mot-clé, elle ne voudrait plus rien dire quand elle compte. */
+  if (niveau === "alert" || niveau === "intervene") {
+    txt("appel-alerte-titre", niveau === "intervene"
+      ? "Danger : ne donnez aucun code, aucun numéro de carte."
+      : "Appel suspect : restez prudente.");
+    voir("appel-alerte", true);
+  } else {
+    voir("appel-alerte", false);
+    txt("appel-alerte-detail", "");
+  }
+}
+
+/* ==========================================================================
+   Câblage.
+   ========================================================================== */
+$("btn-activer").addEventListener("click", activer);
+$("pin").addEventListener("keydown", (e) => { if (e.key === "Enter") activer(); });
+$("btn-decrocher").addEventListener("click", decrocher);
+$("btn-refuser").addEventListener("click", refuser);
+$("btn-raccrocher").addEventListener("click", raccrocher);
+$("btn-attente").addEventListener("click", basculerAttente);
+$("btn-verifier").addEventListener("click", verifierIdentite);
+
+if (!window.Twilio || !window.Twilio.Device) {
+  /* Dit tout de suite, et pas au premier appui : la personne protégée doit
+     savoir AVANT de ranger son téléphone que l'app ne sonnera pas. */
+  txt("erreur-sdk",
+    "Le composant d'appel de Twilio n'a pas pu être téléchargé (réseau bloqué ?). " +
+    "L'application ne pourra pas sonner. Vérifiez la connexion, puis rechargez cette page.");
+  voir("erreur-sdk", true);
+}
+
+/* L'avertissement le plus utile de toute la page : rappelé à chaque retour sur
+   l'app, parce que c'est l'erreur que tout le monde fait une fois. */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && etat.device && !etat.appel) {
+    etatLigne(true, "Protection active — gardez cette page ouverte");
+  }
+});
+
+$("pin").focus();
+</script>
+</body>
+</html>

@@ -7,16 +7,20 @@ import xml.etree.ElementTree as ET
 
 from vocalguard.infrastructure.telephony.twiml import (
     DEFAULT_HOLD_MUSIC_URL,
+    STREAM_TRACK_BOTH,
+    STREAM_TRACK_VICTIM_ONLY,
     announce_twiml,
     empty_twiml,
     hold_music_twiml,
     inbound_call_twiml,
     join_conference_twiml,
+    refusal_twiml,
 )
 
 STREAM_URL = "wss://a1b2.ngrok-free.app/ws/media"
 CONFERENCE = "utopia-guard-CA123"
 CALLBACK = "https://a1b2.ngrok-free.app/twilio/conference/status"
+NOTICE = "Cet appel est analysé par un service de protection contre la fraude."
 
 
 def root(xml: str) -> ET.Element:
@@ -103,6 +107,109 @@ class TestInboundCall:
         assert "join" in (with_callback.get("statusCallbackEvent") or "")
 
 
+class TestAnnonceAlAppelant:
+    """L'ordre `Say` → `Start/Stream` → `Dial` est le montage juridique du produit.
+
+    Ce n'est pas une préférence de mise en page : tout ce que Twilio exécute après
+    l'annonce est postérieur à l'information de l'appelant. Un `<Stream>` placé
+    avant capterait de l'audio qu'on n'a pas le droit d'analyser, et rien dans le
+    reste du système ne pourrait le rattraper après coup.
+    """
+
+    def test_l_annonce_precede_le_stream_et_la_conference(self) -> None:
+        children = [
+            child.tag
+            for child in root(
+                inbound_call_twiml(
+                    stream_url=STREAM_URL,
+                    conference_name=CONFERENCE,
+                    caller_notice=NOTICE,
+                )
+            )
+        ]
+        assert children.index("Say") < children.index("Start") < children.index("Dial")
+
+    def test_l_annonce_est_dite_en_francais(self) -> None:
+        """Une voix anglaise lisant la phrase française est incompréhensible au
+        téléphone, et le symptôme ne se voit dans aucun test — il s'entend."""
+        say = root(
+            inbound_call_twiml(
+                stream_url=STREAM_URL, conference_name=CONFERENCE, caller_notice=NOTICE
+            )
+        ).find("Say")
+        assert say is not None
+        assert say.get("language") == "fr-FR"
+        assert say.text == NOTICE
+
+    def test_aucune_annonce_sans_texte(self) -> None:
+        """Le défaut reste muet : l'appel de confiance passe par la même fonction,
+        et une annonce par défaut informerait la famille d'une analyse qui n'a
+        pas lieu."""
+        element = root(inbound_call_twiml(stream_url=STREAM_URL, conference_name=CONFERENCE))
+        assert element.find("Say") is None
+
+
+class TestAppelDeConfiance:
+    """`track=None` : la forme servie à un contact de la liste blanche."""
+
+    def test_ni_stream_ni_annonce(self) -> None:
+        """Le cœur de la promesse produit : la famille n'est pas écoutée, et
+        l'appelant n'entend rien qui lui apprenne qu'un service existe — donc
+        rien qui lui dise qu'il a été reconnu."""
+        element = root(
+            inbound_call_twiml(
+                stream_url=STREAM_URL,
+                conference_name=CONFERENCE,
+                caller_number="+33672019048",
+                track=None,
+            )
+        )
+        assert element.find("Start") is None
+        assert element.find(".//Stream") is None
+        assert element.find("Say") is None
+
+    def test_la_conference_reste_identique(self) -> None:
+        """Mêmes réglages de conférence qu'un appel analysé, `waitUrl` compris :
+        une musique d'attente qui ne se déclencherait que pour les appelants
+        reconnus apprendrait à qui rappelle deux fois s'il est au carnet."""
+        conference = root(
+            inbound_call_twiml(stream_url=STREAM_URL, conference_name=CONFERENCE, track=None)
+        ).find("Dial/Conference")
+        assert conference is not None
+        assert conference.text == CONFERENCE
+        assert conference.get("startConferenceOnEnter") == "true"
+        assert conference.get("endConferenceOnExit") == "true"
+        assert conference.get("beep") == "false"
+        assert conference.get("waitUrl") == ""
+
+    def test_piste_de_la_personne_protegee_seule(self) -> None:
+        """Lot 3 : on écoute l'abonnée qui a consenti, jamais son interlocuteur.
+        Si cette piste devenait `both_tracks`, la promesse serait rompue sans que
+        rien d'autre ne change dans le système."""
+        element = root(
+            inbound_call_twiml(
+                stream_url=STREAM_URL,
+                conference_name=CONFERENCE,
+                track=STREAM_TRACK_VICTIM_ONLY,
+            )
+        )
+        stream = element.find("Start/Stream")
+        assert stream is not None
+        assert stream.get("track") == "outbound_track"
+        # Toujours aucune annonce : l'appelant de confiance n'est pas analysé,
+        # c'est la voix de la personne protégée qui l'est.
+        assert element.find("Say") is None
+
+    def test_les_deux_pistes_restent_le_defaut(self) -> None:
+        """Le défaut écoute, le refus se demande : une absence d'écoute ne doit
+        jamais pouvoir découler d'un paramètre oublié."""
+        stream = root(inbound_call_twiml(stream_url=STREAM_URL, conference_name=CONFERENCE)).find(
+            "Start/Stream"
+        )
+        assert stream is not None
+        assert stream.get("track") == STREAM_TRACK_BOTH
+
+
 class TestJoinConference:
     def test_no_second_stream(self) -> None:
         """Un `<Stream>` sur la jambe sortante doublerait l'audio envoyé à Transcribe."""
@@ -117,6 +224,39 @@ class TestJoinConference:
         assert conference.get("startConferenceOnEnter") == "true"
         assert conference.get("endConferenceOnExit") == "true"
         assert conference.get("beep") == "false"
+
+    def test_l_annonce_a_la_victime_precede_la_conference(self) -> None:
+        """Avant la conférence = entendu par la personne protégée SEULE : l'appelant
+        n'est pas encore sur la même ligne qu'elle. C'est ce qui permet de lui dire
+        qui appelle, alors que son écran n'affiche que notre numéro Twilio."""
+        element = root(
+            join_conference_twiml(
+                conference_name=CONFERENCE, victim_notice="Appel de Lucas Martin."
+            )
+        )
+        children = [child.tag for child in element]
+        assert children.index("Say") < children.index("Dial")
+        say = element.find("Say")
+        assert say is not None
+        assert say.get("language") == "fr-FR"
+        assert say.text == "Appel de Lucas Martin."
+
+    def test_aucune_annonce_sans_texte(self) -> None:
+        """Session introuvable côté route : pas d'annonce plutôt qu'une fausse."""
+        assert root(join_conference_twiml(conference_name=CONFERENCE)).find("Say") is None
+
+
+class TestRefus:
+    def test_une_phrase_et_aucune_conference(self) -> None:
+        """La garde anti-boucle refuse d'acheminer : surtout pas de `<Dial>`, qui
+        rappellerait la victime et bouclerait à deux jambes facturées par tour."""
+        element = root(refusal_twiml("Cet appel ne peut pas aboutir."))
+        say = element.find("Say")
+        assert say is not None
+        assert say.get("language") == "fr-FR"
+        assert say.text == "Cet appel ne peut pas aboutir."
+        assert element.find("Dial") is None
+        assert element.find(".//Stream") is None
 
 
 class TestAnnounce:

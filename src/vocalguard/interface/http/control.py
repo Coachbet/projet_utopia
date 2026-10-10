@@ -27,6 +27,14 @@ La troisième route est d'une autre nature et il ne faut pas les confondre :
     français vers un long code américain, dont la délivrabilité n'est pas
     garantie et dont l'échec est muet.
 
+La quatrième est d'une troisième nature encore :
+
+  - `verify` : une **demande de preuve**. Elle n'agit pas sur l'appel et ne
+    rapporte aucun fait — elle envoie un code à 4 chiffres au vrai téléphone du
+    proche et demande qu'on le lise. La réponse viendra du dehors, et c'est elle
+    qui pèsera sur le score, pas le clic. Voir `verify_identity` et
+    `application/verification.py`.
+
 Ce module n'est donc **pas** un webhook Twilio, contrairement à son voisin
 `webhooks.py` : il répond en JSON à notre propre dashboard, pas en TwiML à
 Twilio. D'où l'absence de `Response(media_type="application/xml")` ici, et des
@@ -135,6 +143,109 @@ async def contact_denied(call_id: str, request: Request) -> dict[str, object]:
         return {"ok": False, "call_id": call_id}
 
     return {"ok": True, "call_id": call_id}
+
+
+@router.post("/calls/{call_id}/verify")
+async def verify_identity(call_id: str, request: Request) -> dict[str, object]:
+    """Envoie un code à 4 chiffres au vrai téléphone du proche, et le dit à l'oreille
+    de la personne protégée.
+
+    **De quelle nature est cette route.** Ni l'une ni l'autre des deux
+    précédentes, et la distinction compte autant qu'entre `hold` et
+    `contact-denied`. Ce n'est pas une surcharge humaine : elle n'agit pas sur
+    l'appel, personne n'est mis en attente, le score n'est pas court-circuité. Ce
+    n'est pas non plus le rapport d'un fait : l'opérateur ne sait encore rien.
+    C'est une **demande de preuve** — elle pose une question dont la réponse
+    viendra du dehors (le proche qui lit le code, ou qui répond NON par SMS), et
+    c'est cette réponse, pas le clic, qui pèsera sur le score. Le clic lui-même
+    ne fait que deux choses visibles : un SMS vers un numéro du carnet et une
+    annonce entendue de la personne protégée seule.
+
+    **C'est le déclencheur principal du Lot 2**, et le seul sur lequel on puisse
+    compter : il ne dépend d'aucun flux audio, donc il marche sur un appel de
+    CONFIANCE — exactement le cas du scénario d'usurpation, où l'appel est passé
+    par la liste blanche et n'est pas analysé. La touche 1 (DTMF) et la phrase
+    « vérification » sont des compléments, dont l'un n'est même pas éprouvé (cf.
+    `IdentityVerifier.on_dtmf`).
+
+    Réponse JSON de forme stable, toujours les six mêmes clés, parce que l'app de
+    la personne protégée et le dashboard les lisent sans rien tester :
+
+        {"ok": true, "call_id": "CA…", "code": "4821", "sent_to": "Lucas Martin",
+         "expires_in": 120, "reason": null}
+
+    `code` est renvoyé ICI et nulle part ailleurs : l'app l'affiche en grand avec
+    son compte à rebours. Il ne part pas sur le bus d'événements, qui est diffusé
+    sans authentification (cf. `application/verification.py`). `reason` est un
+    code machine (`contact_inconnu`, `sms_refuse`, `deja_actif`…) ou `null`, et
+    il est renseigné même quand `ok` est vrai : une seconde demande répond
+    `deja_actif` avec le code déjà en vol, puisqu'un appel n'a jamais qu'un code.
+
+    Mêmes codes HTTP que ses voisines : 404 si l'appel est inconnu, et jamais de
+    500 — un refus de Twilio ou un service absent reste un 200 avec `ok: false`,
+    pour que l'app puisse dire « je n'ai pas pu envoyer le code » au lieu
+    d'afficher une erreur serveur à une personne de 80 ans.
+    """
+    session = request.app.state.registry.get(call_id)
+    if session is None:
+        # Même raisonnement que les trois autres routes : un appel absent du
+        # registre est raccroché, pas en panne. Le bouton doit disparaître.
+        raise HTTPException(
+            status_code=404,
+            detail=f"Appel {call_id} inconnu : déjà terminé ou jamais ouvert.",
+        )
+
+    verifier = getattr(request.app.state, "verifier", None)
+    if verifier is None:
+        # Même garde défensive que `contact-denied` : on nomme la conséquence
+        # plutôt que de renvoyer un succès silencieux à un bouton qui n'a rien
+        # déclenché.
+        log.warning(
+            "Pas de service de vérification câblé : le code de %s n'a pas été envoyé", call_id
+        )
+        return _reponse_verify(call_id, ok=False, reason="verification_indisponible")
+
+    try:
+        outcome = await verifier.request(call_id, source="app")
+    except Exception:
+        # Un clic ne devient jamais une 500. La demande est idempotente côté
+        # service (un seul code actif par appel), donc réessayer est sans danger.
+        log.exception("vérification d'identité impossible sur %s", call_id)
+        return _reponse_verify(call_id, ok=False, reason="erreur_interne")
+
+    return _reponse_verify(
+        call_id,
+        ok=bool(outcome.ok),
+        code=outcome.code,
+        sent_to=outcome.sent_to,
+        expires_in=int(outcome.expires_in),
+        reason=outcome.reason,
+    )
+
+
+def _reponse_verify(
+    call_id: str,
+    *,
+    ok: bool,
+    code: str | None = None,
+    sent_to: str | None = None,
+    expires_in: int = 0,
+    reason: str | None = None,
+) -> dict[str, object]:
+    """La réponse de `verify`, à un seul endroit : les clés sont toujours présentes.
+
+    Une clé qui apparaît et disparaît selon le cas obligerait l'app à tester
+    chaque champ, et c'est le genre d'écart qui se découvre en démo, sur un
+    écran qui affiche « undefined » à la place du code.
+    """
+    return {
+        "ok": ok,
+        "call_id": call_id,
+        "code": code,
+        "sent_to": sent_to,
+        "expires_in": expires_in,
+        "reason": reason,
+    }
 
 
 async def _surcharge_humaine(request: Request, call_id: str, *, held: bool) -> dict[str, object]:

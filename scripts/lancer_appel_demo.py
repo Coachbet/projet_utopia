@@ -14,14 +14,30 @@ le `<Stream>`, rappelle la victime et monte la conférence. Le coût bascule
 entièrement sur le compte Twilio, où le tarif est connu d'avance
 (~0,16 USD/min par jambe vers un mobile français).
 
-AUCUNE MODIFICATION DU CODE N'EST NÉCESSAIRE, et c'est le point important :
-`voice_inbound` prend le `CallSid` du webhook comme `call_id`, et
-`TwilioCallController._participants` identifie l'appelant par
-`participant.call_sid == call_id`. Les deux restent vrais pour une jambe
-sortante. Seul `From` change de sens — il vaut alors notre propre numéro Twilio
-plutôt que celui du scammeur — ce qui est sans conséquence sur le scoring : ce
-numéro n'est pas au carnet d'adresses, donc `identity_mismatch` s'arme comme
-prévu dès que Claude entend une identité revendiquée.
+LE CHEMIN DE CODE RESTE CELUI DE LA PRODUCTION : `voice_inbound` prend le
+`CallSid` du webhook comme `call_id`, et `TwilioCallController._participants`
+identifie l'appelant par `participant.call_sid == call_id`. Les deux restent
+vrais pour une jambe sortante.
+
+Seul `From` change de sens : il vaut notre propre `TWILIO_PHONE_NUMBER` plutôt
+que le téléphone du scammeur. Depuis le Lot 1 ce n'est plus anodin — la garde
+anti-boucle de `/twilio/voice/inbound` refuse justement les appels venant de nos
+propres numéros (sinon le renvoi d'appel de la ligne protégée nous ferait
+rappeler nous-mêmes, à deux jambes facturées par tour). Sans précaution, ce
+script se ferait donc refuser par notre propre protection.
+
+D'où les deux paramètres ajoutés à l'URL du webhook :
+
+    ?demo_outbound=1&presented_from=<téléphone du scammeur>
+
+`demo_outbound=1` désarme la garde anti-boucle POUR CET APPEL seulement — un
+réglage `.env` la désarmerait pour les vrais appels aussi, ce qui est exactement
+le risque qu'elle existe pour couvrir. `presented_from` dit au serveur quelle
+identité l'appelant présente réellement sur le plateau : le téléphone du
+scammeur, pas notre relais. Le routage voit alors le même `From` qu'un vrai appel
+entrant, donc la liste blanche, l'annonce à l'appelant et `DEMO_SPOOF_AS`
+(scénario C : « Lucas » appelle depuis le numéro de Lucas) se jouent sans aucune
+branche de code spéciale.
 
 USAGE
 
@@ -38,6 +54,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from urllib.parse import urlencode
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -114,11 +131,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = get_settings()
-    # `SCAMMER_PHONE_NUMBER` n'est pas un champ de `Settings` (il ne sert qu'à la
-    # démo, pas au service) : on le lit directement dans l'environnement.
-    import os
-
-    destination = normalize_number(args.to or os.environ.get("SCAMMER_PHONE_NUMBER", ""))
+    # `SCAMMER_PHONE_NUMBER` est devenu un champ de `Settings` avec le Lot 4 : le
+    # serveur en a besoin pour armer `DEMO_SPOOF_AS`. On le lit donc là et plus
+    # dans `os.environ` — deux lectures du même réglage finissent par diverger,
+    # et ici ça se traduirait par un script qui appelle un numéro que le serveur
+    # ne reconnaît pas comme celui de l'arnaqueur (donc pas d'usurpation simulée,
+    # sans un mot d'explication).
+    destination = normalize_number(args.to or settings.scammer_phone_number)
 
     problemes = _verifier(settings, destination)
     if problemes:
@@ -129,15 +148,42 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     base = settings.public_base_url
-    url_inbound = f"{base}/twilio/voice/inbound"
+    # Les deux paramètres sont expliqués en tête de fichier. En résumé :
+    # `demo_outbound=1` désarme la garde anti-boucle pour cette jambe (son `From`
+    # est notre propre numéro Twilio), et `presented_from` donne au routage
+    # l'identité réellement au bout du fil — sans quoi la démo montrerait la
+    # liste blanche en train de refuser notre propre relais.
+    url_inbound = f"{base}/twilio/voice/inbound?" + urlencode(
+        {"demo_outbound": "1", "presented_from": destination}
+    )
 
     print()
     print("  APPEL DE DÉMO")
     print(f"    Twilio appelle    {destination}        (le « scammeur », décroche)")
     print(f"    depuis            {settings.twilio_phone_number}")
     print(f"    puis rappelle     {settings.victim_phone_number}   (la victime)")
+    print(f"    vu par le routage comme un appel entrant de {destination}")
     print(f"    TwiML             {url_inbound}")
     print(f"    coût estimé       ~{2 * TARIF_MOBILE_FR:.2f} USD/min (deux jambes FR)")
+    # Dit à voix haute, jamais en silence : ce réglage fait croire au serveur que
+    # l'appel vient d'un contact du carnet. L'opérateur de la démo doit savoir
+    # quel scénario il est en train de lancer (A/B ou C).
+    if settings.demo_spoof_active and normalize_number(destination) == normalize_number(
+        settings.scammer_phone_number
+    ):
+        print(
+            f"    USURPATION SIMULÉE  l'appel sera traité comme venant de "
+            f"{settings.demo_spoof_as} (DEMO_SPOOF_AS)"
+        )
+    elif settings.demo_spoof_as:
+        # L'autre moitié du même principe : un réglage renseigné qui ne
+        # s'appliquera PAS doit se dire aussi, sinon le scénario C se joue sans
+        # usurpation et personne ne comprend pourquoi la liste blanche a
+        # fonctionné « normalement ».
+        print(
+            "    DEMO_SPOOF_AS est renseigné mais ne s'appliquera pas : il exige "
+            "SCAMMER_PHONE_NUMBER, et que ce soit bien lui qu'on appelle"
+        )
     print()
 
     if args.dry_run:

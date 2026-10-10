@@ -13,6 +13,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from vocalguard.domain.alerts import ReportedAction
 from vocalguard.domain.events import Event, EventType
 
 if TYPE_CHECKING:
@@ -34,6 +35,29 @@ class InMemoryEventSink:
         """Accepte l'enum comme la forme wire (`"transcript"`), au choix de l'appelant."""
         wanted = EventType(type)
         return [event for event in self.events if event.type is wanted]
+
+    def actions(self) -> list[Event]:
+        """Les événements `action` de la **politique d'alerte** seulement.
+
+        Écarte les faits de routage et de vérification
+        (`domain.alerts.ReportedAction`), qui voyagent dans le même type
+        d'événement parce que le contrat figé à H0 ne permet rien d'autre.
+
+        Sans cette distinction, tout test qui ouvre son appel par
+        `/twilio/voice/inbound` — c'est-à-dire tout test qui part du même état
+        que la production — doit connaître la liste des faits de routage pour
+        affirmer « rien d'audible n'a été déclenché ». Cette liste s'allongerait
+        à chaque lot, dans chaque fichier de test, et c'est précisément le genre
+        de liste parallèle que ce dépôt a déjà payé une fois. Un test qui veut
+        voir les faits de routage, lui, demande toujours
+        `by_type(EventType.ACTION)`.
+        """
+        rapportes = {fait.value for fait in ReportedAction}
+        return [
+            event
+            for event in self.by_type(EventType.ACTION)
+            if event.data.get("action") not in rapportes
+        ]
 
     def clear(self) -> None:
         self.events.clear()
