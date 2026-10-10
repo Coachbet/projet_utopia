@@ -231,11 +231,11 @@ async def test_window_truncates_to_configured_turns():
     await subject.analyze(turns("a", "b", "c", "d", "e"))
 
     user_message = client.calls[0]["body"]["messages"][0]["content"]
-    assert "APPELANT: c" in user_message
-    assert "APPELANT: d" in user_message
-    assert "APPELANT: e" in user_message
-    assert "APPELANT: a" not in user_message
-    assert "APPELANT: b" not in user_message
+    assert "CALLER: c" in user_message
+    assert "CALLER: d" in user_message
+    assert "CALLER: e" in user_message
+    assert "CALLER: a" not in user_message
+    assert "CALLER: b" not in user_message
 
 
 async def test_partial_segments_are_ignored():
@@ -286,12 +286,12 @@ def test_transcript_labels_each_speaker():
         ]
     )
 
-    assert formatted == "APPELANT: envoie l'argent\nPERSONNE APPELÉE: qui est-ce ?"
+    assert formatted == "CALLER: envoie l'argent\nCALLEE: qui est-ce ?"
 
 
 def test_user_message_contains_the_transcript():
     message = build_user_message(turns("bonjour mamie"))
-    assert "APPELANT: bonjour mamie" in message
+    assert "CALLER: bonjour mamie" in message
 
 
 def test_parse_content_signal_is_usable_standalone():

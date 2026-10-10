@@ -286,7 +286,7 @@ class TestJoinConference:
         assert children.index("Say") < children.index("Dial")
         say = element.find("Say")
         assert say is not None
-        assert say.get("language") == "fr-FR"
+        assert say.get("language") == "en-US"
         assert say.text == "Appel de Lucas Martin."
 
     def test_aucune_annonce_sans_texte(self) -> None:
@@ -301,19 +301,19 @@ class TestRefus:
         element = root(refusal_twiml("Cet appel ne peut pas aboutir."))
         say = element.find("Say")
         assert say is not None
-        assert say.get("language") == "fr-FR"
+        assert say.get("language") == "en-US"
         assert say.text == "Cet appel ne peut pas aboutir."
         assert element.find("Dial") is None
         assert element.find(".//Stream") is None
 
 
 class TestAnnounce:
-    def test_speaks_french_by_default(self) -> None:
+    def test_speaks_english_by_default(self) -> None:
         say = root(announce_twiml("Attention, cet appel présente des signes d'arnaque.")).find(
             "Say"
         )
         assert say is not None
-        assert say.get("language") == "fr-FR"
+        assert say.get("language") == "en-US"
         assert say.text == "Attention, cet appel présente des signes d'arnaque."
 
     def test_language_override(self) -> None:

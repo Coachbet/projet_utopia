@@ -128,6 +128,17 @@ _UNITS = {
     "quatorze": 14,
     "quinze": 15,
     "seize": 16,
+    # Chiffres anglais, dits un par un (« four eight two one ») : la démo est
+    # en anglais et Transcribe en-US écrit parfois les chiffres en toutes lettres.
+    "oh": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
 }
 
 _TENS = {"vingt": 20, "trente": 30, "quarante": 40, "cinquante": 50}
@@ -349,6 +360,7 @@ _VERIFY_WORDS = (
     "verifier",
     "verifiez",
     "verifions",
+    "verify",
 )
 
 _VERIFY_PHRASES = (
@@ -359,6 +371,11 @@ _VERIFY_PHRASES = (
     "envoie le code",
     "envoyez un code",
     "envoyez le code",
+    "send a code",
+    "send the code",
+    "send me a code",
+    "check the code",
+    "verify the caller",
 )
 
 _NON_MOT = re.compile(r"[^a-z0-9]+")
@@ -728,7 +745,7 @@ class IdentityVerifier:
                 "target": "caller",
                 "contact": pending.contact_name,
                 "ok": False,
-                "reasons": ["deux essais de vérification échoués"],
+                "reasons": ["two failed verification attempts"],
             },
         )
         await self._escalader(call_id)
@@ -777,7 +794,7 @@ class IdentityVerifier:
                     "action": ReportedAction.VERIFY_EXPIRED.value,
                     "target": "caller",
                     "ok": False,
-                    "reasons": ["appel non analysé : le code n'a pas pu être entendu"],
+                    "reasons": ["call not analyzed: the code could not be heard"],
                 },
             )
             return

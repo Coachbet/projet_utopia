@@ -80,7 +80,10 @@ def _match_strength(contact: Contact, needle: str) -> tuple[int, int]:
     return best
 
 
-_MODES: tuple[str, ...] = ("trusted", "analyze")
+CONTACT_MODES: tuple[str, ...] = ("trusted", "analyze")
+"""Les deux seuls modes de routage. Public parce que les routes d'écriture de
+l'app refusent une autre valeur : une saisie faite dans l'app peut être corrigée
+immédiatement par la personne, contrairement à un fichier écrit à la main."""
 
 
 def _mode_of(entry: dict, name: str) -> ContactMode:
@@ -99,47 +102,38 @@ def _mode_of(entry: dict, name: str) -> ContactMode:
     raw = entry.get("mode")
     if raw is None:
         return "trusted"
-    if raw in _MODES:
+    if raw in CONTACT_MODES:
         return raw  # type: ignore[return-value]
     logger.warning(
         "Contact %s : mode %r inconnu (attendu %s) — traité comme « trusted », "
         "donc transmis sans analyse. Corriger le carnet si l'intention était l'inverse.",
         name,
         raw,
-        " ou ".join(_MODES),
+        " ou ".join(CONTACT_MODES),
     )
     return "trusted"
 
 
-class JsonContactBook:
-    """Implémente le port `ContactBook`."""
+def _lire(path: Path, *, consequence: str) -> tuple[tuple[Contact, ...], str] | None:
+    """Lit le fichier. `None` — et non un carnet vide — quand il est inutilisable.
 
-    def __init__(self, contacts: Sequence[Contact] = (), *, owner: str = "") -> None:
-        self._contacts = tuple(contacts)
-        self._owner = owner
-        self._by_number: dict[str, Contact] = {}
-        for contact in self._contacts:
-            key = normalize_number(contact.phone_number)
-            # Une clé vide ferait passer un appelant sans numéro pour un contact
-            # connu, donc ferait *baisser* le score à tort : le sens dangereux.
-            if key:
-                self._by_number[key] = contact
+    Distinguer « fichier illisible » de « carnet sans contact » est tout l'objet
+    de ce retour : au démarrage les deux se valent, mais `reload` doit garder
+    l'état en mémoire dans le premier cas et l'écraser dans le second. Un carnet
+    vidé par accident fait de chaque proche un inconnu — annonce à l'appelant et
+    analyse comprises — et c'est une panne entièrement silencieuse.
 
-    @classmethod
-    def from_path(cls, path: str | Path) -> JsonContactBook:
-        """Charge le carnet. Un fichier absent ne doit pas casser la démo."""
-        p = Path(path)
-        if not p.exists():
-            logger.warning("Carnet d'adresses introuvable (%s) : aucun contact connu", p)
-            return cls()
-        try:
-            payload = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            logger.exception("Carnet d'adresses illisible (%s) : aucun contact connu", p)
-            return cls()
-
+    `consequence` est la phrase de journal du cas d'échec, parce qu'elle n'est
+    pas la même au démarrage (« aucun contact connu ») et au rechargement
+    (« l'état en mémoire est conservé »).
+    """
+    if not path.exists():
+        logger.warning("Carnet d'adresses introuvable (%s) : %s", path, consequence)
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
         entries = payload.get("contacts", payload) if isinstance(payload, dict) else payload
-        contacts = [
+        contacts = tuple(
             Contact(
                 name=e["name"],
                 phone_number=e["phone_number"],
@@ -149,9 +143,99 @@ class JsonContactBook:
             )
             for e in entries
             if e.get("name") and e.get("phone_number")
-        ]
+        )
         owner = payload.get("owner", "") if isinstance(payload, dict) else ""
-        return cls(contacts, owner=str(owner or ""))
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError, KeyError):
+        # Les deux dernières familles d'erreurs comptent autant que les deux
+        # premières : un JSON valide mais de mauvaise forme (`{"contacts": 3}`,
+        # une entrée qui n'est pas un objet) lèverait sinon au milieu du
+        # chargement, donc ferait planter `create_app` au démarrage et
+        # renverrait une 500 sans rapport depuis la route qui recharge.
+        logger.exception("Carnet d'adresses illisible (%s) : %s", path, consequence)
+        return None
+    return contacts, str(owner or "")
+
+
+class JsonContactBook:
+    """Implémente le port `ContactBook`.
+
+    Mutable par `reload`, et c'est délibéré. L'objet est construit une seule fois
+    par `create_app` puis partagé par cinq détenteurs — `app.state.contacts`, le
+    `ScoringPipeline`, l'`IdentityVerifier`, l'enregistreur d'historique et le
+    `TwilioReputationChecker`. Remplacer l'objet ne mettrait à jour que la
+    première de ces références : ajouter son fils depuis l'app le laisserait
+    traiter comme un inconnu jusqu'au redémarrage, sans aucun message d'erreur.
+    `reload` remplace donc l'état INTERNE, en place.
+    """
+
+    def __init__(
+        self,
+        contacts: Sequence[Contact] = (),
+        *,
+        owner: str = "",
+        path: str | Path | None = None,
+    ) -> None:
+        # Mémorisé pour que `reload()` sans argument sache quoi relire. Les
+        # carnets construits en mémoire (doublures, rejeu) n'en ont pas.
+        self._path = Path(path) if path is not None else None
+        self._adopter(tuple(contacts), owner)
+
+    def _adopter(self, contacts: tuple[Contact, ...], owner: str) -> None:
+        """Installe un état complet : les trois attributs changent ensemble.
+
+        L'index est reconstruit à neuf plutôt que mis à jour : un contact retiré
+        du fichier doit disparaître de `_by_number`, sinon il reste « de
+        confiance » et son appel continue de passer sans analyse — le sens
+        dangereux d'un retrait qui n'aurait pas pris.
+        """
+        self._contacts = contacts
+        self._owner = owner
+        index: dict[str, Contact] = {}
+        for contact in contacts:
+            key = normalize_number(contact.phone_number)
+            # Une clé vide ferait passer un appelant sans numéro pour un contact
+            # connu, donc ferait *baisser* le score à tort : le sens dangereux.
+            if key:
+                index[key] = contact
+        self._by_number = index
+
+    @classmethod
+    def from_path(cls, path: str | Path) -> JsonContactBook:
+        """Charge le carnet. Un fichier absent ne doit pas casser la démo."""
+        p = Path(path)
+        charge = _lire(p, consequence="aucun contact connu")
+        if charge is None:
+            # Le chemin est retenu malgré l'échec : le fichier peut naître d'un
+            # premier ajout depuis l'app, et `reload()` doit alors le trouver.
+            return cls(path=p)
+        contacts, owner = charge
+        return cls(contacts, owner=owner, path=p)
+
+    def reload(self, path: str | Path | None = None) -> bool:
+        """Relit le fichier et remplace l'état interne en place. `False` si échec.
+
+        Appelée après chaque écriture du carnet depuis l'app : sans elle, le
+        fichier change et les cinq détenteurs continuent de répondre avec le
+        carnet du démarrage.
+
+        Un échec ne vide jamais la mémoire. Perdre le carnet en pleine démo
+        transformerait tous les proches en inconnus, donc les ferait annoncer et
+        analyser : on préfère un carnet périmé, qui reste juste pour tous les
+        contacts déjà connus, à un carnet vide.
+        """
+        cible = Path(path) if path is not None else self._path
+        if cible is None:
+            logger.warning(
+                "Rechargement du carnet impossible : ce carnet a été construit en "
+                "mémoire, sans fichier d'origine. L'état en mémoire est conservé."
+            )
+            return False
+        charge = _lire(cible, consequence="l'état en mémoire est conservé")
+        if charge is None:
+            return False
+        self._path = cible
+        self._adopter(*charge)
+        return True
 
     @property
     def owner(self) -> str:

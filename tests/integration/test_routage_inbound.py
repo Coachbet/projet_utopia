@@ -202,7 +202,7 @@ def test_un_contact_de_confiance_passe_sans_annonce_ni_analyse(monter_app):
             "target": "caller",
             "ok": True,
             "contact": "Lucas Martin",
-            "message": "Appel de Lucas Martin : transmis sans annonce ni analyse.",
+            "message": "Call from Lucas Martin: passed through without notice or analysis.",
         }
     ]
 
@@ -538,7 +538,7 @@ def test_la_jambe_victime_annonce_le_nom_du_contact(monter_app):
     assert enfants.index("Say") < enfants.index("Dial")
     say = racine.find("Say")
     assert say is not None
-    assert say.text == "Appel de Lucas Martin."
+    assert say.text == "Call from Lucas Martin."
 
 
 def test_la_jambe_victime_annonce_un_inconnu_comme_tel(monter_app):
@@ -547,7 +547,7 @@ def test_la_jambe_victime_annonce_un_inconnu_comme_tel(monter_app):
 
     say = _joindre(client).find("Say")
     assert say is not None
-    assert say.text == "Appel d'un numéro inconnu, appel protégé."
+    assert say.text == "Call from an unknown number. This call is protected."
 
 
 def test_la_jambe_victime_nomme_meme_un_contact_analyse(monter_app):
@@ -558,7 +558,7 @@ def test_la_jambe_victime_nomme_meme_un_contact_analyse(monter_app):
 
     say = _joindre(client).find("Say")
     assert say is not None
-    assert say.text == "Appel de Banque Crédit Mutuel."
+    assert say.text == "Call from Banque Crédit Mutuel."
 
 
 def test_pas_de_conference_orpheline_quand_la_session_est_introuvable(monter_app):

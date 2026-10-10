@@ -136,7 +136,7 @@ def test_la_page_de_l_app_est_servie(harness) -> None:
     assert "Cut the Line" in reponse.text
     # La limite la plus importante de tout le lot doit rester écrite à l'écran :
     # une page web ne sonne que si elle est ouverte.
-    assert "Laissez cette page ouverte" in reponse.text
+    assert "Keep this page open" in reponse.text
 
 
 def test_le_manifeste_porte_son_type_mime(harness) -> None:

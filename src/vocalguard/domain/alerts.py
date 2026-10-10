@@ -98,10 +98,10 @@ DEFAULT_THRESHOLDS = Thresholds()
 # Courts et sans jargon : la victime les entend une seule fois, sous stress.
 
 ANNOUNCE_ALERT = (
-    "Attention, cet appel présente des signes d'arnaque. Ne donnez aucune information bancaire."
+    "Warning: this call shows signs of a scam. Do not share any banking details."
 )
 
-SMS_VERIFY_CONTACT = "Est-ce toi qui appelles en ce moment ?"
+SMS_VERIFY_CONTACT = "Cut the Line: is that you calling right now? Reply YES or NO."
 
 
 # --- Vérification d'identité par code à 4 chiffres (Lot 2) -----------------
@@ -113,7 +113,7 @@ SMS_VERIFY_CONTACT = "Est-ce toi qui appelles en ce moment ?"
 # l'entendrait et le relirait), jamais dans un log, jamais sur le bus
 # d'événements — cf. `application/verification.py`.
 
-DIGIT_PAUSE = "… "
+DIGIT_PAUSE = "... "
 """Séparateur entre les chiffres énoncés.
 
 Sans lui, la synthèse vocale lit « quatre mille huit cent vingt et un » : la
@@ -141,47 +141,47 @@ def sms_verify_code(code: str, owner: str = "") -> str:
     donc elle arme le coupe-circuit `trusted_contact_denied` sans une ligne de
     code de plus. Changer ce mot casserait le lexique de `webhooks.py`.
     """
-    chez = f" {owner}" if owner else ""
+    who = f" {owner}" if owner else ""
     return (
-        f"VocalGuard : code {code}. Si c'est bien toi qui appelles{chez} en ce moment, "
-        "lis-lui ce code. Sinon réponds NON."
+        f"Cut the Line: code {code}. If you are the one calling{who} right now, "
+        "read this code to them. If not, reply NO."
     )
 
 
 def announce_verify_code(contact_name: str, code: str) -> str:
     """Ce que la personne protégée entend, elle seule, quand le code est parti."""
     return (
-        f"Un code a été envoyé à {contact_name}. Le code est {say_digits(code)}. "
-        "Ne dites jamais ce code. Demandez-lui de vous le lire."
+        f"A code was sent to {contact_name}. The code is {say_digits(code)}. "
+        "Never say this code. Ask them to read it to you."
     )
 
 
-ANNOUNCE_VERIFY_NO_CONTACT = "Je ne peux pas vérifier : cette personne n'est pas dans vos contacts."
+ANNOUNCE_VERIFY_NO_CONTACT = "I can't verify this caller: they are not in your contacts."
 """Ni le numéro appelant ni l'identité revendiquée ne désignent un contact : on
 n'a aucun vrai téléphone vers qui envoyer le code. On le dit, et on ne fait rien
 d'autre — surtout pas d'SMS vers le numéro de l'appel, qui serait le téléphone
 de l'arnaqueur lui-même."""
 
 ANNOUNCE_VERIFY_SAME_NUMBER = (
-    "Je ne peux pas vérifier : le code partirait sur le téléphone de la personne qui appelle."
+    "I can't verify: the code would go to the phone of the person who is calling."
 )
 """Garde-fou : le destinataire retenu est le numéro depuis lequel on appelle,
 alors qu'on y est arrivé par l'identité revendiquée et pas par le carnet. Envoyer
 quand même donnerait le code à vérifier à celui qu'on vérifie."""
 
-ANNOUNCE_VERIFY_SMS_FAILED = "Je n'ai pas réussi à envoyer le code. Vous pouvez réessayer."
+ANNOUNCE_VERIFY_SMS_FAILED = "I could not send the code. You can try again."
 
-ANNOUNCE_VERIFY_OK = "Code correct."
+ANNOUNCE_VERIFY_OK = "Code correct. Identity verified."
 
-ANNOUNCE_VERIFY_WRONG = "Ce code n'est pas le bon. Faites-le répéter."
+ANNOUNCE_VERIFY_WRONG = "That is not the right code. Ask them to repeat it."
 """Dit dès qu'un code faux est entendu, sans rien conclure : la transcription se
 trompe régulièrement d'un chiffre, et accuser sur une erreur de reconnaissance
 mettrait en attente un vrai petit-fils. On l'informe, elle fait répéter."""
 
-ANNOUNCE_VERIFY_EXPIRED = "Le code n'a pas été lu. L'identité n'est pas vérifiée."
+ANNOUNCE_VERIFY_EXPIRED = "The code was not read. The caller's identity is not verified."
 
 ANNOUNCE_VERIFY_UNHEARD = (
-    "Je n'ai pas pu entendre cet appel. Si cette personne ne vous a pas lu le code, méfiez-vous."
+    "I could not hear this call. If this person did not read you the code, be careful."
 )
 """Fin de fenêtre sur un appel qu'on n'écoute pas (contact de confiance : aucun
 `<Stream>`, donc aucun transcript) ou dont la transcription est tombée. On ne
@@ -189,8 +189,8 @@ peut rien affirmer, donc on n'affirme rien et on lui rend la décision."""
 
 
 def announce_intervene(contact_name: str | None) -> str:
-    who = contact_name or "votre proche"
-    return f"Nous avons mis l'appel en pause et prévenu {who}."
+    who = contact_name or "your trusted contact"
+    return f"We have put the call on hold and alerted {who}."
 
 
 @dataclass(frozen=True, slots=True)

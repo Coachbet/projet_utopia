@@ -49,11 +49,11 @@ il alimente le coupe-circuit « paiement + identité » qui force le score à 85
 
 def _line_type_reason(line_type: LineType) -> str | None:
     if line_type is LineType.NON_FIXED_VOIP:
-        return "ligne VoIP non fixe"
+        return "non-fixed VoIP line"
     if line_type is LineType.FIXED_VOIP:
-        return "ligne VoIP"
+        return "VoIP line"
     if line_type is LineType.TOLL_FREE:
-        return "numéro surtaxé ou gratuit"
+        return "premium-rate or toll-free number"
     return None
 
 
@@ -140,7 +140,7 @@ class TwilioReputationChecker:
             risk = KNOWN_CONTACT_RISK
         else:
             risk = _UNKNOWN_NUMBER_RISK[line_type]
-            reasons.append("numéro inconnu")
+            reasons.append("unknown number")
             if (reason := _line_type_reason(line_type)) is not None:
                 reasons.append(reason)
 
@@ -150,7 +150,7 @@ class TwilioReputationChecker:
             risk = max(risk, IDENTITY_MISMATCH_RISK)
             if line_type is LineType.NON_FIXED_VOIP:
                 risk = 1.0
-            reasons.append(f"numéro différent de celui de {claimed_contact.name}")
+            reasons.append(f"number differs from {claimed_contact.name}'s")
 
         return ReputationSignal(
             risk=round(risk, 3),

@@ -183,6 +183,11 @@ class Settings(BaseSettings):
     voice_detector_model_id: str = "MelodyMachine/Deepfake-audio-detection-V2"
     voice_detector_window_seconds: float = 4.0
     voice_detector_target_sample_rate: int = 16000
+    voice_detector_calibration_low: float = 0.0
+    """Probabilité « fake » typique d'une VRAIE voix au téléphone (mesurée avec
+    `scripts/calibrate_voice.py`). En dessous : risque 0."""
+    voice_detector_calibration_high: float = 1.0
+    """Probabilité typique d'une voix CLONÉE au téléphone. Au-dessus : risque 1."""
 
     # --- Scoring (Dev 2) ---------------------------------------------------
     # Défauts dérivés du domaine, jamais recopiés. Le piège qu'on évite ici :

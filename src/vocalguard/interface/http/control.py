@@ -118,7 +118,7 @@ async def contact_denied(call_id: str, request: Request) -> dict[str, object]:
         # registre est raccroché, pas en panne. Le bouton doit disparaître.
         raise HTTPException(
             status_code=404,
-            detail=f"Appel {call_id} inconnu : déjà terminé ou jamais ouvert.",
+            detail=f"Unknown call {call_id}: already ended or never opened.",
         )
 
     pipeline = getattr(request.app.state, "pipeline", None)
@@ -193,7 +193,7 @@ async def verify_identity(call_id: str, request: Request) -> dict[str, object]:
         # registre est raccroché, pas en panne. Le bouton doit disparaître.
         raise HTTPException(
             status_code=404,
-            detail=f"Appel {call_id} inconnu : déjà terminé ou jamais ouvert.",
+            detail=f"Unknown call {call_id}: already ended or never opened.",
         )
 
     verifier = getattr(request.app.state, "verifier", None)
@@ -264,7 +264,7 @@ async def _surcharge_humaine(request: Request, call_id: str, *, held: bool) -> d
         # ouvert, jamais une panne de téléphonie.
         raise HTTPException(
             status_code=404,
-            detail=f"Appel {call_id} inconnu : déjà terminé ou jamais ouvert.",
+            detail=f"Unknown call {call_id}: already ended or never opened.",
         )
 
     if session.caller_held == held:

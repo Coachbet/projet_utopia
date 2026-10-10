@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -17,7 +17,7 @@
     <link rel="manifest" href="/app/manifest.webmanifest" />
     <link rel="icon" href="/app/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/app/icon.svg" />
-    <title>Cut the Line · Ils pêchent, on coupe la ligne</title>
+    <title>Cut the Line · They phish, we cut the line</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -543,6 +543,83 @@
         margin-top: 13px;
         background: var(--surface);
         transition: background 300ms var(--ease-out), border-color 300ms var(--ease-out);
+      }
+      /* --- Panneau d'intervention -------------------------------------------
+         Il n'est pas « une alerte de plus » : à cet instant l'appelant est
+         réellement en pause et la personne protégée doit trancher. D'où le
+         contraste maximal, deux boutons et pas trois, et aucune croix de
+         fermeture — un panneau qu'on peut faire disparaître sans décider
+         laisserait l'appel en pause sans que personne ne sache pourquoi.
+         L'ordre des boutons est délibéré : « Arrêter » d'abord, à la place où le
+         pouce tombe, parce que c'est l'action protectrice. « Continuer » est en
+         retrait (ghost) : la reprise doit être un choix, pas un réflexe. */
+      .intervention {
+        border: 2px solid var(--cut);
+        border-radius: 18px;
+        padding: 16px;
+        margin-top: 14px;
+        background: var(--ctl-navy-deep);
+        animation: intervention-apparait 260ms var(--ease-out) both;
+      }
+      @keyframes intervention-apparait {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .intervention {
+          animation: none;
+        }
+      }
+      .intervention-entete {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 17px;
+        font-weight: 720;
+        color: var(--cut);
+      }
+      .intervention-entete svg {
+        width: 22px;
+        height: 22px;
+        fill: currentColor;
+        flex: none;
+      }
+      .intervention-raison {
+        margin-top: 7px;
+        font-size: 16px;
+        line-height: 1.4;
+        color: var(--ink);
+      }
+      .intervention-question {
+        margin-top: 13px;
+        font-size: 15px;
+        font-weight: 620;
+        color: var(--muted);
+      }
+      .intervention-choix {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      /* Empilés, jamais côte à côte : à 320 px de large, « Continuer à parler »
+         casse sur trois lignes dans une grille à deux colonnes, et deux boutons
+         de tailles différentes se choisissent mal sous stress. */
+      .intervention-choix .principal svg {
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
+      }
+      .principal.danger {
+        background: var(--cut);
+        color: var(--ctl-white);
+      }
+      .intervention-note {
+        margin-top: 11px;
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--muted);
       }
       .risque[data-niveau="watch"] {
         border-color: #b98a3a;
@@ -2130,7 +2207,7 @@
             ><svg aria-hidden="true" style="width: 13px; height: 13px">
               <use href="#i-cadenas" />
             </svg>
-            Accès privé</span
+            Private access</span
           >
         </div>
         <div class="hero">
@@ -2150,18 +2227,17 @@
             </svg>
           </div>
           <p class="eyebrow" style="margin-bottom: 14px">
-            Détection d'arnaques vocales en temps réel
+            Real-time phone scam detection
           </p>
-          <h1>Ils pêchent.<br /><span>On coupe la ligne.</span></h1>
+          <h1>They phish.<br /><span>We cut the line.</span></h1>
           <p class="aide">
-            Vos appels passent par Cut the Line. Les inconnus sont analysés
-            pendant l'appel, vos proches jamais.
+            Your calls go through Cut the Line. Unknown callers are analyzed during the call, your loved ones never are.
           </p>
         </div>
         <div class="carte pin-card">
-          <label for="pin">Votre code d'accès</label>
+          <label for="pin">Your access code</label>
           <p id="aide-pin" class="pin-hint">
-            Le code personnel configuré pour votre protection.
+            The personal code set up for your protection.
           </p>
           <input
             id="pin"
@@ -2175,23 +2251,20 @@
             aria-describedby="aide-pin"
             placeholder="••••••"
           /><button id="btn-activer" class="principal accepter space">
-            <svg aria-hidden="true"><use href="#i-bouclier" /></svg>Activer la
-            protection
+            <svg aria-hidden="true"><use href="#i-bouclier" /></svg>Turn on protection
           </button>
           <p id="erreur-pin" class="erreur space" role="alert" hidden></p>
         </div>
         <div class="micro-note">
           <svg aria-hidden="true"><use href="#i-micro" /></svg>
           <p id="aide-micro" class="note">
-            Autorisez le micro pour parler depuis l'application. Vous gardez le
-            contrôle sur chaque appel.
+            Allow the microphone to talk from the app. You stay in control of every call.
           </p>
         </div>
         <p id="erreur-sdk" class="erreur space" role="alert" hidden></p>
         <div class="pin-footer">
           <p class="privacy">
-            <svg aria-hidden="true"><use href="#i-cadenas" /></svg>Les
-            conversations analysées ne sont pas enregistrées
+            <svg aria-hidden="true"><use href="#i-cadenas" /></svg>Analyzed conversations are never recorded
           </p>
         </div>
       </section>
@@ -2207,27 +2280,25 @@
             aria-controls="shell-protection"
           >
             <span class="dot"></span
-            ><span id="connexion-chip-texte">Connexion…</span
+            ><span id="connexion-chip-texte">Connecting…</span
             ><svg aria-hidden="true"><use href="#i-chevron" /></svg>
           </button>
         </div>
         <div id="shell-protection" class="carte shell-protection" hidden>
           <p class="etat-ligne" id="etat-ligne" data-ok="" role="status">
-            <span class="puce"></span><span id="etat-texte">Connexion…</span>
+            <span class="puce"></span><span id="etat-texte">Connecting…</span>
           </p>
           <p class="etat-ligne" id="etat-micro" data-ok="">
             <span class="puce"></span
-            ><span id="etat-micro-texte">Micro : non vérifié</span>
+            ><span id="etat-micro-texte">Microphone: not checked</span>
           </p>
           <p class="note">
-            <strong>Laissez cette page ouverte et l'écran allumé.</strong> Si
-            elle est fermée, les appels passent sur votre ligne de secours ou
-            votre messagerie, selon votre configuration.
+            <strong>Keep this page open and the screen on.</strong> If it is closed, calls go to your backup line or your voicemail, depending on your setup.
           </p>
         </div>
         <div class="shell-page-heading">
-          <p id="titre-attente" class="shell-owner">Protection active</p>
-          <h1 id="shell-titre">Récents</h1>
+          <p id="titre-attente" class="shell-owner">Protection on</p>
+          <h1 id="shell-titre">Recents</h1>
         </div>
         <section
           id="ecran-historique"
@@ -2235,20 +2306,20 @@
           aria-labelledby="btn-historique"
         >
           <div class="recent-toolbar">
-            <div class="segmented" role="group" aria-label="Filtrer les appels">
-              <button id="filtre-tous" aria-pressed="true">Tous</button
-              ><button id="filtre-manques" aria-pressed="false">Manqués</button>
+            <div class="segmented" role="group" aria-label="Filter calls">
+              <button id="filtre-tous" aria-pressed="true">All</button
+              ><button id="filtre-manques" aria-pressed="false">Missed</button>
             </div>
             <button id="btn-effacer-historique" class="text-button">
-              Effacer
+              Clear
             </button>
           </div>
           <button
             id="btn-historique-retour"
             hidden
-            aria-label="Retour aux récents"
+            aria-label="Back to recents"
           >
-            Retour
+            Back
           </button>
           <p
             id="historique-erreur"
@@ -2262,32 +2333,31 @@
             role="status"
             hidden
           >
-            Chargement des appels…
+            Loading calls…
           </div>
           <ul
             id="historique-liste"
             class="history-list"
-            aria-label="Appels récents"
+            aria-label="Recent calls"
           ></ul>
           <div id="historique-vide" class="empty-state" hidden>
             <svg aria-hidden="true" class="empty-mark" viewBox="0 0 24 24"><use href="#i-marque" /></svg>
-            <h2 id="historique-vide-titre">Aucun appel pour le moment</h2>
+            <h2 id="historique-vide-titre">No calls yet</h2>
             <p id="historique-vide-texte">
-              Les prochains appels apparaîtront ici, avec leurs moments clés.
+              Your next calls will appear here, with their key moments.
             </p>
           </div>
           <button id="btn-historique-plus" class="principal ghost space" hidden>
-            Voir les appels précédents</button
+            Show earlier calls</button
           ><button
             id="btn-historique-reessayer"
             class="principal ghost space"
             hidden
           >
-            Réessayer
+            Try again
           </button>
           <p class="privacy history-footer">
-            <svg aria-hidden="true"><use href="#i-cadenas" /></svg>Métadonnées
-            uniquement · aucun audio ni transcription
+            <svg aria-hidden="true"><use href="#i-cadenas" /></svg>Metadata only · no audio or transcript
           </p>
         </section>
 
@@ -2298,19 +2368,19 @@
           hidden
         >
           <label for="contacts-recherche" class="sr-only"
-            >Rechercher dans vos contacts</label
+            >Search your contacts</label
           >
           <div class="search-field">
             <svg aria-hidden="true"><use href="#i-recherche" /></svg
             ><input
               id="contacts-recherche"
               type="search"
-              placeholder="Nom ou numéro"
+              placeholder="Name or number"
               autocomplete="off"
             />
           </div>
           <p id="contacts-compteur" class="panel-caption">
-            Votre carnet de confiance
+            Your trusted contacts
           </p>
           <p id="contacts-erreur" class="erreur space" role="alert" hidden></p>
           <p
@@ -2319,18 +2389,18 @@
             role="status"
             hidden
           >
-            Chargement des contacts…
+            Loading contacts…
           </p>
           <ul
             id="contacts-liste"
             class="contacts-list"
-            aria-label="Vos contacts"
+            aria-label="Your contacts"
           ></ul>
           <div id="contacts-vide" class="empty-state" hidden>
             <svg aria-hidden="true"><use href="#i-personne" /></svg>
-            <h2 id="contacts-vide-titre">Votre carnet est vide</h2>
+            <h2 id="contacts-vide-titre">No contacts yet</h2>
             <p id="contacts-vide-texte">
-              Vos contacts de confiance apparaîtront ici.
+              Your trusted contacts will appear here.
             </p>
           </div>
           <button
@@ -2338,7 +2408,7 @@
             class="principal ghost space"
             hidden
           >
-            Réessayer
+            Try again
           </button>
         </section>
         <section
@@ -2350,7 +2420,7 @@
           <div class="dialer">
             <p id="numerotation-contact" class="dialer-contact"></p>
             <label for="numerotation-numero" class="sr-only"
-              >Numéro à appeler</label
+              >Number to call</label
             ><input
               id="numerotation-numero"
               class="dialer-number"
@@ -2358,19 +2428,19 @@
               inputmode="tel"
               autocomplete="off"
               maxlength="30"
-              placeholder="Votre numéro"
+              placeholder="Phone number"
             />
             <div class="dialer-edit">
               <button
                 id="btn-indicatif"
                 class="text-button"
-                aria-label="Ajouter l'indicatif international"
+                aria-label="Add the international prefix"
               >
                 +</button
               ><button
                 id="btn-effacer-chiffre"
                 class="text-button"
-                aria-label="Effacer le dernier chiffre"
+                aria-label="Delete last digit"
               >
                 <svg aria-hidden="true"><use href="#i-effacer" /></svg>
               </button>
@@ -2378,12 +2448,12 @@
             <div
               id="numerotation-touches"
               class="dialer-keypad"
-              aria-label="Clavier de numérotation"
+              aria-label="Dial pad"
             ></div>
             <button
               id="btn-appeler"
               class="dialer-call"
-              aria-label="Appeler le numéro composé"
+              aria-label="Call the number entered"
               disabled
             >
               <svg aria-hidden="true"><use href="#i-telephone" /></svg>
@@ -2395,11 +2465,10 @@
               hidden
             ></p>
             <button id="btn-copier-numero" class="text-button" disabled>
-              Copier le numéro
+              Copy number
             </button>
             <p class="note dialer-note">
-              Les appels sortants ne sont pas analysés.<br />Numéros courts et
-              appels d'urgence non pris en charge.
+              Outgoing calls are not analyzed.<br />Short codes and emergency calls are not supported.
             </p>
           </div>
         </section>
@@ -2410,18 +2479,17 @@
           hidden
         >
           <div class="voicemail-heading">
-            <p class="panel-caption">Vos messages vocaux</p>
+            <p class="panel-caption">Your voicemail</p>
             <button
               id="btn-messagerie-actualiser"
               class="text-button"
-              aria-label="Actualiser la messagerie"
+              aria-label="Refresh voicemail"
             >
               <svg aria-hidden="true"><use href="#i-actualiser" /></svg>
             </button>
           </div>
           <p id="messagerie-description" class="note">
-            Les messages laissés après un appel sans réponse sont enregistrés
-            dans votre messagerie.
+            Messages left after an unanswered call are saved to your voicemail.
           </p>
           <p
             id="messagerie-erreur"
@@ -2435,18 +2503,18 @@
             role="status"
             hidden
           >
-            Chargement des messages…
+            Loading messages…
           </p>
           <ul
             id="messagerie-liste"
             class="voicemail-list"
-            aria-label="Messages vocaux"
+            aria-label="Voicemail messages"
           ></ul>
           <div id="messagerie-vide" class="empty-state" hidden>
             <svg aria-hidden="true"><use href="#i-messagerie" /></svg>
-            <h2 id="messagerie-vide-titre">Aucun message vocal</h2>
+            <h2 id="messagerie-vide-titre">No voicemail</h2>
             <p id="messagerie-vide-texte">
-              Les messages de vos appelants apparaîtront ici.
+              Messages from your callers will appear here.
             </p>
           </div>
           <button
@@ -2454,17 +2522,16 @@
             class="principal ghost space"
             hidden
           >
-            Réessayer
+            Try again
           </button>
           <p class="privacy history-footer">
-            <svg aria-hidden="true"><use href="#i-cadenas" /></svg>Messages
-            vocaux privés · accès protégé par votre code
+            <svg aria-hidden="true"><use href="#i-cadenas" /></svg>Private voicemail · protected by your code
           </p>
         </section>
         <nav
           id="telephone-onglets"
           class="phone-tabs"
-          aria-label="Navigation du téléphone"
+          aria-label="Phone navigation"
           role="tablist"
         >
           <button
@@ -2474,7 +2541,7 @@
             aria-controls="ecran-historique"
           >
             <svg aria-hidden="true"><use href="#i-historique" /></svg
-            ><span>Récents</span></button
+            ><span>Recents</span></button
           ><button
             id="tab-contacts"
             role="tab"
@@ -2492,7 +2559,7 @@
             tabindex="-1"
           >
             <svg aria-hidden="true"><use href="#i-clavier" /></svg
-            ><span>Clavier</span></button
+            ><span>Keypad</span></button
           ><button
             id="tab-messagerie"
             role="tab"
@@ -2501,7 +2568,7 @@
             tabindex="-1"
           >
             <svg aria-hidden="true"><use href="#i-messagerie" /></svg
-            ><span>Messagerie</span
+            ><span>Voicemail</span
             ><span id="messagerie-badge" class="tab-badge" hidden></span>
           </button>
         </nav>
@@ -2510,36 +2577,36 @@
         <p class="call-header">
           <svg aria-hidden="true"><use href="#i-bouclier" /></svg
           ><strong>Cut the Line</strong> ·
-          <span id="appel-protection-statut">appel protégé</span>
+          <span id="appel-protection-statut">protected call</span>
         </p>
-        <p id="appel-statut" class="call-status" role="status">Appel entrant</p>
+        <p id="appel-statut" class="call-status" role="status">Incoming call</p>
         <div class="appelant">
           <div id="appel-avatar" class="avatar" aria-hidden="true">
             <svg><use href="#i-personne" /></svg>
           </div>
-          <h1 class="nom" id="appel-nom">Appel entrant</h1>
+          <h1 class="nom" id="appel-nom">Incoming call</h1>
           <p class="numero" id="appel-numero"></p>
           <p class="provenance" id="appel-provenance">
-            Identification en cours…
+            Identifying…
           </p>
           <span class="badge" id="appel-badge" data-confiance=""
             ><svg aria-hidden="true">
               <use id="appel-badge-icone" href="#i-inconnu" /></svg
-            ><span id="appel-badge-texte">Identification en cours</span></span
+            ><span id="appel-badge-texte">Identifying</span></span
           >
         </div>
         <div class="risque" id="appel-risque" data-niveau="none" hidden>
           <p class="entete">
             <svg aria-hidden="true">
               <use id="appel-risque-icone" href="#i-ok" /></svg
-            ><span id="appel-risque-texte">Analyse en attente</span
+            ><span id="appel-risque-texte">Analysis pending</span
             ><span class="valeur" id="appel-risque-valeur">— / 100</span>
           </p>
           <div
             class="jauge"
             id="appel-risque-jauge"
             role="meter"
-            aria-label="Score de risque de l'appel"
+            aria-label="Call risk score"
             aria-valuemin="0"
             aria-valuemax="100"
             aria-valuenow="0"
@@ -2547,7 +2614,7 @@
             <span id="appel-risque-barre"></span>
           </div>
           <p id="analyse-etat" class="note" style="margin-top: 6px" hidden>
-            Analyse déconnectée · restez vigilant
+            Analysis disconnected · stay alert
           </p>
           <button
             id="btn-voir-alerte"
@@ -2560,8 +2627,44 @@
             "
             hidden
           >
-            Voir les conseils de protection
+            See safety advice
           </button>
+        </div>
+        <!-- Panneau d'intervention. N'apparaît QU'AU moment où la protection a
+             réellement mis l'appelant en attente (`action: hold_caller`), et pas
+             sur un score élevé : un score à 90 dont la mise en attente a échoué
+             laisse l'appelant en train de parler, et proposer « Continuer » à cet
+             instant mentirait sur l'état de la ligne.
+             Jusque-là, l'écran reste celui d'un appel ordinaire — c'est voulu :
+             une interface qui s'agite en permanence n'est plus lue. -->
+        <div
+          id="intervention"
+          class="intervention"
+          role="alertdialog"
+          aria-labelledby="intervention-titre"
+          aria-describedby="intervention-raison"
+          hidden
+        >
+          <p class="intervention-entete">
+            <svg aria-hidden="true"><use href="#i-pause" /></svg
+            ><span id="intervention-titre">Call on hold</span>
+          </p>
+          <p id="intervention-raison" class="intervention-raison">
+            The caller can no longer hear you and is waiting.
+          </p>
+          <p class="intervention-question">What would you like to do?</p>
+          <div class="intervention-choix">
+            <button id="btn-intervention-raccrocher" class="principal danger">
+              <svg aria-hidden="true"><use href="#i-raccrocher" /></svg
+              >End the call</button
+            ><button id="btn-intervention-continuer" class="principal ghost">
+              <svg aria-hidden="true"><use href="#i-reprendre" /></svg
+              >Keep talking
+            </button>
+          </div>
+          <p class="intervention-note">
+            Nothing happens until you choose: the call stays on hold.
+          </p>
         </div>
         <div class="call-controls">
           <div id="appel-boutons-entrant">
@@ -2570,16 +2673,16 @@
                 <span class="circle"
                   ><svg aria-hidden="true">
                     <use href="#i-raccrocher" /></svg></span
-                >Refuser</button
+                >Decline</button
               ><button id="btn-decrocher" class="round-action accepter">
                 <span class="circle"
                   ><svg aria-hidden="true">
                     <use href="#i-telephone" /></svg></span
-                >Accepter
+                >Accept
               </button>
             </div>
             <p class="incoming-note">
-              Vous choisissez de répondre ou de refuser.
+              You choose whether to answer or decline.
             </p>
           </div>
           <div id="appel-boutons-encours" hidden>
@@ -2587,16 +2690,16 @@
               <button id="btn-muet" class="phone-action" aria-pressed="false">
                 <span class="circle"
                   ><svg aria-hidden="true"><use href="#i-micro" /></svg></span
-                ><span id="btn-muet-texte">Muet</span></button
+                ><span id="btn-muet-texte">Mute</span></button
               ><button
                 id="btn-haut-parleur"
                 class="phone-action"
-                aria-label="Choisir la sortie audio"
+                aria-label="Choose audio output"
                 hidden
               >
                 <span class="circle"
                   ><svg aria-hidden="true"><use href="#i-audio" /></svg></span
-                >Haut-parleur</button
+                >Speaker</button
               ><button
                 id="btn-clavier"
                 class="phone-action"
@@ -2604,7 +2707,7 @@
               >
                 <span class="circle"
                   ><svg aria-hidden="true"><use href="#i-clavier" /></svg></span
-                >Clavier</button
+                >Keypad</button
               ><button
                 id="btn-verifier"
                 class="phone-action verify"
@@ -2612,7 +2715,7 @@
               >
                 <span class="circle"
                   ><svg aria-hidden="true"><use href="#i-cle" /></svg></span
-                >Vérifier</button
+                >Verify</button
               ><button
                 id="btn-attente"
                 class="phone-action"
@@ -2621,12 +2724,12 @@
                 <span class="circle"
                   ><svg aria-hidden="true">
                     <use id="btn-attente-icone" href="#i-pause" /></svg></span
-                ><span id="btn-attente-texte">Attente</span></button
+                ><span id="btn-attente-texte">Hold</span></button
               ><button
                 id="btn-contacts"
                 class="phone-action"
                 disabled
-                aria-label="Contacts, bientôt disponible"
+                aria-label="Contacts, coming soon"
               >
                 <span class="circle"
                   ><svg aria-hidden="true">
@@ -2638,7 +2741,7 @@
               <span class="circle"
                 ><svg aria-hidden="true">
                   <use href="#i-raccrocher" /></svg></span
-              >Raccrocher
+              >Hang up
             </button>
           </div>
         </div>
@@ -2648,20 +2751,20 @@
         <div class="avatar">
           <svg aria-hidden="true"><use href="#i-raccrocher" /></svg>
         </div>
-        <h1>Appel terminé</h1>
+        <h1>Call ended</h1>
         <p id="fin-duree" class="duration">00:00</p>
-        <p id="fin-message" class="note">Votre protection reste active.</p>
+        <p id="fin-message" class="note">Your protection stays on.</p>
       </section>
       <section id="ecran-detail" hidden>
         <div class="page-title">
           <button
             id="btn-detail-retour"
             class="icon-button"
-            aria-label="Retour à l'historique"
+            aria-label="Back to history"
           >
             <svg aria-hidden="true"><use href="#i-fleche" /></svg>
           </button>
-          <h1>Détail de l'appel</h1>
+          <h1>Call details</h1>
         </div>
         <p id="detail-erreur" class="erreur space" role="alert" hidden></p>
         <div
@@ -2670,11 +2773,11 @@
           role="status"
           hidden
         >
-          Chargement de l'appel…
+          Loading call…
         </div>
         <div id="detail-contenu"></div>
         <button id="btn-detail-reessayer" class="principal ghost space" hidden>
-          Réessayer
+          Try again
         </button>
       </section>
     </main>
@@ -2689,12 +2792,12 @@
         <div class="alert-icon">
           <svg aria-hidden="true"><use href="#i-attention" /></svg>
         </div>
-        <h2 id="appel-alerte-titre">Cet appel mérite votre vigilance</h2>
-        <p class="consigne">Ne donnez aucun code ni numéro de carte.</p>
+        <h2 id="appel-alerte-titre">Be careful with this call</h2>
+        <p class="consigne">Never give out a code or a card number.</p>
         <p class="detail" id="appel-alerte-detail">
-          Prenez le temps de vérifier l'identité de votre interlocuteur.
+          Take the time to check who you are talking to.
         </p>
-        <button id="btn-fermer-alerte" class="principal">J'ai compris</button>
+        <button id="btn-fermer-alerte" class="principal">Got it</button>
       </div>
     </div>
     <div id="appel-code" class="overlay" hidden>
@@ -2707,24 +2810,24 @@
       >
         <div class="handle" aria-hidden="true"></div>
         <div class="sheet-header">
-          <h2 id="code-titre">Vérifier son identité</h2>
+          <h2 id="code-titre">Verify their identity</h2>
           <button
             id="btn-fermer-code"
             class="icon-button"
-            aria-label="Fermer le code"
+            aria-label="Close code"
           >
             <svg aria-hidden="true"><use href="#i-fermer" /></svg>
           </button>
         </div>
-        <p class="eyebrow">Code envoyé à votre proche</p>
+        <p class="eyebrow">Code sent to your loved one</p>
         <p class="chiffres" id="appel-code-chiffres">— — — —</p>
         <p class="reste" id="appel-code-reste"></p>
         <p class="code-instruction">
-          Ne dites jamais ce code.<br />C'est à lui de vous le lire.
+          Never say this code.<br />They must read it to you.
         </p>
         <p class="aide code-target" id="appel-code-cible"></p>
         <button id="btn-code-retour" class="principal ghost space">
-          Revenir à l'appel
+          Back to the call
         </button>
       </div>
     </div>
@@ -2738,11 +2841,11 @@
       >
         <div class="handle" aria-hidden="true"></div>
         <div class="sheet-header">
-          <h2 id="clavier-titre">Clavier</h2>
+          <h2 id="clavier-titre">Keypad</h2>
           <button
             id="btn-fermer-clavier"
             class="icon-button"
-            aria-label="Fermer le clavier"
+            aria-label="Close keypad"
           >
             <svg aria-hidden="true"><use href="#i-fermer" /></svg>
           </button>
@@ -2750,7 +2853,7 @@
         <p
           id="clavier-chiffres"
           class="keypad-display"
-          aria-label="Touches envoyées"
+          aria-label="Keys sent"
         ></p>
         <div id="clavier-touches" class="keypad-grid"></div>
       </div>
@@ -2765,16 +2868,16 @@
       >
         <div class="handle" aria-hidden="true"></div>
         <div class="sheet-header">
-          <h2 id="audio-titre">Sortie audio</h2>
+          <h2 id="audio-titre">Audio output</h2>
           <button
             id="btn-fermer-audio"
             class="icon-button"
-            aria-label="Fermer les sorties audio"
+            aria-label="Close audio outputs"
           >
             <svg aria-hidden="true"><use href="#i-fermer" /></svg>
           </button>
         </div>
-        <p class="aide space">Choisissez un appareil audio disponible.</p>
+        <p class="aide space">Choose an available audio device.</p>
         <div id="audio-options" class="audio-options"></div>
       </div>
     </div>
@@ -2787,17 +2890,16 @@
         tabindex="-1"
       >
         <div class="handle" aria-hidden="true"></div>
-        <h2 id="effacer-titre">Effacer l'historique ?</h2>
+        <h2 id="effacer-titre">Clear history?</h2>
         <p class="clear-copy">
-          Tous les appels de cet historique seront supprimés. Cette action est
-          définitive.
+          All calls in this history will be deleted. This cannot be undone.
         </p>
         <p id="effacer-erreur" class="erreur" role="alert" hidden></p>
         <div class="clear-buttons">
           <button id="btn-annuler-effacement" class="principal ghost">
-            Conserver</button
+            Keep</button
           ><button id="btn-confirmer-effacement" class="principal refuser">
-            Tout effacer
+            Clear all
           </button>
         </div>
       </div>
@@ -2811,14 +2913,14 @@
         tabindex="-1"
       >
         <div class="handle" aria-hidden="true"></div>
-        <h2 id="message-supprimer-titre">Supprimer ce message vocal ?</h2>
+        <h2 id="message-supprimer-titre">Delete this voicemail?</h2>
         <p id="message-supprimer-cible" class="clear-copy"></p>
         <p id="message-supprimer-erreur" class="erreur" role="alert" hidden></p>
         <div class="clear-buttons">
           <button id="btn-message-conserver" class="principal ghost">
-            Conserver</button
+            Keep</button
           ><button id="btn-message-supprimer" class="principal refuser">
-            Supprimer
+            Delete
           </button>
         </div>
       </div>
@@ -2895,66 +2997,66 @@
       };
       const NIVEAUX = {
         none: { mot: "Normal", icone: "#i-ok" },
-        watch: { mot: "Vigilance", icone: "#i-oeil" },
-        alert: { mot: "Alerte", icone: "#i-attention" },
+        watch: { mot: "Caution", icone: "#i-oeil" },
+        alert: { mot: "Alert", icone: "#i-attention" },
         intervene: { mot: "Danger", icone: "#i-danger" },
       };
       const RAISONS = {
         contact_inconnu:
-          "Cette personne n'est pas dans vos contacts. N'envoyez aucun code à un numéro qu'elle vous indique.",
+          "This person is not in your contacts. Never send a code to a number they give you.",
         sms_refuse:
-          "Le code n'a pas pu être envoyé à votre proche. Ne communiquez aucune information sensible.",
+          "The code could not be sent to your loved one. Do not share any sensitive information.",
         verification_indisponible:
-          "La vérification par code est indisponible pour le moment.",
+          "Code verification is unavailable right now.",
         erreur_interne:
-          "La vérification n'a pas abouti. Vous pouvez réessayer.",
+          "Verification failed. You can try again.",
         essais_epuises:
-          "Deux essais ont échoué. Ne communiquez aucune information sensible.",
+          "Two attempts failed. Do not share any sensitive information.",
         verification_terminee:
-          "La vérification de cet appel est déjà terminée.",
+          "Verification for this call is already finished.",
         destinataire_est_l_appelant:
-          "La vérification nécessite un proche appelé sur le numéro de votre carnet.",
-        _defaut: "La vérification n'a pas pu être lancée.",
+          "Verification needs a loved one reached on the number in your contacts.",
+        _defaut: "Verification could not be started.",
       };
       const ACTIONS = {
-        caller_notice: "Appelant informé de l'analyse",
-        announce_victim: "Conseil de protection annoncé",
-        hold_caller: "Appelant mis en attente",
-        resume_caller: "Appel repris",
-        sms_contact: "Proche de confiance prévenu par SMS",
-        verify_requested: "Vérification d'identité demandée",
-        identity_verified: "Identité confirmée par code",
-        contact_denied: "Identité démentie par le proche",
-        verify_expired: "Code de vérification expiré",
-        verify_failed: "Vérification échouée",
-        verification_failed: "Vérification échouée",
-        dial_victim: "Téléphone de la personne protégée appelé",
-        dial_fallback: "Ligne de secours appelée",
-        fallback_dial: "Ligne de secours appelée",
+        caller_notice: "Caller informed of the analysis",
+        announce_victim: "Safety advice announced",
+        hold_caller: "Caller put on hold",
+        resume_caller: "Call resumed",
+        sms_contact: "Trusted contact alerted by text",
+        verify_requested: "Identity verification requested",
+        identity_verified: "Identity confirmed by code",
+        contact_denied: "Identity denied by the loved one",
+        verify_expired: "Verification code expired",
+        verify_failed: "Verification failed",
+        verification_failed: "Verification failed",
+        dial_victim: "Protected person's phone called",
+        dial_fallback: "Backup line called",
+        fallback_dial: "Backup line called",
       };
       const VERIFICATIONS = {
-        none: "Aucune vérification demandée",
-        verified: "Identité confirmée",
-        failed: "Vérification échouée",
-        expired: "Code expiré",
+        none: "No verification requested",
+        verified: "Identity confirmed",
+        failed: "Verification failed",
+        expired: "Code expired",
       };
       const PAYS = {
         FR: "France",
-        GB: "Royaume-Uni",
-        US: "États-Unis",
+        GB: "United Kingdom",
+        US: "United States",
         CA: "Canada",
-        BE: "Belgique",
-        CH: "Suisse",
-        DE: "Allemagne",
-        ES: "Espagne",
-        IT: "Italie",
+        BE: "Belgium",
+        CH: "Switzerland",
+        DE: "Germany",
+        ES: "Spain",
+        IT: "Italy",
         PT: "Portugal",
         LU: "Luxembourg",
-        NL: "Pays-Bas",
-        IE: "Irlande",
-        MA: "Maroc",
-        DZ: "Algérie",
-        TN: "Tunisie",
+        NL: "Netherlands",
+        IE: "Ireland",
+        MA: "Morocco",
+        DZ: "Algeria",
+        TN: "Tunisia",
       };
       const INDICATIFS = [
         ["+33", "FR"],
@@ -3008,7 +3110,7 @@
         return mots.length
           ? (
               mots[0][0] + (mots.length > 1 ? mots[mots.length - 1][0] : "")
-            ).toLocaleUpperCase("fr-FR")
+            ).toLocaleUpperCase("en-US")
           : "";
       }
       function avatar(node, nom) {
@@ -3019,7 +3121,7 @@
       }
       function provenance(contexte) {
         const numero = String(contexte.caller_number || "");
-        if (!numero || contexte.origin === "masqué") return "Numéro masqué";
+        if (!numero || contexte.origin === "masqué") return "Hidden number";
         const indicatif = INDICATIFS.find(([prefixe]) =>
           numero.startsWith(prefixe),
         );
@@ -3027,7 +3129,7 @@
         const paysNom = PAYS[pays] || pays;
         const type = {
           mobile: "Mobile",
-          landline: "Fixe",
+          landline: "Landline",
           fixedVoip: "VoIP",
           nonFixedVoip: "VoIP",
         }[contexte.line_type];
@@ -3037,13 +3139,13 @@
         const zone =
           paysNom ||
           (numero.startsWith("+1")
-            ? "+1 · Amérique du Nord"
-            : (numero.match(/^\+\d{1,3}/) || ["Origine inconnue"])[0]);
+            ? "+1 · North America"
+            : (numero.match(/^\+\d{1,3}/) || ["Unknown origin"])[0]);
         return etranger
           ? type
             ? type + " · " + zone
-            : "Étranger · " + zone
-          : (type ? type + " · " : "") + (paysNom || "Origine inconnue");
+            : "Foreign · " + zone
+          : (type ? type + " · " : "") + (paysNom || "Unknown origin");
       }
       function duree(secondes) {
         const valeur = Math.max(0, Math.floor(Number(secondes) || 0));
@@ -3058,8 +3160,8 @@
       function dateFr(value, options) {
         const date = new Date(value);
         return Number.isNaN(date.getTime())
-          ? "Date indisponible"
-          : new Intl.DateTimeFormat("fr-FR", options).format(date);
+          ? "Date unavailable"
+          : new Intl.DateTimeFormat("en-US", options).format(date);
       }
       function montrer(ecran) {
         if (ecran === "historique") {
@@ -3150,6 +3252,29 @@
       }
 
       /* Le geste d'activation déverrouille l'audio avant tout appel asynchrone. */
+      /* Sonneries disponibles. Toutes SYNTHÉTISÉES en WebAudio, aucun fichier :
+         la page doit rester autonome, et un .mp3 servi depuis un CDN la rendrait
+         muette sur un réseau qui filtre l'extérieur — exactement le réseau d'un
+         lieu d'événement.
+
+         `grave` n'est pas un gadget : la presbyacousie fait perdre les AIGUS en
+         premier. Une sonnerie basse est donc objectivement plus audible après
+         70 ans qu'une sonnerie haute, ce qui est l'inverse de ce que font la
+         plupart des téléphones. C'est le réglage à proposer en premier si la
+         personne protégée dit « je ne l'entends pas ». */
+      const SONNERIES = {
+        classique: {
+          label: "Classic",
+          bips: [
+            [0, 440],
+            [0.55, 480],
+          ],
+          periode: 2400,
+          vibration: [450, 250, 450],
+          gain: 0.2,
+        },
+      };
+      const SONNERIE_DEFAUT = "classique";
       const sonnerie = (() => {
         let ctx = null,
           minuteur = null;
@@ -3161,15 +3286,19 @@
             /* iOS ou refus */
           }
         };
-        function bip(retard, frequence) {
+        function bip(retard, frequence, volume) {
           if (!ctx || ctx.state !== "running") return;
+          if (!(volume > 0)) return;
           const t0 = ctx.currentTime + retard;
           const osc = ctx.createOscillator(),
             gain = ctx.createGain();
           osc.type = "sine";
           osc.frequency.value = frequence;
+          // Rampes exponentielles et jamais de valeur nulle : un gain à 0 fait
+          // lever `exponentialRampToValueAtTime`, et une attaque abrupte
+          // produit un claquement désagréable au casque.
           gain.gain.setValueAtTime(0.0001, t0);
-          gain.gain.exponentialRampToValueAtTime(0.2, t0 + 0.04);
+          gain.gain.exponentialRampToValueAtTime(volume, t0 + 0.04);
           gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
           osc.connect(gain).connect(ctx.destination);
           oscillateurs.add(osc);
@@ -3194,19 +3323,64 @@
             }
             if (ctx.state === "suspended") ctx.resume().catch(() => {});
           },
-          demarrer() {
+          demarrer(nom = SONNERIE_DEFAUT) {
             if (minuteur) return;
+            // Le motif est figé à l'instant où ça sonne : changer de sonnerie
+            // pendant qu'elle sonne donnerait un mélange des deux.
+            const choix = SONNERIES[nom] || SONNERIES[SONNERIE_DEFAUT];
             const motif = () => {
               try {
-                bip(0, 440);
-                bip(0.55, 480);
+                for (const [retard, frequence] of choix.bips)
+                  bip(retard, frequence, choix.gain);
               } catch (e) {
                 /* audio indisponible */
               }
-              vibrer([450, 250, 450]);
+              vibrer(choix.vibration);
             };
             motif();
-            minuteur = setInterval(motif, 2400);
+            minuteur = setInterval(motif, choix.periode);
+          },
+          /* Ringback while an outgoing call is connecting: the North American
+             pattern (440 + 480 Hz, 2 s on / 4 s off). Shares the oscillator set
+             with the ringtone, so `arreter()` silences both. */
+          retour() {
+            this.preparer();
+            if (minuteur) return;
+            const cycle = () => {
+              if (!ctx || ctx.state !== "running") return;
+              const t0 = ctx.currentTime + 0.02;
+              const gain = ctx.createGain();
+              gain.gain.setValueAtTime(0.0001, t0);
+              gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.05);
+              gain.gain.setValueAtTime(0.12, t0 + 1.95);
+              gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 2);
+              gain.connect(ctx.destination);
+              for (const frequence of [440, 480]) {
+                const osc = ctx.createOscillator();
+                osc.type = "sine";
+                osc.frequency.value = frequence;
+                osc.connect(gain);
+                oscillateurs.add(osc);
+                osc.onended = () => {
+                  oscillateurs.delete(osc);
+                  osc.disconnect();
+                };
+                osc.start(t0);
+                osc.stop(t0 + 2.02);
+              }
+            };
+            try {
+              cycle();
+            } catch (e) {
+              /* audio unavailable */
+            }
+            minuteur = setInterval(() => {
+              try {
+                cycle();
+              } catch (e) {
+                /* audio unavailable */
+              }
+            }, 6000);
           },
           arreter() {
             if (minuteur) clearInterval(minuteur);
@@ -3269,7 +3443,7 @@
           const detail =
             charge && typeof charge.detail === "string" ? charge.detail : "";
           const erreur = new Error(
-            detail || "Le service est indisponible pour le moment.",
+            detail || "The service is unavailable right now.",
           );
           erreur.statut = reponse.status;
           throw erreur;
@@ -3284,10 +3458,10 @@
         const pin = $("pin").value.trim();
         voir("erreur-pin", false);
         if (!/^\d{6,}$/.test(pin))
-          return erreurPin("Entrez votre code d'au moins 6 chiffres.");
+          return erreurPin("Enter your code (at least 6 digits).");
         if (!window.Twilio || !window.Twilio.Device)
           return erreurPin(
-            "Le composant d'appel est indisponible. Vérifiez votre connexion puis rechargez la page.",
+            "The calling component is unavailable. Check your connection, then reload the page.",
           );
         sonnerie.preparer();
         etat.activating = true;
@@ -3300,8 +3474,8 @@
           txt(
             "titre-attente",
             jeton.owner
-              ? "Protection active, " + jeton.owner
-              : "Protection active",
+              ? "Protection on, " + jeton.owner
+              : "Protection on",
           );
           await demarrerDevice(jeton.token);
           ecouterLeBus();
@@ -3321,7 +3495,7 @@
           etat.registered = false;
           erreurPin(
             erreur.message ||
-              "Connexion impossible. Réessayez dans un instant.",
+              "Could not connect. Try again in a moment.",
           );
         } finally {
           etat.activating = false;
@@ -3338,7 +3512,7 @@
           txt("etat-micro-texte", texte);
         };
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          micro(false, "Micro indisponible · ouvrez la page en HTTPS");
+          micro(false, "Microphone unavailable · open the page over HTTPS");
           return;
         }
         try {
@@ -3346,15 +3520,16 @@
             audio: true,
           });
           flux.getTracks().forEach((piste) => piste.stop());
-          micro(true, "Micro autorisé · prêt pour vos appels");
+          micro(true, "Microphone allowed · ready for your calls");
         } catch (e) {
-          micro(false, "Micro refusé · autorisez-le pour parler ici");
+          micro(false, "Microphone blocked · allow it to talk here");
         }
       }
       async function demarrerDevice(jeton) {
         const device = new Twilio.Device(jeton, {
           logLevel: "error",
           codecPreferences: ["opus", "pcmu"],
+          enableRingingState: true,
         });
         etat.device = device;
         try {
@@ -3366,17 +3541,17 @@
         device.on("registered", () => {
           if (etat.device !== device) return;
           etat.registered = true;
-          etatLigne(true, "Connecté · prêt à recevoir vos appels");
+          etatLigne(true, "Connected · ready for your calls");
           garderEcranAllume();
         });
         device.on("unregistered", () => {
           if (etat.device !== device) return;
           etat.registered = false;
-          etatLigne(false, "Déconnecté · rechargez pour vous reconnecter");
+          etatLigne(false, "Disconnected · reload to reconnect");
         });
         device.on("error", () => {
           if (etat.device === device)
-            etatLigne(false, "Connexion interrompue · vérifiez votre réseau");
+            etatLigne(false, "Connection lost · check your network");
         });
         device.on("incoming", (appel) => {
           if (etat.device === device) surAppelEntrant(appel);
@@ -3389,7 +3564,7 @@
             if (etat.device === device)
               etatLigne(
                 false,
-                "Session expirée · rechargez et entrez votre code",
+                "Session expired · reload and enter your code",
               );
           }
         });
@@ -3401,7 +3576,7 @@
       function etatLigne(ok, texte) {
         $("etat-ligne").dataset.ok = ok ? "1" : "0";
         txt("etat-texte", texte);
-        txt("connexion-chip-texte", ok ? "Protégé" : "Déconnecté");
+        txt("connexion-chip-texte", ok ? "Protected" : "Disconnected");
         actualiserNumerotation();
         $("connexion-chip").querySelector(".dot").style.background = ok
           ? "var(--brand)"
@@ -3467,7 +3642,7 @@
           terminerAppel(
             appel,
             generation,
-            "La communication a été interrompue.",
+            "The call was interrupted.",
           ),
         );
       }
@@ -3515,7 +3690,7 @@
             }
             txt(
               "appel-provenance",
-              "Plusieurs appels · identification en cours",
+              "Several calls · identifying",
             );
           }
         } catch (e) {
@@ -3528,7 +3703,7 @@
           );
         else if (!etat.callId && actif(appel, generation))
           message(
-            "Appel non identifié. La vérification et l'attente sont indisponibles pour cette ligne.",
+            "Unidentified call. Verification and hold are unavailable for this line.",
           );
       }
       function appliquerContexte(contexte) {
@@ -3539,7 +3714,7 @@
         etat.analyse = !contexte.trusted;
         const numero = contexte.caller_number || "",
           nom = contexte.caller_name || "";
-        txt("appel-nom", nom || (numero ? numero : "Numéro masqué"));
+        txt("appel-nom", nom || (numero ? numero : "Hidden number"));
         txt("appel-numero", nom && numero ? numero : "");
         txt("appel-provenance", provenance(contexte));
         avatar($("appel-avatar"), nom);
@@ -3550,7 +3725,7 @@
         );
         txt(
           "appel-badge-texte",
-          contexte.trusted ? "Contact de confiance" : "Inconnu · appel analysé",
+          contexte.trusted ? "Trusted contact" : "Unknown · call analyzed",
         );
         voir("appel-risque", etat.analyse);
         voir("analyse-etat", etat.analyse && !etat.busConnected);
@@ -3562,29 +3737,29 @@
       function reinitialiserEcranAppel() {
         txt(
           "appel-protection-statut",
-          etat.sortant ? "appel sortant" : "appel protégé",
+          etat.sortant ? "outgoing call" : "protected call",
         );
-        txt("appel-nom", "Appel entrant");
+        txt("appel-nom", "Incoming call");
         txt("appel-numero", "");
-        txt("appel-provenance", "Identification en cours…");
+        txt("appel-provenance", "Identifying…");
         avatar($("appel-avatar"), "");
-        txt("appel-statut", "Appel entrant");
+        txt("appel-statut", "Incoming call");
         $("appel-badge").dataset.confiance = "";
         $("appel-badge-icone").setAttribute("href", "#i-inconnu");
-        txt("appel-badge-texte", "Identification en cours");
+        txt("appel-badge-texte", "Identifying");
         voir("appel-risque", false);
         voir("appel-message", false);
         voir("btn-voir-alerte", false);
         cacherCode();
         rendreRisque(0, "none", false);
-        txt("appel-risque-texte", "Analyse en attente");
+        txt("appel-risque-texte", "Analysis pending");
         txt("appel-risque-valeur", "— / 100");
         voir("appel-boutons-entrant", true);
         voir("appel-boutons-encours", false);
         $("btn-decrocher").disabled = false;
         $("btn-refuser").disabled = false;
         $("btn-muet").setAttribute("aria-pressed", "false");
-        txt("btn-muet-texte", "Muet");
+        txt("btn-muet-texte", "Mute");
         txt("clavier-chiffres", "");
         actualiserBoutons();
         rendreAttente();
@@ -3613,7 +3788,7 @@
           if (actif(appel, generation))
             txt(
               "appel-statut",
-              (etat.enAttente ? "En attente · " : "") +
+              (etat.enAttente ? "On hold · " : "") +
                 duree((Date.now() - etat.debut) / 1000),
             );
         };
@@ -3626,7 +3801,7 @@
           generation = etat.generation;
         if (!appel || etat.decroche || $("btn-decrocher").disabled) return;
         $("btn-decrocher").disabled = true;
-        txt("appel-statut", "Connexion de l'appel…");
+        txt("appel-statut", "Connecting the call…");
         sonnerie.arreter();
         try {
           const operation = appel.accept();
@@ -3634,20 +3809,20 @@
             operation.catch(() => {
               if (actif(appel, generation)) {
                 $("btn-decrocher").disabled = false;
-                txt("appel-statut", "Appel entrant");
+                txt("appel-statut", "Incoming call");
                 sonnerie.demarrer();
                 message(
-                  "Impossible de décrocher. Vérifiez l'autorisation du micro.",
+                  "Could not answer. Check the microphone permission.",
                 );
               }
             });
         } catch (e) {
           if (actif(appel, generation)) {
             $("btn-decrocher").disabled = false;
-            txt("appel-statut", "Appel entrant");
+            txt("appel-statut", "Incoming call");
             sonnerie.demarrer();
             message(
-              "Impossible de décrocher. Vérifiez l'autorisation du micro.",
+              "Could not answer. Check the microphone permission.",
             );
           }
         }
@@ -3686,6 +3861,7 @@
         if (!appel || !actif(appel, generation)) return;
         sonnerie.arreter();
         cacherCode();
+        fermerIntervention();
         fermerModal(false);
         clearInterval(etat.minuteurAppel);
         clearTimeout(etat.contexteTimer);
@@ -3693,9 +3869,9 @@
         const secondes = etat.debut ? (Date.now() - etat.debut) / 1000 : 0;
         txt(
           "fin-duree",
-          etat.decroche ? duree(secondes) : "Appel non décroché",
+          etat.decroche ? duree(secondes) : "Call not answered",
         );
-        txt("fin-message", erreur || "Votre protection reste active.");
+        txt("fin-message", erreur || "Your protection stays on.");
         if (etat.callId) etat.evenements.delete(etat.callId);
         etat.appel = null;
         etat.callId = null;
@@ -3714,9 +3890,9 @@
           etat.appel.mute(muet);
           etat.muet = muet;
           $("btn-muet").setAttribute("aria-pressed", String(muet));
-          txt("btn-muet-texte", muet ? "Micro coupé" : "Muet");
+          txt("btn-muet-texte", muet ? "Muted" : "Mute");
         } catch (e) {
-          message("Le micro n'a pas pu changer d'état.");
+          message("The microphone could not be toggled.");
         }
       }
       async function basculerAttente() {
@@ -3737,21 +3913,54 @@
             etat.enAttente = Boolean(rep.caller_held);
           rendreAttente();
           if (rep.ok === false)
-            message("L'action n'a pas abouti. Vous pouvez réessayer.");
+            message("The action failed. You can try again.");
           else voir("appel-message", false);
         } catch (e) {
           if (actif(appel, generation))
             message(
               e.statut === 404
-                ? "Cet appel est terminé."
-                : "L'attente est indisponible pour le moment.",
+                ? "This call has ended."
+                : "Hold is unavailable right now.",
             );
         } finally {
           if (actif(appel, generation)) $("btn-attente").disabled = false;
         }
       }
+      function ouvrirIntervention() {
+        if (!etat.appel || !etat.decroche) return;
+        // L'explication du score est déjà la phrase la plus utile qu'on ait :
+        // on la réutilise plutôt que d'en écrire une générique. Elle vient de
+        // Claude, donc de texte libre — `txt` l'insère en textContent.
+        const detail = ($("appel-alerte-detail").textContent || "").trim();
+        txt(
+          "intervention-raison",
+          detail
+            ? detail + " The caller can no longer hear you and is waiting."
+            : "This call shows signs of a scam. The caller can no longer hear you and is waiting.",
+        );
+        voir("intervention", true);
+        sonnerie.arreter();
+        // Le focus va sur « Arrêter l'appel » : c'est l'action protectrice, et
+        // un lecteur d'écran doit annoncer le panneau sans que la personne
+        // cherche où elle en est.
+        try {
+          $("btn-intervention-raccrocher").focus({ preventScroll: true });
+        } catch (e) {
+          /* navigateur ancien */
+        }
+      }
+      function fermerIntervention() {
+        voir("intervention", false);
+      }
+      async function interventionContinuer() {
+        // On passe par le même chemin que le bouton « Attente/Reprendre » :
+        // un second appel à `/resume` écrit ici dupliquerait la gestion des
+        // erreurs et des réponses retardées, qui est déjà subtile.
+        fermerIntervention();
+        if (etat.enAttente) await basculerAttente();
+      }
       function rendreAttente() {
-        txt("btn-attente-texte", etat.enAttente ? "Reprendre" : "Attente");
+        txt("btn-attente-texte", etat.enAttente ? "Resume" : "Hold");
         $("btn-attente").setAttribute("aria-pressed", String(etat.enAttente));
         $("btn-attente-icone").setAttribute(
           "href",
@@ -3760,7 +3969,7 @@
         if (etat.decroche && etat.debut)
           txt(
             "appel-statut",
-            (etat.enAttente ? "En attente · " : "") +
+            (etat.enAttente ? "On hold · " : "") +
               duree((Date.now() - etat.debut) / 1000),
           );
       }
@@ -3791,8 +4000,8 @@
           if (actif(appel, generation))
             message(
               e.statut === 404
-                ? "Cet appel est terminé ou la vérification est indisponible."
-                : "La vérification est indisponible pour le moment.",
+                ? "This call has ended or verification is unavailable."
+                : "Verification is unavailable right now.",
             );
         } finally {
           if (actif(appel, generation)) actualiserBoutons();
@@ -3805,8 +4014,8 @@
         txt(
           "appel-code-cible",
           cible
-            ? "Envoyé par SMS à " + cible + ". Demandez-lui de vous le lire."
-            : "Envoyé au numéro de votre proche enregistré dans vos contacts. Demandez-lui de vous le lire.",
+            ? "Sent by text to " + cible + ". Ask them to read it to you."
+            : "Sent to your loved one's number saved in your contacts. Ask them to read it to you.",
         );
         const appel = etat.appel,
           generation = etat.generation;
@@ -3824,7 +4033,7 @@
           );
           txt(
             "appel-code-reste",
-            reste > 0 ? "Valable encore " + duree(reste) : "Code expiré",
+            reste > 0 ? "Valid for " + duree(reste) : "Code expired",
           );
           if (!reste) {
             clearInterval(etat.minuteurCode);
@@ -3876,7 +4085,7 @@
             el(
               "p",
               "aide",
-              "Le changement de sortie audio est indisponible sur ce navigateur.",
+              "Changing the audio output is not supported in this browser.",
             ),
           );
           return;
@@ -3893,7 +4102,7 @@
             "button",
             "",
             appareil.label ||
-              (id === "default" ? "Sortie par défaut" : "Appareil audio"),
+              (id === "default" ? "Default output" : "Audio device"),
           );
           const selectionne = [...actifs].some(
             (actuel) => actuel.deviceId === id,
@@ -3908,15 +4117,15 @@
               if (actif(appel, generation)) {
                 fermerModal();
                 message(
-                  "Sortie audio sélectionnée : " +
-                    (appareil.label || "sortie par défaut") +
+                  "Audio output selected: " +
+                    (appareil.label || "default output") +
                     ".",
                 );
               }
             } catch (e) {
               if (actif(appel, generation)) {
                 fermerModal();
-                message("Cette sortie audio n'a pas pu être sélectionnée.");
+                message("This audio output could not be selected.");
               }
             } finally {
               bouton.disabled = false;
@@ -3938,7 +4147,7 @@
           );
         } catch (e) {
           fermerModal();
-          message("La touche n'a pas pu être envoyée.");
+          message("The key could not be sent.");
         }
       }
       for (const [digit, lettres] of [
@@ -3962,7 +4171,7 @@
         );
         button.setAttribute(
           "aria-label",
-          digit === "*" ? "Étoile" : digit === "#" ? "Dièse" : digit,
+          digit === "*" ? "Star" : digit === "#" ? "Pound" : digit,
         );
         button.addEventListener("click", () => envoyerTouche(digit));
         $("clavier-touches").append(button);
@@ -4053,7 +4262,7 @@
             etat.busConnected = false;
             voir("analyse-etat", etat.analyse && Boolean(etat.appel));
             if ([1008, 4401, 4403, 4003].includes(event.code)) {
-              etatLigne(false, "Accès à l'analyse refusé · reconnectez-vous");
+              etatLigne(false, "Analysis access denied · sign in again");
               return;
             }
             replanifier();
@@ -4090,7 +4299,7 @@
           cacherCode();
           actualiserBoutons();
           message(
-            "Deux essais ont échoué ou le code est incorrect. Ne communiquez aucune information sensible.",
+            "Two attempts failed or the code is wrong. Do not share any sensitive information.",
           );
           return;
         }
@@ -4099,7 +4308,7 @@
           cacherCode();
           actualiserBoutons();
           message(
-            "Le code a expiré ou n'a pas pu être entendu. L'identité n'a pas été confirmée.",
+            "The code expired or could not be heard. Identity was not confirmed.",
           );
           return;
         }
@@ -4108,18 +4317,25 @@
             etat.attenteVersion += 1;
             etat.enAttente = true;
             rendreAttente();
+            // C'est ICI, et nulle part ailleurs, que la protection a vraiment
+            // coupé la parole à l'appelant. Le score ne suffit pas : à 90 avec
+            // une mise en attente refusée par Twilio, l'appelant parle encore.
+            ouvrirIntervention();
           }
           if (d.action === "resume_caller") {
             etat.attenteVersion += 1;
             etat.enAttente = false;
             rendreAttente();
+            // Reprise par le bus (dashboard, ou notre propre bouton) : la
+            // question posée n'a plus d'objet, le panneau doit disparaître.
+            fermerIntervention();
           }
           if (d.action === "identity_verified") {
             etat.verificationTerminee = true;
             cacherCode();
             actualiserBoutons();
             message(
-              "Identité confirmée. Restez attentif aux demandes de votre interlocuteur.",
+              "Identity confirmed. Stay alert to what the caller asks for.",
             );
           }
         }
@@ -4146,7 +4362,7 @@
         $("appel-risque-jauge").setAttribute("aria-valuenow", String(valeur));
         $("appel-risque-jauge").setAttribute(
           "aria-valuetext",
-          def.mot + ", " + valeur + " sur 100",
+          def.mot + ", " + valeur + " out of 100",
         );
         const grave = niveau === "alert" || niveau === "intervene";
         voir("btn-voir-alerte", grave);
@@ -4154,8 +4370,8 @@
           txt(
             "appel-alerte-titre",
             niveau === "intervene"
-              ? "Risque élevé de fraude"
-              : "Cet appel est suspect",
+              ? "High fraud risk"
+              : "This call is suspicious",
           );
           if (
             ouvrir &&
@@ -4169,7 +4385,7 @@
           etat.alerteFermee = null;
           txt(
             "appel-alerte-detail",
-            "Prenez le temps de vérifier l'identité de votre interlocuteur.",
+            "Take the time to check who you are talking to.",
           );
         }
       }
@@ -4222,7 +4438,7 @@
             "historique-erreur",
             e.statut === 403 || e.statut === 429
               ? e.message
-              : "L'historique n'a pas pu être chargé. Réessayez dans un instant.",
+              : "History could not be loaded. Try again in a moment.",
           );
           voir("historique-erreur", true);
           voir("btn-historique-reessayer", true);
@@ -4247,8 +4463,8 @@
         const hier = new Date();
         hier.setDate(hier.getDate() - 1);
         if (date.toDateString() === maintenant.toDateString())
-          return "Aujourd'hui";
-        if (date.toDateString() === hier.toDateString()) return "Hier";
+          return "Today";
+        if (date.toDateString() === hier.toDateString()) return "Yesterday";
         return dateFr(iso, {
           day: "numeric",
           month: "long",
@@ -4267,11 +4483,11 @@
             : "unknown";
         const nom =
           call.direction === "outgoing" || call.route === "outgoing"
-            ? "Sortant"
+            ? "Outgoing"
             : trusted
               ? "Contact"
               : level === "unknown"
-                ? "Non évalué"
+                ? "Not assessed"
                 : NIVEAUX[level].mot;
         const chip = el("span", "level-chip", nom);
         chip.dataset.level = level;
@@ -4318,7 +4534,7 @@
           avatar(av, call.caller_name);
           av.setAttribute("aria-hidden", "true");
           const principal = el("span", "history-main"),
-            nom = call.caller_name || call.caller_number || "Numéro masqué";
+            nom = call.caller_name || call.caller_number || "Hidden number";
           principal.append(
             el("span", "history-name", nom),
             el(
@@ -4328,11 +4544,11 @@
                 " · " +
                 (!call.answered
                   ? call.direction === "outgoing" || call.route === "outgoing"
-                    ? "Sans réponse"
-                    : "Manqué"
+                    ? "No answer"
+                    : "Missed"
                   : call.ended_at
                     ? duree(call.duration_s)
-                    : "En cours"),
+                    : "In progress"),
             ),
           );
           const droite = el("span", "history-right");
@@ -4356,15 +4572,15 @@
           "historique-vide-titre",
           etat.historique.enabled
             ? etat.historique.filtre === "missed"
-              ? "Aucun appel manqué"
-              : "Aucun appel pour le moment"
-            : "Historique désactivé",
+              ? "No missed calls"
+              : "No calls yet"
+            : "History turned off",
         );
         txt(
           "historique-vide-texte",
           etat.historique.enabled
-            ? "Les prochains appels apparaîtront ici, avec leurs moments clés."
-            : "Les appels ne sont pas conservés avec votre configuration actuelle.",
+            ? "Your next calls will appear here, with their key moments."
+            : "Calls are not kept with your current settings.",
         );
       }
       async function ouvrirDetail(callId) {
@@ -4398,8 +4614,8 @@
           txt(
             "detail-erreur",
             e.statut === 404
-              ? "Cet appel n'est plus dans l'historique."
-              : "Le détail de cet appel est indisponible pour le moment.",
+              ? "This call is no longer in the history."
+              : "Details for this call are unavailable right now.",
           );
           voir("detail-erreur", true);
           voir("btn-detail-reessayer", e.statut !== 404);
@@ -4425,7 +4641,7 @@
           el(
             "h2",
             "",
-            call.caller_name || call.caller_number || "Numéro masqué",
+            call.caller_name || call.caller_number || "Hidden number",
           ),
         );
         if (call.caller_name && call.caller_number)
@@ -4435,7 +4651,7 @@
           pastille(call),
         );
         contenu.append(identite);
-        const info = carteDetail("L'appel en bref", "#i-telephone"),
+        const info = carteDetail("Call summary", "#i-telephone"),
           liste = el("dl", "metadata");
         const valeurs = [
           [
@@ -4447,67 +4663,67 @@
               minute: "2-digit",
             }),
           ],
-          ["Durée", call.ended_at ? duree(call.duration_s) : "Appel en cours"],
+          ["Duration", call.ended_at ? duree(call.duration_s) : "Call in progress"],
           [
-            "État",
+            "Status",
             call.answered
-              ? "Décroché"
+              ? "Answered"
               : call.direction === "outgoing" || call.route === "outgoing"
-                ? "Sans réponse"
-                : "Manqué",
+                ? "No answer"
+                : "Missed",
           ],
           [
-            "Provenance",
+            "Origin",
             {
               contact: "Contact",
-              inconnu: "Inconnu",
-              masqué: "Numéro masqué",
-              étranger: "Étranger",
-            }[call.origin] || "Inconnue",
+              inconnu: "Unknown",
+              masqué: "Hidden number",
+              étranger: "Foreign",
+            }[call.origin] || "Unknown",
           ],
-          ["Pays", PAYS[call.country] || call.country || "Non déterminé"],
+          ["Country", PAYS[call.country] || call.country || "Undetermined"],
           [
-            "Ligne",
+            "Line",
             {
               mobile: "Mobile",
-              landline: "Fixe",
-              fixedVoip: "VoIP fixe",
-              nonFixedVoip: "VoIP non fixe",
-            }[call.line_type] || "Non déterminée",
+              landline: "Landline",
+              fixedVoip: "Fixed VoIP",
+              nonFixedVoip: "Non-fixed VoIP",
+            }[call.line_type] || "Undetermined",
           ],
           [
             "Protection",
             call.direction === "outgoing" || call.route === "outgoing"
-              ? "Appel sortant · sans analyse"
+              ? "Outgoing call · not analyzed"
               : call.route === "trusted_passthrough"
-                ? "Contact de confiance"
-                : "Appel analysé",
+                ? "Trusted contact"
+                : "Call analyzed",
           ],
         ];
-        if (call.relation) valeurs.push(["Relation", call.relation]);
+        if (call.relation) valeurs.push(["Relationship", call.relation]);
         valeurs.push([
-          "Sens",
+          "Direction",
           call.direction === "outgoing" || call.route === "outgoing"
-            ? "Appel sortant"
-            : "Appel entrant",
+            ? "Outgoing call"
+            : "Incoming call",
         ]);
         for (const [cle, value] of valeurs)
           liste.append(el("dt", "", cle), el("dd", "", value));
         info.append(liste);
         contenu.append(info);
         if (call.direction === "outgoing" || call.route === "outgoing") {
-          const outgoing = carteDetail("Un appel sortant", "#i-telephone");
+          const outgoing = carteDetail("An outgoing call", "#i-telephone");
           outgoing.append(
             el(
               "p",
               "detail-copy",
-              "Cet appel a été passé depuis votre application. Les appels sortants ne sont ni analysés ni enregistrés.",
+              "This call was placed from your app. Outgoing calls are neither analyzed nor recorded.",
             ),
           );
           contenu.append(outgoing);
         } else if (call.route !== "trusted_passthrough") {
-          const frise = carteDetail("Les moments clés", "#i-historique");
-          const score = el("div", "score-summary", "Risque maximal");
+          const frise = carteDetail("Key moments", "#i-historique");
+          const score = el("div", "score-summary", "Peak risk");
           const value = el(
             "strong",
             "",
@@ -4517,8 +4733,8 @@
           score.append(value);
           frise.append(score);
           const seuils = [
-            ["watch", "Vigilance", call.watch_at_s],
-            ["alert", "Alerte", call.alert_at_s],
+            ["watch", "Caution", call.watch_at_s],
+            ["alert", "Alert", call.alert_at_s],
             ["intervene", "Intervention", call.intervene_at_s],
           ];
           const max = Math.max(
@@ -4561,19 +4777,19 @@
               el(
                 "strong",
                 "",
-                nombre(seconds) === null ? "Non franchi" : duree(seconds),
+                nombre(seconds) === null ? "Not crossed" : duree(seconds),
               ),
             );
             thresholds.append(row);
           }
           frise.append(thresholds);
           contenu.append(frise);
-          const signaux = carteDetail("Les quatre signaux", "#i-oeil");
+          const signaux = carteDetail("The four signals", "#i-oeil");
           for (const [label, cle] of [
-            ["Claude · contenu", "peak_llm"],
-            ["Mots-clés", "peak_keywords"],
-            ["Voix synthétique", "peak_voice"],
-            ["Réputation du numéro", "peak_reputation"],
+            ["Claude · content", "peak_llm"],
+            ["Keywords", "peak_keywords"],
+            ["Synthetic voice", "peak_voice"],
+            ["Number reputation", "peak_reputation"],
           ]) {
             const signal = el("div", "signal"),
               valeur = nombre(call[cle]);
@@ -4584,7 +4800,7 @@
                 "span",
                 "",
                 valeur === null
-                  ? "Non mesuré"
+                  ? "Not measured"
                   : Math.round(Math.max(0, Math.min(1, valeur)) * 100) + " %",
               ),
             );
@@ -4601,12 +4817,12 @@
             el(
               "p",
               "signal-note",
-              "Pics observés pendant l'appel. Ces signaux sont des indices de risque, pas une preuve de fraude.",
+              "Peaks observed during the call. These signals are risk indicators, not proof of fraud.",
             ),
           );
           contenu.append(signaux);
           const tactiques = carteDetail(
-            "Ce qui a attiré l'attention",
+            "What raised the alarm",
             "#i-attention",
           );
           if (Array.isArray(call.tactics) && call.tactics.length) {
@@ -4616,23 +4832,23 @@
             tactiques.append(tags);
           } else
             tactiques.append(
-              el("p", "detail-copy", "Aucune tactique détectée."),
+              el("p", "detail-copy", "No tactic detected."),
             );
           if (call.explanation)
             tactiques.append(el("p", "detail-copy space", call.explanation));
           contenu.append(tactiques);
         } else {
-          const confiance = carteDetail("Un appel de confiance", "#i-bouclier");
+          const confiance = carteDetail("A trusted call", "#i-bouclier");
           confiance.append(
             el(
               "p",
               "detail-copy",
-              "Ce contact figure dans votre carnet de confiance. Sa voix n'a pas été analysée. Aucun score de risque n'est conservé pour cet appel.",
+              "This contact is in your trusted list. Their voice was not analyzed. No risk score is kept for this call.",
             ),
           );
           contenu.append(confiance);
         }
-        const actions = carteDetail("Actions de protection", "#i-bouclier");
+        const actions = carteDetail("Protection actions", "#i-bouclier");
         if (Array.isArray(call.actions) && call.actions.length) {
           const rows = el("ul", "actions-list");
           for (const action of call.actions)
@@ -4645,9 +4861,9 @@
             );
           actions.append(rows);
         } else
-          actions.append(el("p", "detail-copy", "Aucune action enregistrée."));
+          actions.append(el("p", "detail-copy", "No action recorded."));
         contenu.append(actions);
-        const verification = carteDetail("Vérification d'identité", "#i-cle"),
+        const verification = carteDetail("Identity verification", "#i-cle"),
           result = el(
             "p",
             "verification-result",
@@ -4669,7 +4885,7 @@
           el(
             "p",
             "note space",
-            "Seules les métadonnées et les indicateurs de cet appel sont conservés. Aucun audio ni transcription.",
+            "Only this call's metadata and indicators are kept. No audio or transcript.",
           ),
         );
       }
@@ -4693,7 +4909,7 @@
           if (requete === etat.historique.requete && !etat.appel) {
             txt(
               "effacer-erreur",
-              "L'historique n'a pas pu être effacé. Réessayez.",
+              "History could not be cleared. Try again.",
             );
             voir("effacer-erreur", true);
           }
@@ -4708,7 +4924,7 @@
         recents: {
           button: "btn-historique",
           panel: "ecran-historique",
-          title: "Récents",
+          title: "Recents",
         },
         contacts: {
           button: "tab-contacts",
@@ -4718,12 +4934,12 @@
         clavier: {
           button: "tab-clavier",
           panel: "ecran-numerotation",
-          title: "Clavier",
+          title: "Keypad",
         },
         messagerie: {
           button: "tab-messagerie",
           panel: "ecran-messagerie",
-          title: "Messagerie",
+          title: "Voicemail",
         },
       };
       const ongletActif = (nom) =>
@@ -4760,7 +4976,7 @@
       }
       function rechercher(texte) {
         return String(texte || "")
-          .toLocaleLowerCase("fr-FR")
+          .toLocaleLowerCase("en-US")
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "");
       }
@@ -4776,7 +4992,7 @@
             return;
           etat.contacts.items = (Array.isArray(rep.items) ? rep.items : [])
             .filter((item) => item && item.name && item.number)
-            .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+            .sort((a, b) => a.name.localeCompare(b.name, "en"));
           rendreContacts();
         } catch (e) {
           if (requete !== etat.contacts.requete || !ongletActif("contacts"))
@@ -4785,7 +5001,7 @@
             "contacts-erreur",
             e.statut === 403 || e.statut === 429
               ? e.message
-              : "Votre carnet n'a pas pu être chargé. Réessayez dans un instant.",
+              : "Your contacts could not be loaded. Try again in a moment.",
           );
           voir("contacts-erreur", true);
           voir("btn-contacts-reessayer", true);
@@ -4810,7 +5026,7 @@
           const letter = String(item.name)
             .trim()
             .slice(0, 1)
-            .toLocaleUpperCase("fr-FR");
+            .toLocaleUpperCase("en-US");
           if (letter !== lettre) {
             const group = el("li", "history-group", letter);
             group.setAttribute("role", "presentation");
@@ -4830,8 +5046,8 @@
               "small",
               "contact-trust" + (item.mode === "analyze" ? " analyzed" : ""),
               item.mode === "analyze"
-                ? "Appels analysés"
-                : "Contact de confiance",
+                ? "Analyzed calls"
+                : "Trusted contact",
             ),
           );
           main.append(av, identity);
@@ -4840,7 +5056,7 @@
           );
           const call = el("button", "contact-call");
           call.append(icone("#i-telephone"));
-          call.setAttribute("aria-label", "Appeler " + item.name);
+          call.setAttribute("aria-label", "Call " + item.name);
           call.addEventListener("click", () =>
             demarrerSortant(item.number, item.name),
           );
@@ -4852,18 +5068,18 @@
           all.length +
             " contact" +
             (all.length === 1 ? "" : "s") +
-            " dans votre carnet",
+            " in your trusted list",
         );
         voir("contacts-vide", !items.length);
         txt(
           "contacts-vide-titre",
-          all.length ? "Aucun contact trouvé" : "Votre carnet est vide",
+          all.length ? "No contact found" : "No contacts yet",
         );
         txt(
           "contacts-vide-texte",
           all.length
-            ? "Essayez un autre nom ou numéro."
-            : "Vos contacts de confiance apparaîtront ici.",
+            ? "Try another name or number."
+            : "Your trusted contacts will appear here.",
         );
       }
 
@@ -4879,8 +5095,8 @@
         txt(
           "btn-copier-numero",
           value && etat.numeroCopie === value
-            ? "Numéro copié"
-            : "Copier le numéro",
+            ? "Number copied"
+            : "Copy number",
         );
         $("btn-effacer-chiffre").disabled = !value;
         const nom = etat.contacts.items.find(
@@ -4927,7 +5143,7 @@
         } catch (e) {
           $("numerotation-numero").focus();
           $("numerotation-numero").select();
-          etatNumerotation("Sélectionnez le numéro puis choisissez Copier.");
+          etatNumerotation("Select the number, then choose Copy.");
         }
       }
       async function demarrerSortant(number = numeroCompose(), name = "") {
@@ -4952,7 +5168,7 @@
           )
             return;
           if (!rep.authorization || !rep.number)
-            throw new Error("L'appel n'a pas pu être autorisé.");
+            throw new Error("The call could not be authorized.");
           arreterLecture();
           fermerModal(false);
           clearTimeout(etat.minuteurFin);
@@ -4992,13 +5208,14 @@
           txt("appel-numero", callerName ? rep.number : "");
           avatar($("appel-avatar"), callerName);
           txt("appel-provenance", provenance({ caller_number: rep.number }));
-          txt("appel-statut", "Appel sortant…");
-          txt("appel-badge-texte", "Appel sortant · sans analyse");
+          txt("appel-statut", "Calling…");
+          txt("appel-badge-texte", "Outgoing call · not analyzed");
           $("appel-badge").dataset.confiance = "";
           $("appel-badge-icone").setAttribute("href", "#i-telephone");
           voir("appel-boutons-entrant", false);
           voir("appel-boutons-encours", true);
           actualiserBoutons();
+          sonnerie.retour();
           const call = await etat.device.connect({
             params: { Authorization: rep.authorization },
           });
@@ -5007,6 +5224,7 @@
             !etat.sortantPending ||
             etat.appel
           ) {
+            sonnerie.arreter();
             try {
               call.disconnect();
             } catch (e) {
@@ -5024,9 +5242,12 @@
             accepterAppel(call, outgoingGeneration);
           };
           call.on("accept", accepted);
-          call.on("ringing", () => {
-            if (actif(call, outgoingGeneration))
-              txt("appel-statut", "Sonnerie…");
+          call.on("ringing", (hasEarlyMedia) => {
+            if (!actif(call, outgoingGeneration)) return;
+            txt("appel-statut", "Ringing…");
+            // The carrier is already playing its own ringback down the line:
+            // stop ours so the caller does not hear two tones at once.
+            if (hasEarlyMedia) sonnerie.arreter();
           });
           for (const event of ["disconnect", "cancel", "reject"])
             call.on(event, () => terminerAppel(call, outgoingGeneration));
@@ -5034,12 +5255,13 @@
             terminerAppel(
               call,
               outgoingGeneration,
-              "L'appel n'a pas pu aboutir.",
+              "The call could not go through.",
             ),
           );
           if (typeof call.status === "function" && call.status() === "open")
             accepted();
         } catch (e) {
+          sonnerie.arreter();
           if (
             outgoingGeneration !== null &&
             etat.generation === outgoingGeneration
@@ -5055,7 +5277,7 @@
             if (etat.ecran === "attente") {
               if (etat.onglet !== "clavier") await preparerNumero(number, name);
               etatNumerotation(
-                e.message || "L'appel est indisponible pour le moment.",
+                e.message || "Calling is unavailable right now.",
               );
             }
           }
@@ -5070,14 +5292,15 @@
         const generation = etat.generation;
         etat.sortantPending = false;
         etat.sortant = false;
+        sonnerie.arreter();
         try {
           if (etat.device && typeof etat.device.disconnectAll === "function")
             etat.device.disconnectAll();
         } catch (e) {
           /* Promise connect annulée par sa génération. */
         }
-        txt("fin-duree", "Appel annulé");
-        txt("fin-message", "Votre protection reste active.");
+        txt("fin-duree", "Call cancelled");
+        txt("fin-message", "Your protection stays on.");
         montrer("fin");
         etat.minuteurFin = setTimeout(() => {
           if (!etat.appel && etat.generation === generation)
@@ -5156,7 +5379,7 @@
             "messagerie-erreur",
             e.statut === 403 || e.statut === 429
               ? e.message
-              : "La messagerie n'a pas pu être chargée. Réessayez dans un instant.",
+              : "Voicemail could not be loaded. Try again in a moment.",
           );
           voir("messagerie-erreur", true);
           voir("btn-messagerie-reessayer", true);
@@ -5183,9 +5406,9 @@
           const header = el("div", "voicemail-card-head"),
             unread = el("span", "voicemail-unread");
           unread.hidden = Boolean(item.listened);
-          unread.setAttribute("aria-label", "Nouveau message");
+          unread.setAttribute("aria-label", "New message");
           const identity = el("div", "voicemail-identity"),
-            name = item.caller_name || item.caller_number || "Numéro masqué";
+            name = item.caller_name || item.caller_number || "Hidden number";
           identity.append(
             el("strong", "", name),
             el(
@@ -5198,7 +5421,7 @@
             ),
           );
           const remove = el("button", "voicemail-delete");
-          remove.setAttribute("aria-label", "Supprimer le message de " + name);
+          remove.setAttribute("aria-label", "Delete the message from " + name);
           remove.append(icone("#i-corbeille"));
           remove.addEventListener("click", () =>
             confirmerSuppressionMessage(item),
@@ -5208,13 +5431,13 @@
             listen = el("button", "voicemail-listen");
           listen.append(
             icone("#i-reprendre"),
-            el("span", "", item.listened ? "Réécouter" : "Écouter le message"),
+            el("span", "", item.listened ? "Play again" : "Play message"),
           );
           listen.addEventListener("click", () => ecouterMessage(item, row));
           actions.append(listen);
           if (item.caller_number) {
             const call = el("button", "voicemail-call");
-            call.setAttribute("aria-label", "Rappeler " + name);
+            call.setAttribute("aria-label", "Call back " + name);
             call.append(icone("#i-telephone"));
             call.addEventListener("click", () =>
               preparerNumero(item.caller_number, item.caller_name),
@@ -5237,20 +5460,20 @@
         txt(
           "messagerie-vide-titre",
           etat.voicemail.enabled
-            ? "Aucun message vocal"
-            : "Messagerie désactivée",
+            ? "No voicemail"
+            : "Voicemail turned off",
         );
         txt(
           "messagerie-vide-texte",
           etat.voicemail.enabled
-            ? "Les messages de vos appelants apparaîtront ici."
-            : "La messagerie vocale n'est pas activée pour votre ligne.",
+            ? "Messages from your callers will appear here."
+            : "Voicemail is not enabled for your line.",
         );
         txt(
           "messagerie-description",
           etat.voicemail.enabled
-            ? "Les messages laissés après un appel sans réponse sont enregistrés dans votre messagerie."
-            : "Vos conversations restent disponibles dans l'historique des appels.",
+            ? "Messages left after an unanswered call are saved to your voicemail."
+            : "Your conversations remain available in the call history.",
         );
       }
       function arreterLecture() {
@@ -5298,8 +5521,8 @@
           if (!rep.ok)
             throw new Error(
               rep.status === 404
-                ? "Ce message n'est plus disponible."
-                : "Ce message ne peut pas être écouté pour le moment.",
+                ? "This message is no longer available."
+                : "This message cannot be played right now.",
             );
           const blob = await rep.blob();
           if (
@@ -5315,8 +5538,8 @@
           audio.src = url;
           audio.setAttribute(
             "aria-label",
-            "Message vocal de " +
-              (item.caller_name || item.caller_number || "numéro masqué"),
+            "Voicemail from " +
+              (item.caller_name || item.caller_number || "hidden number"),
           );
           etat.voicemail.url = url;
           etat.voicemail.audio = audio;
@@ -5324,7 +5547,7 @@
           const status = el(
             "p",
             "voicemail-play-status",
-            "Message vocal enregistré",
+            "Voicemail saved",
           );
           container.replaceChildren(audio, status);
           container.hidden = false;
@@ -5348,7 +5571,7 @@
               )
                 return;
               row.querySelector(".voicemail-unread").hidden = true;
-              button.querySelector("span").textContent = "Réécouter";
+              button.querySelector("span").textContent = "Play again";
               const count = etat.voicemail.items.filter(
                 (message) => !message.listened,
               ).length;
@@ -5357,7 +5580,7 @@
             } catch (e) {
               if (lecture === etat.voicemail.lecture)
                 status.textContent =
-                  "Message écouté · état de lecture non synchronisé";
+                  "Message played · read state not synced";
             } finally {
               item.heardPending = false;
             }
@@ -5365,7 +5588,7 @@
           audio.onended = () => {
             if (lecture === etat.voicemail.lecture) {
               arreterLecture();
-              button.querySelector("span").textContent = "Réécouter";
+              button.querySelector("span").textContent = "Play again";
             }
           };
           audio.onerror = () => {
@@ -5373,7 +5596,7 @@
               arreterLecture();
               txt(
                 "messagerie-erreur",
-                "Le message ne peut pas être lu sur ce navigateur. Réessayez.",
+                "This message cannot be played in this browser. Try again.",
               );
               voir("messagerie-erreur", true);
             }
@@ -5383,13 +5606,13 @@
           } catch (e) {
             if (lecture === etat.voicemail.lecture)
               status.textContent =
-                "Appuyez sur lecture pour écouter le message.";
+                "Press play to listen to the message.";
           }
         } catch (e) {
           if (lecture === etat.voicemail.lecture && ongletActif("messagerie")) {
             txt(
               "messagerie-erreur",
-              e.message || "La lecture du message est indisponible.",
+              e.message || "Playback is unavailable.",
             );
             voir("messagerie-erreur", true);
           }
@@ -5403,9 +5626,9 @@
         etat.voicemail.deleting = item.id;
         txt(
           "message-supprimer-cible",
-          "Le message de " +
-            (item.caller_name || item.caller_number || "ce numéro masqué") +
-            " sera supprimé définitivement.",
+          "The message from " +
+            (item.caller_name || item.caller_number || "this hidden number") +
+            " will be permanently deleted.",
         );
         voir("message-supprimer-erreur", false);
         ouvrirModal("messagerie-confirmation");
@@ -5442,7 +5665,7 @@
           if (generation === etat.generation && ongletActif("messagerie")) {
             txt(
               "message-supprimer-erreur",
-              "Ce message n'a pas pu être supprimé. Réessayez.",
+              "This message could not be deleted. Try again.",
             );
             voir("message-supprimer-erreur", true);
           }
@@ -5531,7 +5754,7 @@
         );
         button.setAttribute(
           "aria-label",
-          digit === "*" ? "Étoile" : digit === "#" ? "Dièse" : digit,
+          digit === "*" ? "Star" : digit === "#" ? "Pound" : digit,
         );
         button.addEventListener("click", () => composerTouche(digit));
         $("numerotation-touches").append(button);
@@ -5557,6 +5780,14 @@
       $("btn-muet").addEventListener("click", basculerMuet);
       $("btn-attente").addEventListener("click", basculerAttente);
       $("btn-verifier").addEventListener("click", verifierIdentite);
+      $("btn-intervention-continuer").addEventListener(
+        "click",
+        interventionContinuer,
+      );
+      // « Arrêter l'appel » raccroche vraiment, sans confirmation : la personne
+      // vient de lire la question et de choisir. Redemander ici transformerait
+      // une décision en hésitation, au moment où elle est le plus pressée.
+      $("btn-intervention-raccrocher").addEventListener("click", raccrocher);
       $("btn-clavier").addEventListener("click", ouvrirClavier);
       $("btn-haut-parleur").addEventListener("click", () => {
         if (!etat.appel || !etat.decroche) return;
@@ -5607,7 +5838,7 @@
           garderEcranAllume();
           if (etat.pin && etat.registered) demarrerVeilleMessagerie();
           if (etat.device && !etat.registered)
-            etatLigne(false, "Déconnecté · rechargez pour vous reconnecter");
+            etatLigne(false, "Disconnected · reload to reconnect");
         }
       });
       window.addEventListener("pagehide", () => {
@@ -5619,7 +5850,7 @@
       if (!window.Twilio || !window.Twilio.Device) {
         txt(
           "erreur-sdk",
-          "Le composant d'appel n'a pas pu être téléchargé. Vérifiez votre connexion puis rechargez la page pour recevoir vos appels.",
+          "The calling component could not be downloaded. Check your connection, then reload the page to receive calls.",
         );
         voir("erreur-sdk", true);
       }

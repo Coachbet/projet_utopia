@@ -31,7 +31,7 @@ def _collect_reasons(signals: SignalSet) -> tuple[str, ...]:
     if signals.reputation is not None:
         reasons.extend(signals.reputation.reasons)
     if signals.voice is not None and signals.voice.risk >= 0.5:
-        reasons.append("voix possiblement synthétique")
+        reasons.append("possibly synthetic voice")
 
     seen: set[str] = set()
     unique = []

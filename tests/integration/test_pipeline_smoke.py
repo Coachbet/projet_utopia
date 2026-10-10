@@ -244,7 +244,7 @@ def test_annonce_servie_une_seule_fois(harness):
 
     premiere = client.post(f"/twilio/voice/announce/{CALL_ID}")
     say = ElementTree.fromstring(premiere.text).find("./Say")
-    assert say is not None and say.get("language") == "fr-FR"
+    assert say is not None and say.get("language") == "en-US"
     assert "arnaque" in (say.text or "")
 
     # Twilio peut rappeler l'URL : sans file vidée, la victime réentendrait la phrase.

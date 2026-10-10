@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cut the Line — surveillance d'appel en direct</title>
+<title>Cut the Line — live call monitoring</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap">
@@ -432,24 +432,24 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
 
 <header class="head">
   <div>
-    <div class="brand"><svg class="logo" viewBox="56 6 88 190" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M100 12 V51"/><ellipse cx="100" cy="58" rx="13" ry="5"/><ellipse cx="100" cy="67" rx="13" ry="5"/><ellipse cx="100" cy="76" rx="13" ry="5"/><ellipse cx="100" cy="85" rx="13" ry="5"/><ellipse cx="100" cy="94" rx="13" ry="5"/><path d="M100 100 V114"/><g transform="rotate(16 104 134)"><path d="M104 134 V168 A16 16 0 0 1 72 168 V157 L80 164"/></g></g><path d="M76 131 L128 113" fill="none" stroke="#ff5a36" stroke-width="8" stroke-linecap="round"/></svg><span>Cut <span class="the">the</span> Line</span><span class="mark">· surveillance d'appel en direct</span></div>
-    <div class="callid" id="callid">en attente d'appel</div>
+    <div class="brand"><svg class="logo" viewBox="56 6 88 190" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M100 12 V51"/><ellipse cx="100" cy="58" rx="13" ry="5"/><ellipse cx="100" cy="67" rx="13" ry="5"/><ellipse cx="100" cy="76" rx="13" ry="5"/><ellipse cx="100" cy="85" rx="13" ry="5"/><ellipse cx="100" cy="94" rx="13" ry="5"/><path d="M100 100 V114"/><g transform="rotate(16 104 134)"><path d="M104 134 V168 A16 16 0 0 1 72 168 V157 L80 164"/></g></g><path d="M76 131 L128 113" fill="none" stroke="#ff5a36" stroke-width="8" stroke-linecap="round"/></svg><span>Cut <span class="the">the</span> Line</span><span class="mark">· live call monitoring</span></div>
+    <div class="callid" id="callid">waiting for a call</div>
   </div>
   <div class="head-right">
-    <span class="chip demo hidden" id="demobadge">mode démonstration</span>
-    <button class="ghost hidden" id="replay" type="button">Rejouer</button>
-    <span class="chip" id="conn" data-conn="wait"><span class="dot"></span><span id="conntext">connexion…</span></span>
-    <button class="ghost" id="theme" type="button">Thème sombre</button>
+    <span class="chip demo hidden" id="demobadge">demo mode</span>
+    <button class="ghost hidden" id="replay" type="button">Replay</button>
+    <span class="chip" id="conn" data-conn="wait"><span class="dot"></span><span id="conntext">connecting…</span></span>
+    <button class="ghost" id="theme" type="button">Dark theme</button>
   </div>
 </header>
 
 <form id="dashboard-auth" class="card" style="margin:20px;max-width:520px">
-  <label for="dashboard-pin">Code d'accès Cut the Line</label>
+  <label for="dashboard-pin">Cut the Line access code</label>
   <div style="display:flex;gap:12px;margin-top:12px">
     <input id="dashboard-pin" type="password" inputmode="numeric" autocomplete="off"
       minlength="6" required aria-describedby="dashboard-auth-error"
       style="font:inherit;min-height:48px;min-width:0;padding:10px;border-radius:8px">
-    <button class="primary" type="submit">Se connecter</button>
+    <button class="primary" type="submit">Sign in</button>
   </div>
   <p id="dashboard-auth-error" role="status" aria-live="polite"></p>
 </form>
@@ -464,32 +464,32 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
 
 <!-- Région distincte de la bannière : un bouton ne doit pas vivre dans une
      zone aria-live assertive, qui le réannoncerait à chaque action. -->
-<div class="hold-ctl" id="holdctl" data-held="0" role="region" aria-label="Contrôle de l'appel">
+<div class="hold-ctl" id="holdctl" data-held="0" role="region" aria-label="Call control">
   <svg class="ico" width="26" height="26" aria-hidden="true"><use href="#i-pause"/></svg>
   <div class="txt">
-    <div class="who">L'appelant est en attente</div>
-    <div class="note">La surveillance reste active : si le risque remonte, il sera remis en attente.</div>
+    <div class="who">The caller is on hold</div>
+    <div class="note">Monitoring stays on: if the risk rises again, they go back on hold.</div>
     <div class="err" id="holderr" role="status" aria-live="polite"></div>
   </div>
   <button class="primary" id="resumebtn" type="button">
     <svg width="19" height="19" aria-hidden="true"><use href="#i-play"/></svg>
-    <span id="resumelbl">Reprendre l'appel maintenant</span>
+    <span id="resumelbl">Resume the call now</span>
   </button>
 </div>
 
 <main class="grid">
 
   <section class="card c-score" aria-labelledby="h-score">
-    <h2 id="h-score">Score de risque</h2>
+    <h2 id="h-score">Risk score</h2>
     <div class="hero-row">
       <div class="hero-num" id="score" aria-live="polite">0<span class="hero-unit"> / 100</span></div>
       <div class="state" id="state" data-level="none">
         <svg width="25" height="25" aria-hidden="true"><use id="stateicon" href="#i-good"/></svg>
-        <span class="lbl" id="statelabel">Aucun signe</span>
+        <span class="lbl" id="statelabel">No signs</span>
       </div>
     </div>
 
-    <div class="meter" role="img" id="meter" aria-label="Score 0 sur 100, aucun signe">
+    <div class="meter" role="img" id="meter" aria-label="Score 0 out of 100, no signs">
       <div class="meter-track">
         <div class="meter-band" data-b="none"      style="left:0;width:40%"></div>
         <div class="meter-band" data-b="watch"     style="left:40%;width:25%"></div>
@@ -509,17 +509,17 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
 
     <div class="meter-legend">
       <span><i style="background:var(--status-good)"></i>&lt;&nbsp;40 aucun signe</span>
-      <span><i style="background:var(--status-warning)"></i>40–64 vigilance</span>
-      <span><i style="background:var(--status-serious)"></i>65–84 alerte</span>
+      <span><i style="background:var(--status-warning)"></i>40–64 caution</span>
+      <span><i style="background:var(--status-serious)"></i>65–84 alert</span>
       <span><i style="background:var(--status-critical)"></i>≥&nbsp;85 intervention</span>
     </div>
-    <div class="to-next" id="tonext">En attente des premiers signaux.</div>
+    <div class="to-next" id="tonext">Waiting for the first signals.</div>
     <div class="why" id="why"></div>
   </section>
 
   <section class="card c-signals" aria-labelledby="h-sig">
-    <h2 id="h-sig">Les quatre signaux
-      <button class="ghost right" id="tvtoggle" type="button" aria-pressed="false">Tableau</button>
+    <h2 id="h-sig">The four signals
+      <button class="ghost right" id="tvtoggle" type="button" aria-pressed="false">Table</button>
     </h2>
 
     <div id="sigchart">
@@ -529,8 +529,7 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
       </div>
       <div id="sigrows"></div>
       <p style="font-size:13px;color:var(--text-muted);margin:14px 0 0;line-height:1.45">
-        La longueur de chaque piste est le maximum que le signal peut peser ;
-        le remplissage est ce qu'il pèse réellement. Un signal ne vaut pas l'autre.
+        Each track's length is the most that signal can weigh; the fill is what it actually weighs. Not every signal counts the same.
       </p>
     </div>
 
@@ -540,25 +539,25 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
   <section class="card c-identity" aria-labelledby="h-id">
     <h2 id="h-id">Qui appelle&nbsp;?</h2>
     <dl class="kv">
-      <dt>Identité revendiquée</dt>
-      <dd class="quiet" id="claimed">non déclarée</dd>
-      <dt>Type de ligne</dt>
-      <dd class="quiet" id="linetype">inconnu</dd>
+      <dt>Claimed identity</dt>
+      <dd class="quiet" id="claimed">not stated</dd>
+      <dt>Line type</dt>
+      <dd class="quiet" id="linetype">unknown</dd>
     </dl>
     <div class="flagline" id="mismatch">
       <svg width="21" height="21" aria-hidden="true"><use href="#i-alert"/></svg>
-      <span class="txt">Numéro incohérent avec l'identité annoncée</span>
+      <span class="txt">Number does not match the claimed identity</span>
     </div>
   </section>
 
   <section class="card c-transcript" aria-labelledby="h-tr">
-    <h2 id="h-tr">Transcription en direct</h2>
-    <div class="scroll" id="turns" aria-live="polite"><p class="empty">Aucune parole transcrite pour l'instant.</p></div>
+    <h2 id="h-tr">Live transcript</h2>
+    <div class="scroll" id="turns" aria-live="polite"><p class="empty">No speech transcribed yet.</p></div>
   </section>
 
   <section class="card c-feed" aria-labelledby="h-fd">
-    <h2 id="h-fd">Journal des décisions</h2>
-    <div class="scroll" id="feed"><p class="empty">Rien à signaler.</p></div>
+    <h2 id="h-fd">Decision log</h2>
+    <div class="scroll" id="feed"><p class="empty">Nothing to report.</p></div>
   </section>
 
 </main>
@@ -576,9 +575,9 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
    ======================================================================= */
 
 const LEVELS = {
-  none:      { label: "Aucun signe",  icon: "#i-good",      token: "--status-good" },
-  watch:     { label: "Vigilance",    icon: "#i-watch",     token: "--status-warning" },
-  alert:     { label: "Alerte",       icon: "#i-alert",     token: "--status-serious" },
+  none:      { label: "No signs",  icon: "#i-good",      token: "--status-good" },
+  watch:     { label: "Caution",    icon: "#i-watch",     token: "--status-warning" },
+  alert:     { label: "Alert",       icon: "#i-alert",     token: "--status-serious" },
   intervene: { label: "Intervention", icon: "#i-intervene", token: "--status-critical" },
 };
 const THRESHOLDS = [
@@ -590,45 +589,45 @@ const THRESHOLDS = [
 /* Ordre fixe des slots catégoriels : l'identité suit l'entité, jamais le rang. */
 const SIGNALS = [
   { key: "llm",        name: "Contenu (Claude)",  weight: 45, slot: "--series-1" },
-  { key: "keyword",    name: "Mots-clés",         weight: 20, slot: "--series-2" },
-  { key: "voice",      name: "Voix synthétique",  weight: 20, slot: "--series-3" },
-  { key: "reputation", name: "Réputation",        weight: 15, slot: "--series-4" },
+  { key: "keyword",    name: "Keywords",         weight: 20, slot: "--series-2" },
+  { key: "voice",      name: "Synthetic voice",  weight: 20, slot: "--series-3" },
+  { key: "reputation", name: "Reputation",        weight: 15, slot: "--series-4" },
 ];
 const AXIS_MAX = 45;
 const AXIS_TICKS = [0, 10, 20, 30, 40];
 
 const LINE_TYPES = {
-  mobile: "Mobile", landline: "Fixe", fixedVoip: "VoIP fixe",
-  nonFixedVoip: "VoIP non fixe", tollFree: "Numéro vert",
-  personal: "Personnel", unknown: "Inconnu",
+  mobile: "Mobile", landline: "Landline", fixedVoip: "Fixed VoIP",
+  nonFixedVoip: "Non-fixed VoIP", tollFree: "Toll-free",
+  personal: "Personal", unknown: "Unknown",
 };
 const ACTIONS = {
-  hold_caller:      { label: "Appelant mis en attente", icon: "#i-pause" },
-  resume_caller:    { label: "Appelant réintégré",       icon: "#i-play"  },
-  announce_victim:  { label: "Annonce à la victime",     icon: "#i-speak" },
-  sms_contact:      { label: "SMS au proche de confiance", icon: "#i-sms" },
-  notify_dashboard: { label: "Dashboard notifié",        icon: "#i-watch" },
+  hold_caller:      { label: "Caller put on hold", icon: "#i-pause" },
+  resume_caller:    { label: "Caller brought back",       icon: "#i-play"  },
+  announce_victim:  { label: "Warning played to the callee",     icon: "#i-speak" },
+  sms_contact:      { label: "Text sent to trusted contact", icon: "#i-sms" },
+  notify_dashboard: { label: "Dashboard notified",        icon: "#i-watch" },
 
   /* Faits de routage et de vérification d'identité. Ils voyagent dans le même
      événement `action` parce que le contrat figé à H0 n'accepte aucun nouveau
      `type` (cf. domain/alerts.py, ReportedAction). Sans ces entrées, la frise
      affichait le nom machine brut — « trusted_passthrough » devant un jury. */
-  trusted_passthrough: { label: "Appel de confiance : transmis, non analysé", icon: "#i-good" },
-  caller_notice:    { label: "Appelant informé de l'analyse", icon: "#i-speak" },
+  trusted_passthrough: { label: "Trusted call: passed through, not analyzed", icon: "#i-good" },
+  caller_notice:    { label: "Caller informed of the analysis", icon: "#i-speak" },
   /* `failure` existe parce que `ok: false` ne veut PAS dire la même chose
      partout. Sur une action de la politique d'alerte, c'est Twilio qui a refusé.
      Sur une vérification, c'est l'appelant qui n'a pas su lire le code : annoncer
      « Échec de l'appel API Twilio » à cet instant-là ferait chercher une panne
      réseau au moment précis où le système vient de démasquer un usurpateur. */
-  verify_requested: { label: "Code de vérification envoyé au vrai proche", icon: "#i-sms",
-                      failure: "Le code n'a pas pu être envoyé." },
-  identity_verified: { label: "Identité vérifiée par code",  icon: "#i-good",
-                       failure: "Code faux : l'appelant n'a pas pu le lire." },
-  verify_expired:   { label: "Vérification sans réponse",    icon: "#i-alert",
-                      failure: "Aucun code lu pendant la fenêtre." },
+  verify_requested: { label: "Verification code sent to the real contact", icon: "#i-sms",
+                      failure: "The code could not be sent." },
+  identity_verified: { label: "Identity verified by code",  icon: "#i-good",
+                       failure: "Wrong code: the caller could not read it." },
+  verify_expired:   { label: "Verification unanswered",    icon: "#i-alert",
+                      failure: "No code read within the window." },
   /* Jamais en service réel : DEMO_SPOOF_AS. L'écran doit MONTRER le mensonge —
      « le serveur croit que c'est Lucas » est exactement ce que la démo prouve. */
-  spoof_simulated:  { label: "DÉMO : numéro appelant usurpé (simulé)", icon: "#i-alert" },
+  spoof_simulated:  { label: "DEMO: spoofed caller number (simulated)", icon: "#i-alert" },
 };
 
 /* Décidé une fois, au chargement : le chemin démonstration et le chemin live
@@ -636,7 +635,7 @@ const ACTIONS = {
 const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
 let dashboardPin = "";
 
-const RESUME_LABEL = "Reprendre l'appel maintenant";
+const RESUME_LABEL = "Resume the call now";
 
 const state = {
   callId: null,
@@ -671,8 +670,8 @@ function svgUse(href, size) {
   s.appendChild(u);
   return s;
 }
-const num1 = (x) => Number(x).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const secs = (t) => Number(t).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "s";
+const num1 = (x) => Number(x).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const secs = (t) => Number(t).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "s";
 const clamp01 = (x) => Math.max(0, Math.min(1, Number(x) || 0));
 
 /* --- barres de signaux : construction une fois, mise à jour ensuite ----- */
@@ -714,7 +713,7 @@ function buildSignals() {
     const hit = el("div", "sig-hit");
     plot.append(track, fill, hit);
 
-    const val = el("div", "sig-num", "en attente");
+    const val = el("div", "sig-num", "pending");
     body.append(plot, val);
     row.appendChild(body);
     rows.appendChild(row);
@@ -738,7 +737,7 @@ function renderSignals() {
     const val = row.querySelector(".sig-num");
     if (silent) {
       fill.style.width = "0%";
-      val.textContent = "en attente";
+      val.textContent = "pending";
     } else {
       const pts = clamp01(risk) * sig.weight;
       fill.style.width = (pts / AXIS_MAX * 100) + "%";
@@ -755,10 +754,10 @@ function renderTable() {
   const host = $("sigtable");
   host.textContent = "";
   const t = el("table", "tv");
-  t.appendChild(el("caption", null, "Contribution de chaque signal au score sur 100."));
+  t.appendChild(el("caption", null, "Each signal's contribution to the score out of 100."));
   const thead = el("thead");
   const hr = el("tr");
-  ["Signal", "Risque", "Poids", "Points"].forEach((h) => hr.appendChild(el("th", null, h)));
+  ["Signal", "Risk", "Weight", "Points"].forEach((h) => hr.appendChild(el("th", null, h)));
   thead.appendChild(hr);
   t.appendChild(thead);
 
@@ -781,7 +780,7 @@ function renderTable() {
     tb.appendChild(tr);
   });
   const tr = el("tr");
-  tr.appendChild(el("td", "k", "Somme pondérée"));
+  tr.appendChild(el("td", "k", "Weighted sum"));
   tr.appendChild(el("td", null, ""));
   tr.appendChild(el("td", null, 100));
   tr.appendChild(el("td", null, Math.round(total)));
@@ -803,8 +802,8 @@ function tipContent(sig) {
   n.append(i, document.createTextNode(sig.name));
   tip.appendChild(n);
   tip.appendChild(el("div", "x", has
-    ? `risque ${num1(risk)} × poids ${sig.weight}`
-    : "ce signal n'a pas encore parlé"));
+    ? `risk ${num1(risk)} × weight ${sig.weight}`
+    : "this signal has not spoken yet"));
 }
 function showTip(e, sig) {
   tipContent(sig);
@@ -837,7 +836,7 @@ function renderScore() {
   const fill = $("fill");
   fill.style.width = Math.max(0, Math.min(100, state.score)) + "%";
   fill.dataset.level = state.level;
-  $("meter").setAttribute("aria-label", `Score ${state.score} sur 100, ${lv.label.toLowerCase()}`);
+  $("meter").setAttribute("aria-label", `Score ${state.score} out of 100, ${lv.label.toLowerCase()}`);
 
   renderWhy();
 
@@ -845,7 +844,7 @@ function renderScore() {
   const tn = $("tonext");
   tn.textContent = "";
   if (!next) {
-    tn.appendChild(document.createTextNode("Seuil d'intervention franchi."));
+    tn.appendChild(document.createTextNode("Intervention threshold crossed."));
   } else {
     tn.appendChild(document.createTextNode("Encore "));
     tn.appendChild(el("b", null, next.at - state.score));
@@ -860,12 +859,12 @@ function renderWhy() {
   host.textContent = "";
   if (!state.reasons.length && !state.lastExplanation && !state.breakers.length) return;
 
-  host.appendChild(el("h3", null, "Pourquoi ce score"));
+  host.appendChild(el("h3", null, "Why this score"));
   if (state.lastExplanation) host.appendChild(el("div", "quote", "« " + state.lastExplanation + " »"));
   if (state.reasons.length || state.breakers.length) {
     const tags = el("div", "tags");
     state.reasons.slice(0, 8).forEach((r) => tags.appendChild(el("span", "tag", r)));
-    state.breakers.forEach((b) => tags.appendChild(el("span", "tag brk", "coupe-circuit : " + b)));
+    state.breakers.forEach((b) => tags.appendChild(el("span", "tag brk", "circuit breaker: " + b)));
     host.appendChild(tags);
   }
 }
@@ -873,7 +872,7 @@ function renderWhy() {
 function renderIdentity() {
   const c = $("claimed");
   if (state.claimed) { c.textContent = state.claimed; c.className = ""; }
-  else { c.textContent = "non déclarée"; c.className = "quiet"; }
+  else { c.textContent = "not stated"; c.className = "quiet"; }
 
   const l = $("linetype");
   if (state.lineType) {
@@ -893,7 +892,7 @@ function addTurn(ev) {
   const turn = el("div", "turn");
   turn.dataset.who = ev.speaker === "victim" ? "victim" : "caller";
   const who = el("div", "who");
-  who.appendChild(el("span", null, ev.speaker === "victim" ? "Victime" : "Appelant"));
+  who.appendChild(el("span", null, ev.speaker === "victim" ? "Callee" : "Caller"));
   who.appendChild(el("span", "at", secs(ev.t)));
   turn.appendChild(who);
   turn.appendChild(el("div", "txt", ev.data && ev.data.text ? ev.data.text : ""));
@@ -923,7 +922,7 @@ function addFeed(ev, kind, headline, iconHref, opts) {
   if ((o.tags && o.tags.length) || (o.breakers && o.breakers.length)) {
     const tags = el("div", "tags");
     (o.tags || []).forEach((t) => tags.appendChild(el("span", "tag", t)));
-    (o.breakers || []).forEach((b) => tags.appendChild(el("span", "tag brk", "coupe-circuit : " + b)));
+    (o.breakers || []).forEach((b) => tags.appendChild(el("span", "tag brk", "circuit breaker: " + b)));
     body.appendChild(tags);
   }
   row.appendChild(body);
@@ -937,7 +936,7 @@ function showBanner(ev) {
   const a = ACTIONS[ev.data && ev.data.action] || { label: ev.data && ev.data.action, icon: "#i-intervene" };
   $("bannerwho").textContent = a.label;
   const msg = ev.data && ev.data.message ? String(ev.data.message).trim() : "";
-  $("bannerwhat").textContent = msg || "Action appliquée sur l'appel en cours.";
+  $("bannerwhat").textContent = msg || "Action applied to the live call.";
   const b = $("banner");
   b.dataset.shown = "1";
   b.dataset.pulse = "0";
@@ -967,7 +966,7 @@ function setHeld(held) {
 
 function setResumeBusy(busy) {
   $("resumebtn").disabled = Boolean(busy);
-  $("resumelbl").textContent = busy ? "Reprise en cours…" : RESUME_LABEL;
+  $("resumelbl").textContent = busy ? "Resuming…" : RESUME_LABEL;
 }
 
 async function resumeCall() {
@@ -995,7 +994,7 @@ async function resumeCall() {
        les deux cas l'appelant est toujours en attente, et croire l'avoir
        libéré est la pire issue possible pour l'opérateur. */
     setResumeBusy(false);
-    $("holderr").textContent = "Serveur injoignable. L'appelant est toujours en attente.";
+    $("holderr").textContent = "Server unreachable. The caller is still on hold.";
     return;
   }
   setResumeBusy(false);
@@ -1017,7 +1016,7 @@ async function resumeCall() {
     return;
   }
   /* Jamais de 5xx côté serveur : ok:false veut dire que Twilio a refusé. */
-  $("holderr").textContent = "Twilio a refusé la reprise. L'appelant est toujours en attente.";
+  $("holderr").textContent = "Twilio refused to resume. The caller is still on hold.";
 }
 
 /* --- le réducteur ------------------------------------------------------ */
@@ -1029,7 +1028,7 @@ function applyEvent(ev) {
   if (ev.call_id && ev.call_id !== state.callId) {
     if (state.callId !== null) resetForNewCall();
     state.callId = ev.call_id;
-    $("callid").textContent = "appel " + ev.call_id;
+    $("callid").textContent = "call " + ev.call_id;
   }
 
   switch (ev.type) {
@@ -1056,7 +1055,7 @@ function applyEvent(ev) {
       const expl = d.explanation ? String(d.explanation) : "";
       if (expl && expl !== state.lastExplanation) {
         state.lastExplanation = expl;
-        addFeed(ev, "llm", "Analyse du contenu", "#i-speak", {
+        addFeed(ev, "llm", "Content analysis", "#i-speak", {
           quote: expl,
           tags: Array.isArray(d.tactics) ? d.tactics : [],
         });
@@ -1072,7 +1071,7 @@ function applyEvent(ev) {
       renderSignals();
       renderIdentity();
       if (state.mismatch && !wasMismatch) {
-        addFeed(ev, "reputation", "Numéro incohérent avec l'identité annoncée", "#i-alert", {
+        addFeed(ev, "reputation", "Number does not match the claimed identity", "#i-alert", {
           tags: Array.isArray(d.reasons) ? d.reasons : [],
         });
       }
@@ -1101,7 +1100,7 @@ function applyEvent(ev) {
     case "action": {
       const a = ACTIONS[d.action] || { label: String(d.action || "action"), icon: "#i-intervene" };
       addFeed(ev, "action", a.label, a.icon, {
-        sub: d.ok === false ? (a.failure || "Échec de l'appel API Twilio.") : undefined,
+        sub: d.ok === false ? (a.failure || "Twilio API call failed.") : undefined,
         quote: d.message ? String(d.message).trim() : undefined,
       });
       if (d.ok !== false) {
@@ -1122,9 +1121,9 @@ function resetForNewCall() {
   state.claimed = null; state.lineType = null; state.mismatch = false;
   state.lastExplanation = null; state.reasons = []; state.breakers = [];
   $("turns").textContent = "";
-  $("turns").appendChild(el("p", "empty", "Aucune parole transcrite pour l'instant."));
+  $("turns").appendChild(el("p", "empty", "No speech transcribed yet."));
   $("feed").textContent = "";
-  $("feed").appendChild(el("p", "empty", "Rien à signaler."));
+  $("feed").appendChild(el("p", "empty", "Nothing to report."));
   $("banner").dataset.shown = "0";
   setHeld(false);
   renderScore(); renderSignals(); renderIdentity();
@@ -1149,7 +1148,7 @@ function connectLive() {
       return schedule();
     }
 
-    ws.onopen = () => { delay = 500; setConn("up", "connecté"); };
+    ws.onopen = () => { delay = 500; setConn("up", "connected"); };
 
     ws.onmessage = (m) => {
       let payload;
@@ -1165,8 +1164,8 @@ function connectLive() {
       if (event.code === 1008) {
         dashboardPin = "";
         $("dashboard-auth").hidden = false;
-        $("dashboard-auth-error").textContent = "Session refusée. Entrez votre code à nouveau.";
-        setConn("down", "code requis");
+        $("dashboard-auth-error").textContent = "Session refused. Enter your code again.";
+        setConn("down", "code required");
         return;
       }
       schedule();
@@ -1175,7 +1174,7 @@ function connectLive() {
   };
 
   const schedule = () => {
-    setConn("down", "hors ligne — reconnexion…");
+    setConn("down", "offline — reconnecting…");
     setTimeout(open, delay);
     delay = Math.min(8000, Math.round(delay * 1.6));
   };
@@ -1189,42 +1188,42 @@ function connectLive() {
    ----------------------------------------------------------------------- */
 const DEMO_CALL = "CA_DEMO_SCAM_01";
 const DEMO_EVENTS = [
-  { t: 0.0, type: "reputation", data: { risk: 0.35, line_type: "unknown", in_contacts: false, identity_mismatch: false, reasons: ["numéro inconnu"] } },
-  { t: 0.0, type: "score", data: { score: 5, level: "none", reasons: ["numéro inconnu"], breakers_fired: [] } },
+  { t: 0.0, type: "reputation", data: { risk: 0.35, line_type: "unknown", in_contacts: false, identity_mismatch: false, reasons: ["unknown number"] } },
+  { t: 0.0, type: "score", data: { score: 5, level: "none", reasons: ["unknown number"], breakers_fired: [] } },
 
-  { t: 1.0, type: "transcript", speaker: "caller", data: { text: "Mamie ? Mamie c'est Lucas, tu m'entends ?", is_final: true } },
-  { t: 1.4, type: "keyword", data: { risk: 0.04, terms: ["mamie"] } },
-  { t: 1.8, type: "llm", data: { risk: 0.22, tactics: ["identité revendiquée"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant se présente comme un proche de la victime." } },
-  { t: 2.1, type: "reputation", data: { risk: 0.95, line_type: "nonFixedVoip", in_contacts: false, identity_mismatch: true, reasons: ["numéro inconnu", "numéro différent de celui de Lucas Martin", "ligne VoIP non fixe"] } },
-  { t: 2.3, type: "score", data: { score: 25, level: "none", reasons: ["identité revendiquée", "numéro inconnu"], breakers_fired: [] } },
+  { t: 1.0, type: "transcript", speaker: "caller", data: { text: "Grandma? Grandma, it's Lucas, can you hear me?", is_final: true } },
+  { t: 1.4, type: "keyword", data: { risk: 0.04, terms: ["grandma"] } },
+  { t: 1.8, type: "llm", data: { risk: 0.22, tactics: ["claimed identity"], claimed_identity: "Lucas, grandson", explanation: "The caller presents himself as a relative of the callee." } },
+  { t: 2.1, type: "reputation", data: { risk: 0.95, line_type: "nonFixedVoip", in_contacts: false, identity_mismatch: true, reasons: ["unknown number", "number differs from Lucas Martin's", "non-fixed VoIP line"] } },
+  { t: 2.3, type: "score", data: { score: 25, level: "none", reasons: ["claimed identity", "unknown number"], breakers_fired: [] } },
 
-  { t: 4.0, type: "transcript", speaker: "victim", data: { text: "Lucas ? Mais ta voix est bizarre mon chéri", is_final: true } },
+  { t: 4.0, type: "transcript", speaker: "victim", data: { text: "Lucas? Your voice sounds strange, sweetheart", is_final: true } },
   { t: 5.2, type: "voice", data: { risk: 0.68, windows_analyzed: 2 } },
-  { t: 5.4, type: "score", data: { score: 39, level: "none", reasons: ["identité revendiquée", "numéro inconnu", "voix possiblement synthétique"], breakers_fired: [] } },
+  { t: 5.4, type: "score", data: { score: 39, level: "none", reasons: ["claimed identity", "unknown number", "possibly synthetic voice"], breakers_fired: [] } },
 
-  { t: 7.0, type: "transcript", speaker: "caller", data: { text: "Oui c'est le téléphone, j'ai cassé le mien. Écoute, j'ai eu un accident avec la voiture.", is_final: true } },
-  { t: 7.6, type: "keyword", data: { risk: 0.33, terms: ["j'ai eu un accident", "mamie"] } },
-  { t: 8.2, type: "llm", data: { risk: 0.44, tactics: ["identité revendiquée", "pression émotionnelle"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant invoque un accident pour créer un sentiment d'urgence." } },
-  { t: 8.5, type: "score", data: { score: 54, level: "watch", reasons: ["identité revendiquée", "pression émotionnelle", "numéro inconnu"], breakers_fired: [] } },
+  { t: 7.0, type: "transcript", speaker: "caller", data: { text: "Yeah it's the phone, I broke mine. Listen, I had a car accident.", is_final: true } },
+  { t: 7.6, type: "keyword", data: { risk: 0.33, terms: ["I had an accident", "grandma"] } },
+  { t: 8.2, type: "llm", data: { risk: 0.44, tactics: ["claimed identity", "emotional pressure"], claimed_identity: "Lucas, grandson", explanation: "The caller brings up an accident to create a sense of urgency." } },
+  { t: 8.5, type: "score", data: { score: 54, level: "watch", reasons: ["claimed identity", "emotional pressure", "unknown number"], breakers_fired: [] } },
 
-  { t: 12.0, type: "transcript", speaker: "victim", data: { text: "Mon Dieu, tu n'as rien ?", is_final: true } },
+  { t: 12.0, type: "transcript", speaker: "victim", data: { text: "Oh my God, are you hurt?", is_final: true } },
 
-  { t: 15.0, type: "transcript", speaker: "caller", data: { text: "Non ça va mais il faut payer le garage tout de suite sinon ils gardent la voiture.", is_final: true } },
-  { t: 15.7, type: "keyword", data: { risk: 0.53, terms: ["j'ai eu un accident", "tout de suite", "payer"] } },
-  { t: 16.4, type: "llm", data: { risk: 0.88, tactics: ["urgence", "paiement inhabituel", "identité revendiquée", "pression émotionnelle"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant réclame un paiement immédiat en se faisant passer pour votre petit-fils." } },
-  { t: 16.8, type: "score", data: { score: 85, level: "intervene", reasons: ["urgence", "paiement inhabituel", "identité revendiquée", "numéro inconnu"], breakers_fired: ["payment_request_with_identity_mismatch"] } },
+  { t: 15.0, type: "transcript", speaker: "caller", data: { text: "No I'm fine, but I have to pay the garage right now or they keep the car.", is_final: true } },
+  { t: 15.7, type: "keyword", data: { risk: 0.53, terms: ["I had an accident", "right now", "pay"] } },
+  { t: 16.4, type: "llm", data: { risk: 0.88, tactics: ["urgency", "unusual payment", "claimed identity", "emotional pressure"], claimed_identity: "Lucas, grandson", explanation: "The caller demands an immediate payment while posing as your grandson." } },
+  { t: 16.8, type: "score", data: { score: 85, level: "intervene", reasons: ["urgency", "unusual payment", "claimed identity", "unknown number"], breakers_fired: ["payment_request_with_identity_mismatch"] } },
   { t: 17.1, type: "action", data: { action: "hold_caller", target: "caller", ok: true } },
-  { t: 17.5, type: "action", data: { action: "announce_victim", target: "victim", ok: true, message: "Nous avons mis l'appel en pause et prévenu Lucas Martin. L'appelant réclame un paiement immédiat en se faisant passer pour votre petit-fils." } },
-  { t: 18.0, type: "action", data: { action: "sms_contact", target: "trusted_contact", ok: true, message: "Est-ce toi qui appelles en ce moment ?" } },
+  { t: 17.5, type: "action", data: { action: "announce_victim", target: "victim", ok: true, message: "We have put the call on hold and alerted Lucas Martin. The caller demands an immediate payment while posing as your grandson." } },
+  { t: 18.0, type: "action", data: { action: "sms_contact", target: "trusted_contact", ok: true, message: "Is that you calling right now?" } },
 
-  { t: 21.0, type: "transcript", speaker: "caller", data: { text: "Il faut faire un virement de deux mille euros maintenant, c'est urgent.", is_final: true } },
-  { t: 21.6, type: "keyword", data: { risk: 0.77, terms: ["virement", "c'est urgent", "tout de suite"] } },
-  { t: 24.0, type: "transcript", speaker: "caller", data: { text: "Je t'explique, tu me donnes le code de ta carte bancaire et je m'occupe de tout.", is_final: true } },
-  { t: 24.6, type: "keyword", data: { risk: 0.88, terms: ["carte bancaire", "virement", "c'est urgent"] } },
-  { t: 27.0, type: "transcript", speaker: "caller", data: { text: "Et surtout ne dis rien à maman, elle va s'inquiéter pour rien.", is_final: true } },
-  { t: 27.6, type: "keyword", data: { risk: 0.96, terms: ["ne dis rien à", "carte bancaire", "virement"] } },
-  { t: 28.2, type: "llm", data: { risk: 0.95, tactics: ["urgence", "secret", "paiement inhabituel", "identité revendiquée"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant demande le secret et les coordonnées bancaires de la victime." } },
-  { t: 28.6, type: "score", data: { score: 90, level: "intervene", reasons: ["urgence", "secret", "paiement inhabituel", "numéro inconnu"], breakers_fired: ["payment_request_with_identity_mismatch", "llm_high_confidence"] } },
+  { t: 21.0, type: "transcript", speaker: "caller", data: { text: "You need to wire two thousand dollars now, it's urgent.", is_final: true } },
+  { t: 21.6, type: "keyword", data: { risk: 0.77, terms: ["wire", "it's urgent", "right now"] } },
+  { t: 24.0, type: "transcript", speaker: "caller", data: { text: "Here's the thing, give me your card PIN and I'll take care of everything.", is_final: true } },
+  { t: 24.6, type: "keyword", data: { risk: 0.88, terms: ["card PIN", "wire", "it's urgent"] } },
+  { t: 27.0, type: "transcript", speaker: "caller", data: { text: "And whatever you do, don't tell Mom, she'll worry for nothing.", is_final: true } },
+  { t: 27.6, type: "keyword", data: { risk: 0.96, terms: ["don't tell", "card PIN", "wire"] } },
+  { t: 28.2, type: "llm", data: { risk: 0.95, tactics: ["urgency", "secrecy", "unusual payment", "claimed identity"], claimed_identity: "Lucas, grandson", explanation: "The caller asks the callee for secrecy and banking details." } },
+  { t: 28.6, type: "score", data: { score: 90, level: "intervene", reasons: ["urgency", "secrecy", "unusual payment", "unknown number"], breakers_fired: ["payment_request_with_identity_mismatch", "llm_high_confidence"] } },
 ];
 
 const DEMO_SPEED = 2.6;
@@ -1233,7 +1232,7 @@ let demoTimers = [];
 function startDemo() {
   $("demobadge").classList.remove("hidden");
   $("replay").classList.remove("hidden");
-  setConn("up", "lecture de la démo");
+  setConn("up", "playing demo");
   $("replay").addEventListener("click", runDemo);
   runDemo();
 }
@@ -1243,7 +1242,7 @@ function runDemo() {
   demoTimers = [];
   state.callId = null;
   resetForNewCall();
-  $("callid").textContent = "appel " + DEMO_CALL + " (démonstration)";
+  $("callid").textContent = "call " + DEMO_CALL + " (demo)";
 
   DEMO_EVENTS.forEach((ev) => {
     const id = setTimeout(
@@ -1264,7 +1263,7 @@ function initTheme() {
   const paint = () => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     document.body.dataset.mode = dark ? "dark" : "light";
-    btn.textContent = dark ? "Thème clair" : "Thème sombre";
+    btn.textContent = dark ? "Light theme" : "Dark theme";
   };
   btn.addEventListener("click", () => { dark = !dark; paint(); });
   paint();
@@ -1275,7 +1274,7 @@ function initTableToggle() {
   btn.addEventListener("click", () => {
     const tableNowVisible = btn.getAttribute("aria-pressed") !== "true";
     btn.setAttribute("aria-pressed", String(tableNowVisible));
-    btn.textContent = tableNowVisible ? "Graphique" : "Tableau";
+    btn.textContent = tableNowVisible ? "Chart" : "Table";
     $("sigchart").classList.toggle("hidden", tableNowVisible);
     $("sigtable").classList.toggle("hidden", !tableNowVisible);
   });
@@ -1293,7 +1292,7 @@ if (DEMO_MODE) {
   $("dashboard-auth").hidden = true;
   startDemo();
 } else {
-  setConn("wait", "code requis");
+  setConn("wait", "code required");
   $("dashboard-auth").addEventListener("submit", async (event) => {
     event.preventDefault();
     const pin = $("dashboard-pin").value.trim();
@@ -1306,7 +1305,7 @@ if (DEMO_MODE) {
       });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.detail || "Connexion refusée.");
+        throw new Error(data.detail || "Connection refused.");
       }
       dashboardPin = pin;
       $("dashboard-pin").value = "";

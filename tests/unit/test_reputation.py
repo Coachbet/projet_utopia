@@ -246,7 +246,7 @@ async def test_identity_mismatch_dominates() -> None:
     signal = await make_checker().check(SCAMMER, claimed_identity="Lucas, votre petit-fils")
     assert signal.identity_mismatch is True
     assert signal.risk >= 0.9
-    assert "numéro différent de celui de Lucas Martin" in signal.reasons
+    assert "number differs from Lucas Martin's" in signal.reasons
 
 
 async def test_unknown_claimed_identity_is_not_a_mismatch() -> None:
@@ -263,8 +263,8 @@ async def test_non_fixed_voip_worse_than_mobile() -> None:
     mobile = await make_checker(FakeLookup("mobile")).check(SCAMMER)
     assert voip.line_type is LineType.NON_FIXED_VOIP
     assert voip.risk > mobile.risk
-    assert "ligne VoIP non fixe" in voip.reasons
-    assert "numéro inconnu" in mobile.reasons
+    assert "non-fixed VoIP line" in voip.reasons
+    assert "unknown number" in mobile.reasons
 
 
 async def test_mismatch_on_voip_is_maximal() -> None:

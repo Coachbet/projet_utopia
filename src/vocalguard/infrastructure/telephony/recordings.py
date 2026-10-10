@@ -46,7 +46,7 @@ class TwilioRecordings:
                 raise RecordingUnavailable("Message audio vide")
             return bytes(audio)
         except httpx.HTTPError:
-            raise RecordingUnavailable("Le message ne peut pas être lu actuellement") from None
+            raise RecordingUnavailable("The message cannot be played right now") from None
 
     async def delete(self, sid: str) -> None:
         try:
@@ -60,4 +60,4 @@ class TwilioRecordings:
                 if response.status_code != 404:
                     response.raise_for_status()
         except httpx.HTTPError:
-            raise RecordingUnavailable("Suppression du message indisponible") from None
+            raise RecordingUnavailable("Message deletion unavailable") from None

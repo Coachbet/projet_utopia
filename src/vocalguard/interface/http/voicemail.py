@@ -36,9 +36,9 @@ async def audio(message_id: str, demande: DemandeApp, request: Request) -> Respo
     try:
         content = await service.audio(message_id)
     except (RecordingUnavailable, sqlite3.Error, OSError):
-        raise HTTPException(status_code=503, detail="Lecture momentanément indisponible.") from None
+        raise HTTPException(status_code=503, detail="Playback temporarily unavailable.") from None
     if content is None:
-        raise HTTPException(status_code=404, detail="Message absent ou supprimé.")
+        raise HTTPException(status_code=404, detail="Message missing or deleted.")
     return Response(content, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
 
 
@@ -50,7 +50,7 @@ async def heard(message_id: str, demande: DemandeApp, request: Request) -> dict[
     except (sqlite3.Error, OSError):
         raise HTTPException(status_code=503, detail="Messagerie indisponible.") from None
     if not found:
-        raise HTTPException(status_code=404, detail="Message absent ou supprimé.")
+        raise HTTPException(status_code=404, detail="Message missing or deleted.")
     return {"ok": True}
 
 
@@ -61,8 +61,8 @@ async def delete(message_id: str, demande: DemandeApp, request: Request) -> dict
         found = await service.delete(message_id)
     except (RecordingUnavailable, sqlite3.Error, OSError):
         raise HTTPException(
-            status_code=503, detail="Suppression momentanément indisponible."
+            status_code=503, detail="Deletion temporarily unavailable."
         ) from None
     if not found:
-        raise HTTPException(status_code=404, detail="Message absent ou supprimé.")
+        raise HTTPException(status_code=404, detail="Message missing or deleted.")
     return {"ok": True}

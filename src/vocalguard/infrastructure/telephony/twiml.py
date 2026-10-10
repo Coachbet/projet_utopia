@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from twilio.twiml.voice_response import VoiceResponse
 
-SAY_LANGUAGE = "fr-FR"
+SAY_LANGUAGE = "en-US"
 """Langue des annonces entendues par la personne protégée."""
 CALLER_NOTICE_LANGUAGE = "en-US"
 CALLER_NOTICE_FRENCH = "Cet appel est analysé par un service de protection contre la fraude."
@@ -97,7 +97,7 @@ def inbound_call_twiml(
         # c'est cet ordre-là, pas un commentaire, qui porte la promesse.
         response.say(caller_notice, language=caller_notice_language)
         if caller_notice_bilingual:
-            response.say(CALLER_NOTICE_FRENCH, language=SAY_LANGUAGE)
+            response.say(CALLER_NOTICE_FRENCH, language="fr-FR")
 
     if track is not None:
         # Pas de `<Parameter name="call_id">` : le message `start` du WebSocket
@@ -258,7 +258,7 @@ def outgoing_call_twiml(*, number: str, caller_id: str, done_url: str, status_ur
 def outgoing_done_twiml(status: str) -> str:
     response = VoiceResponse()
     if status in {"busy", "failed", "no-answer"}:
-        response.say("Votre correspondant est indisponible.", language=SAY_LANGUAGE)
+        response.say("The person you are calling is not available.", language=SAY_LANGUAGE)
     response.hangup()
     return str(response)
 

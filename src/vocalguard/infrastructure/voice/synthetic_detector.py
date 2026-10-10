@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections import deque
 from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
@@ -81,6 +82,65 @@ def resolve_fake_index(id2label: Mapping[int, str]) -> int | None:
     return None
 
 
+_SHARED: dict[tuple[str, int], AudioClassifier] = {}
+_SHARED_LOCK = threading.Lock()
+
+
+def shared_classifier(model_id: str) -> AudioClassifier:
+    """Le modèle, chargé UNE fois par processus et partagé entre les appels.
+
+    Avant, chaque appel construisait son détecteur et rechargeait wav2vec2
+    (plusieurs centaines de Mo) à sa première fenêtre : 10 à 60 s pendant
+    lesquelles le signal voix restait muet, soit souvent tout l'appel de démo.
+    Le tampon de fenêtres, lui, reste par appel ; seuls les poids sont partagés,
+    et l'inférence ne modifie pas le modèle (`eval()`, `no_grad`).
+
+    La clé inclut l'identité du chargeur pour que les tests qui le remplacent
+    ne récupèrent jamais le modèle d'un autre test. Un échec n'est pas mis en
+    cache : l'appel suivant retentera.
+    """
+    key = (model_id, id(_load_classifier))
+    with _SHARED_LOCK:
+        cached = _SHARED.get(key)
+        if cached is None:
+            cached = _load_classifier(model_id)
+            _SHARED[key] = cached
+        return cached
+
+
+def warm_up(model_id: str) -> bool:
+    """Charge le modèle à l'avance (au démarrage du serveur, dans un thread).
+
+    Renvoie `False` sans lever si torch ou le modèle manquent : le serveur doit
+    démarrer quand même, le signal voix sera simplement absent.
+    """
+    try:
+        classifier = shared_classifier(model_id)
+        # Une inférence à vide initialise les noyaux CPU : la première vraie
+        # fenêtre d'un appel ne paie plus ce coût.
+        classifier(np.zeros(16000, dtype=np.float32), 16000)
+    except Exception as exc:
+        logger.warning("Préchargement du détecteur de voix impossible (%s) : %s", model_id, exc)
+        return False
+    logger.info("Détecteur de voix synthétique prêt (%s).", model_id)
+    return True
+
+
+def calibrate(probability: float, low: float, high: float) -> float:
+    """Ramène la probabilité brute du modèle sur l'échelle de risque réelle.
+
+    Sur de l'audio téléphonique, un modèle entraîné en studio ne répond pas
+    autour de 0 pour une vraie voix : il répond souvent 0,3 ou 0,6, et ce
+    plancher dépend du modèle et de la ligne. `low` est la probabilité typique
+    d'une VRAIE voix passée par le téléphone, `high` celle d'une voix clonée :
+    on les mesure avec `scripts/calibrate_voice.py`. Par défaut (0, 1) la
+    probabilité est rendue telle quelle.
+    """
+    if high <= low:
+        return float(probability)
+    return float(min(1.0, max(0.0, (probability - low) / (high - low))))
+
+
 def _load_classifier(model_id: str) -> AudioClassifier:
     """Charge le modèle Hugging Face. Bloquant : à appeler dans un thread.
 
@@ -124,8 +184,17 @@ class Wav2VecVoiceDetector:
         target_sample_rate: int | None = None,
         enabled: bool | None = None,
         smoothing_windows: int = SMOOTHING_WINDOWS,
+        calibration: tuple[float, float] | None = None,
     ) -> None:
         settings = get_settings()
+        self._calibration = (
+            calibration
+            if calibration is not None
+            else (
+                settings.voice_detector_calibration_low,
+                settings.voice_detector_calibration_high,
+            )
+        )
         self._model_id = model_id or settings.voice_detector_model_id
         self._window_seconds = (
             window_seconds if window_seconds is not None else settings.voice_detector_window_seconds
@@ -201,7 +270,7 @@ class Wav2VecVoiceDetector:
             return None
 
         self._windows_analyzed += 1
-        self._recent.append(probability)
+        self._recent.append(calibrate(probability, *self._calibration))
         return VoiceSignal(
             risk=float(sum(self._recent) / len(self._recent)),
             windows_analyzed=self._windows_analyzed,
@@ -211,7 +280,7 @@ class Wav2VecVoiceDetector:
         """Chargement paresseux puis inférence. Tourne dans un thread."""
         if self._classifier is None:
             try:
-                self._classifier = _load_classifier(self._model_id)
+                self._classifier = shared_classifier(self._model_id)
             except ImportError as exc:
                 self._die("torch/transformers absents (make install-voice) : %s", exc)
                 return None

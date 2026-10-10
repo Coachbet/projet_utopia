@@ -29,7 +29,7 @@ class PinGuard:
     def check(self, expected: str, received: str) -> None:
         if not re.fullmatch(r"[0-9]{6,}", expected):
             raise HTTPException(
-                503, "APP_PIN doit contenir au moins 6 chiffres pour activer la protection."
+                503, "APP_PIN must contain at least 6 digits to turn on protection."
             )
         now = self._clock()
         if self._blocked_until > now:
@@ -45,13 +45,13 @@ class PinGuard:
         if self._failures >= 5:
             self._blocked_until = now + 600
             self._locked(now)
-        raise HTTPException(403, "Code incorrect.")
+        raise HTTPException(403, "Incorrect code.")
 
     def _locked(self, now: float) -> None:
         seconds = max(1, int(self._blocked_until - now + 0.999))
         raise HTTPException(
             429,
-            "Trop d'essais. Réessayez dans 10 minutes.",
+            "Too many attempts. Try again in 10 minutes.",
             headers={"Retry-After": str(seconds)},
         )
 

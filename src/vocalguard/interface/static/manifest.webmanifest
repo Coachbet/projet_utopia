@@ -1,9 +1,9 @@
 {
-  "lang": "fr",
+  "lang": "en",
   "dir": "ltr",
-  "name": "Cut the Line — protection des appels",
+  "name": "Cut the Line — call protection",
   "short_name": "Cut the Line",
-  "description": "Ils pêchent, on coupe la ligne. Votre téléphone sonne ici : Cut the Line vous dit qui appelle et vous prévient si l'appel est suspect.",
+  "description": "They phish, we cut the line. Your phone rings here: Cut the Line tells you who is calling and warns you if the call looks like a scam.",
   "start_url": "/app",
   "scope": "/app",
   "display": "standalone",

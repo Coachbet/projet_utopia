@@ -50,11 +50,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CONTACT_DENIED_REASON = "le vrai contact dit que ce n'est pas lui"
+CONTACT_DENIED_REASON = "the real contact says it is not them"
 """Repris mot pour mot par le dashboard : c'est la phrase la plus convaincante
 que l'écran puisse afficher devant le jury."""
 
-IDENTITY_VERIFIED_REASON = "code de vérification lu correctement"
+IDENTITY_VERIFIED_REASON = "verification code read correctly"
 """Le pendant exact de `CONTACT_DENIED_REASON`, et il doit s'afficher aussi
 franchement : un appel qu'on vient de disculper mérite de dire pourquoi.
 

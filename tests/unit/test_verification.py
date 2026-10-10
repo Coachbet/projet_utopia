@@ -213,7 +213,7 @@ async def test_le_code_fait_quatre_chiffres_et_part_au_proche() -> None:
     corps = banc.sms()[0][2]
     assert resultat.code in corps
     assert "Jeanne" in corps
-    assert "NON" in corps, "la réponse NON réutilise le chemin existant du démenti"
+    assert "NO" in corps, "la réponse NO réutilise le chemin existant du démenti"
 
 
 async def test_mille_codes_tires_restent_a_quatre_chiffres() -> None:
@@ -691,7 +691,7 @@ async def test_sur_un_appel_de_confiance_la_fin_de_la_fenetre_n_accuse_personne(
     assert ANNOUNCE_VERIFY_UNHEARD in banc.annonces()
     expiration = [a for a in banc.actions() if a["action"] == "verify_expired"][-1]
     assert expiration["ok"] is False
-    assert expiration["reasons"] == ["appel non analysé : le code n'a pas pu être entendu"]
+    assert expiration["reasons"] == ["call not analyzed: the code could not be heard"]
     assert banc.pipeline.denied == [], "aucune escalade sur ce qu'on n'a pas entendu"
 
 

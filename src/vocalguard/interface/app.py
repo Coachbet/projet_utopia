@@ -184,6 +184,15 @@ def create_app(
             mailbox.enabled = False
             log.warning("Messagerie indisponible au démarrage ; dépôt désactivé")
         maintenance = asyncio.create_task(mailbox.maintain()) if mailbox.enabled else None
+        if settings.voice_detector_enabled:
+            # Préchargement du modèle de voix en tâche de fond : sans lui, le
+            # premier appel attendrait le chargement de wav2vec2 et le signal
+            # voix arriverait après la fin de la démo.
+            from vocalguard.infrastructure.voice.synthetic_detector import warm_up
+
+            app.state.voice_warmup = asyncio.create_task(
+                asyncio.to_thread(warm_up, settings.voice_detector_model_id)
+            )
         if not settings.public_hostname:
             log.warning(
                 "PUBLIC_HOSTNAME est vide : Twilio ne pourra joindre ni le "

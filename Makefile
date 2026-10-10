@@ -34,6 +34,9 @@ EVAL_OUTPUT ?= artifacts/evaluation/$(EVAL_MODE)
 evaluate: ## Évalue les scénarios (EVAL_MODE=offline|keywords|bedrock)
 	uv run python scripts/evaluate_scenarios.py --mode $(EVAL_MODE) --output-dir $(EVAL_OUTPUT)
 
+calibrate-voice: ## Calibre la voix synthétique (HUMAN="a.wav b.wav" FAKE="c.wav d.wav")
+	uv run python scripts/calibrate_voice.py --human $(HUMAN) --fake $(FAKE)
+
 test: ## Tests unitaires
 	uv run pytest -q
 

@@ -227,7 +227,7 @@ def test_no_answer_marque_sortant_manque_et_done_prononce_francais(app_client):
     )
     assert response.status_code == 200
     xml = ET.fromstring(response.text)
-    assert xml.find("Say").get("language") == "fr-FR"
+    assert xml.find("Say").get("language") == "en-US"
     assert xml.find("Hangup") is not None
     assert app.state.registry.get(CALL) is None
     history_response = client.post(f"/app/history/{CALL}", json={"pin": PIN})

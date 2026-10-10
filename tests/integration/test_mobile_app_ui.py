@@ -79,9 +79,9 @@ def test_complete_mobile_screen_contract_and_unique_targets() -> None:
 
 def test_security_notice_accessible_dialogs_and_pinned_sdk() -> None:
     html, markup = served_markup()
-    assert "Ne dites jamais ce code." in html
-    assert "C'est à lui de vous le lire." in html
-    assert "Laissez cette page ouverte" in html
+    assert "Never say this code." in html
+    assert "They must read it to you." in html
+    assert "Keep this page open" in html
     assert len(markup.external_scripts) == 1
     sdk = markup.external_scripts[0]
     assert "@twilio/voice-sdk@2.18.5/" in str(sdk["src"])

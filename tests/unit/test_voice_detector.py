@@ -314,3 +314,85 @@ async def test_model_is_loaded_only_once(monkeypatch):
 
     assert loads == ["some/model"]
     assert classifier.calls == 3
+
+
+# --- bande limitée, modèle partagé, calibration ------------------------------
+
+
+def _energy_above(signal: np.ndarray, rate: int, hz: float) -> float:
+    spectrum = np.abs(np.fft.rfft(signal)) ** 2
+    freqs = np.fft.rfftfreq(signal.size, 1 / rate)
+    return float(spectrum[freqs > hz].sum() / spectrum.sum())
+
+
+def test_bandlimited_upsampling_leaves_no_images_above_telephone_band():
+    """Le cœur du problème « des Hertz » : l'interpolation linéaire invente de
+    l'énergie entre 4 et 8 kHz, que le modèle lit comme des artefacts."""
+    from vocalguard.infrastructure.voice.resample import resample_bandlimited
+
+    t = np.arange(SAMPLE_RATE, dtype=np.float32) / SAMPLE_RATE
+    tone = (0.5 * np.sin(2 * np.pi * 3000 * t)).astype(np.float32)
+
+    linear = resample_linear(tone, 8000, 16000)
+    clean = resample_bandlimited(tone, 8000, 16000)
+
+    assert clean.size == linear.size == tone.size * 2
+    assert _energy_above(linear, 16000, 4200) > 0.01
+    assert _energy_above(clean, 16000, 4200) < 0.001
+    assert np.abs(clean).max() <= 1.0
+
+
+async def test_model_is_shared_across_calls(monkeypatch):
+    """Un détecteur par appel, mais un seul chargement de wav2vec2 par serveur."""
+    classifier = FakeClassifier([[0.2, 0.8]] * 4)
+    loads = []
+
+    def load(model_id: str):
+        loads.append(model_id)
+        return classifier
+
+    monkeypatch.setattr(sd, "_load_classifier", load)
+    for _ in range(2):
+        detector = Wav2VecVoiceDetector(
+            window_seconds=WINDOW_SECONDS, enabled=True, model_id="shared/model"
+        )
+        await detector.feed("caller", pcm_window(), SAMPLE_RATE)
+
+    assert loads == ["shared/model"]
+    assert classifier.calls == 2
+
+
+def test_calibration_maps_phone_floor_to_zero_and_clone_level_to_one():
+    assert sd.calibrate(0.40, 0.45, 0.85) == 0.0
+    assert sd.calibrate(0.65, 0.45, 0.85) == pytest.approx(0.5)
+    assert sd.calibrate(0.95, 0.45, 0.85) == 1.0
+    # Réglage par défaut : probabilité inchangée.
+    assert sd.calibrate(0.37, 0.0, 1.0) == pytest.approx(0.37)
+
+
+async def test_calibration_is_applied_to_the_signal():
+    classifier = FakeClassifier([[0.35, 0.65]])
+    detector = Wav2VecVoiceDetector(
+        classifier=classifier, window_seconds=WINDOW_SECONDS, calibration=(0.45, 0.85)
+    )
+
+    signal = await detector.feed("caller", pcm_window(), SAMPLE_RATE)
+
+    assert signal is not None
+    assert signal.risk == pytest.approx(0.5)
+
+
+def test_warm_up_never_raises(monkeypatch):
+    def explode(model_id: str):
+        raise ImportError("No module named 'torch'")
+
+    monkeypatch.setattr(sd, "_load_classifier", explode)
+    assert sd.warm_up("missing/model") is False
+
+
+@pytest.fixture(autouse=True)
+def _clear_shared_models():
+    """Le cache de modèles est global au processus : chaque test repart à vide."""
+    sd._SHARED.clear()
+    yield
+    sd._SHARED.clear()

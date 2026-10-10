@@ -164,13 +164,13 @@ jamais."""
 
 # --- Routage de l'appel entrant : liste blanche vs analyse ------------------
 
-LOOP_REFUSAL_TEXT = "Cet appel ne peut pas aboutir."
+LOOP_REFUSAL_TEXT = "This call cannot be completed."
 """Phrase servie à un appel refusé par la garde anti-boucle. Volontairement muette
 sur la cause : l'appelant est soit nous-mêmes, soit la personne protégée qui a
 composé son propre numéro renvoyé — dans les deux cas, expliquer le montage ne
 sert personne, et le dire à un tiers renseignerait sur notre infrastructure."""
 
-VICTIM_NOTICE_UNKNOWN = "Appel d'un numéro inconnu, appel protégé."
+VICTIM_NOTICE_UNKNOWN = "Call from an unknown number. This call is protected."
 """Ce que la personne protégée entend, elle seule, quand l'appelant n'est pas au
 carnet. « Appel protégé » est là pour qu'elle sache que l'analyse tourne : c'est
 la contrepartie rassurante de l'annonce faite à l'appelant."""
@@ -229,6 +229,12 @@ _DENIAL_ANYWHERE = (
     "ce n est pas moi",
     "pas du tout",
     "surtout pas",
+    "not me",
+    "it s not me",
+    "it is not me",
+    "that s not me",
+    "wasn t me",
+    "not calling",
 )
 """Démentis non ambigus : aucun ne s'emploie en remplissage de phrase, donc leur
 position dans le message ne change pas leur sens. Ce sont eux qui rattrapent
@@ -243,6 +249,9 @@ _AFFIRMATION_TERMS = (
     "affirmatif",
     "c est moi",
     "c est bien moi",
+    "it s me",
+    "it is me",
+    "that s me",
 )
 """Reconnues pour deux raisons : les logguer comme telles — un « oui » n'est pas
 un corps incompris, et savoir lequel des deux est arrivé change tout au débogage
@@ -409,8 +418,8 @@ async def voice_inbound(request: Request) -> Response:
                 "real_from": numero_reel,
                 "presented_as": from_number,
                 "message": (
-                    f"Usurpation SIMULÉE (mode démo) : l'appel vient de {numero_reel}, "
-                    f"il est traité comme venant de {from_number}."
+                    f"SIMULATED spoofing (demo mode): the call comes from {numero_reel} "
+                    f"and is treated as coming from {from_number}."
                 ),
             },
         )
@@ -434,7 +443,9 @@ async def voice_inbound(request: Request) -> Response:
                 "target": "caller",
                 "ok": True,
                 "contact": confiance.name,
-                "message": f"Appel de {confiance.name} : transmis sans annonce ni analyse.",
+                "message": (
+                    f"Call from {confiance.name}: passed through without notice or analysis."
+                ),
             },
         )
         return _xml(
@@ -656,7 +667,7 @@ def _annonce_appelant(state: Any, call_id: str) -> str:
     # le droit de savoir qui appelle, et c'est une question d'affichage, pas la
     # décision de confiance (qui s'est prise, elle, dans `voice_inbound`).
     if contact is not None:
-        return f"Appel de {contact.name}."
+        return f"Call from {contact.name}."
     return VICTIM_NOTICE_UNKNOWN
 
 
@@ -806,24 +817,24 @@ async def _outbound_call(request: Request, form) -> Response:
     settings = state.settings
     identity = str(form.get("From") or "")
     if identity != settings.voice_client_target:
-        raise HTTPException(403, "Identité Voice non autorisée.")
+        raise HTTPException(403, "Voice identity not allowed.")
     call_id = str(form.get("CallSid") or "")
     nonce = str(form.get("Authorization") or "")
     if not call_id or len(form.getlist("Authorization")) != 1:
-        raise HTTPException(403, "Autorisation sortante absente.")
+        raise HTTPException(403, "Missing outgoing call authorization.")
     authorizations = outgoing_authorizations(state)
     already_active = authorizations.owns(call_id)
     number = authorizations.consume(nonce, identity=settings.voice_client_identity, call_id=call_id)
     if number is None:
-        raise HTTPException(403, "Autorisation sortante expirée ou déjà utilisée.")
+        raise HTTPException(403, "Outgoing call authorization expired or already used.")
     # Le webhook ignore toute destination envoyée par le client. Vérifier une
     # seconde fois celle réservée protège aussi un changement de configuration.
     try:
         number = outgoing_number(number, settings)
         if already_active and state.registry.get(call_id) is None:
-            raise HTTPException(409, "Cet appel est terminé.")
+            raise HTTPException(409, "This call has ended.")
         if not already_active and state.registry.active():
-            raise HTTPException(409, "Un appel est déjà en cours.")
+            raise HTTPException(409, "A call is already in progress.")
         if not already_active:
             session = await state.registry.open(call_id, caller_number=number, transcribe=False)
             recorder = getattr(state, "history_recorder", None)
@@ -878,7 +889,7 @@ async def voice_outbound_done(call_id: str, request: Request) -> Response:
     form = await request.form()
     authorizations = outgoing_authorizations(state)
     if str(form.get("CallSid") or "") != call_id:
-        raise HTTPException(403, "Appel sortant incorrect.")
+        raise HTTPException(403, "Invalid outgoing call.")
     status = str(form.get("DialCallStatus") or "")
     child_sid = str(form.get("DialCallSid") or "")
     if authorizations.owns(call_id) and (
