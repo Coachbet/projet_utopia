@@ -75,9 +75,7 @@ async def test_scenario_matches_its_expectations(name: str):
 
     recorder = InMemoryEventSink()
     bus = DeferredSink()
-    registry = SessionRegistry(
-        transcriber_factory=FakeTranscriber, sink=bus, settings=settings
-    )
+    registry = SessionRegistry(transcriber_factory=FakeTranscriber, sink=bus, settings=settings)
     pipeline = ScoringPipeline(
         registry=registry,
         keyword_engine=KeywordDetector(),

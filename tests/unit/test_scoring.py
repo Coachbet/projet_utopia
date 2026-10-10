@@ -158,9 +158,7 @@ def build(
     settings = settings or settings_for()
     recorder = InMemoryEventSink()
     bus = Bus()
-    registry = SessionRegistry(
-        transcriber_factory=FakeTranscriber, sink=bus, settings=settings
-    )
+    registry = SessionRegistry(transcriber_factory=FakeTranscriber, sink=bus, settings=settings)
     pipeline = ScoringPipeline(
         registry=registry,
         keyword_engine=keywords if keywords is not None else StubKeywords(),
@@ -373,9 +371,7 @@ async def test_the_pipeline_ignores_its_own_events(own_type):
     harness, registry = build()
     await registry.open("CA1")
 
-    await harness.pipeline.emit(
-        Event(call_id="CA1", t=1.0, type=own_type, data={"score": 90})
-    )
+    await harness.pipeline.emit(Event(call_id="CA1", t=1.0, type=own_type, data={"score": 90}))
 
     assert harness.recorder.events == []
 
@@ -454,9 +450,7 @@ async def test_no_audio_tap_when_the_detector_is_disabled():
 
 
 async def test_the_audio_tap_satisfies_the_audio_consumer_port():
-    harness, registry = build(
-        voice_factory=lambda: FakeVoiceDetector(), settings=voice_settings()
-    )
+    harness, registry = build(voice_factory=lambda: FakeVoiceDetector(), settings=voice_settings())
     session = await registry.open("CA1")
 
     assert isinstance(harness.pipeline.audio_tap(session), AudioConsumer)
@@ -548,9 +542,7 @@ async def test_fake_analyzer_detects_the_demo_scenario():
 
 
 async def test_fake_analyzer_stays_quiet_on_a_legitimate_call():
-    signal = await FakeContentAnalyzer().analyze(
-        [seg("je passe dimanche, j'apporte le gâteau")]
-    )
+    signal = await FakeContentAnalyzer().analyze([seg("je passe dimanche, j'apporte le gâteau")])
 
     assert signal is not None
     assert signal.risk == 0.0
@@ -582,12 +574,8 @@ async def test_an_injected_clock_drives_the_event_timestamps():
     settings = settings_for()
     recorder = InMemoryEventSink()
     bus = Bus()
-    registry = SessionRegistry(
-        transcriber_factory=FakeTranscriber, sink=bus, settings=settings
-    )
-    pipeline = ScoringPipeline(
-        registry=registry, keyword_engine=StubKeywords(), settings=settings
-    )
+    registry = SessionRegistry(transcriber_factory=FakeTranscriber, sink=bus, settings=settings)
+    pipeline = ScoringPipeline(registry=registry, keyword_engine=StubKeywords(), settings=settings)
     bus.sinks = (recorder, pipeline)
 
     session = CallSession(

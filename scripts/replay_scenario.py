@@ -385,9 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Rejoue un ou plusieurs scénarios d'appel dans le pipeline complet.",
     )
-    parser.add_argument(
-        "scenarios", nargs="+", type=Path, help="fichiers JSON de scénario"
-    )
+    parser.add_argument("scenarios", nargs="+", type=Path, help="fichiers JSON de scénario")
     parser.add_argument(
         "--speed",
         type=float,

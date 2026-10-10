@@ -55,9 +55,7 @@ class _VoiceTap:
     appels dans le même tampon donnerait un score de voix absurde.
     """
 
-    def __init__(
-        self, session: CallSession, detector: VoiceDetector, sample_rate: int
-    ) -> None:
+    def __init__(self, session: CallSession, detector: VoiceDetector, sample_rate: int) -> None:
         self._session = session
         self._detector = detector
         self._sample_rate = sample_rate
@@ -110,9 +108,7 @@ class ScoringPipeline:
         """À passer en `audio_tap_factory` de `create_app`."""
         if self._voice_factory is None or not self._settings.voice_detector_enabled:
             return None
-        return _VoiceTap(
-            session, self._voice_factory(), self._settings.transcribe_sample_rate
-        )
+        return _VoiceTap(session, self._voice_factory(), self._settings.transcribe_sample_rate)
 
     async def emit(self, event: Event) -> None:
         """Port `EventSink`. Ne réagit qu'aux `transcript` finaux.
@@ -165,9 +161,7 @@ class ScoringPipeline:
     async def _run_keywords(self, session: CallSession) -> None:
         signal = self._keywords.scan_call(session.history)
         session.signals.keywords = signal
-        await session.emit(
-            EventType.KEYWORD, {"risk": signal.risk, "terms": list(signal.terms)}
-        )
+        await session.emit(EventType.KEYWORD, {"risk": signal.risk, "terms": list(signal.terms)})
 
     def _schedule_llm(self, session: CallSession) -> None:
         """Lance Claude en tâche de fond, un seul vol à la fois par appel.
@@ -253,9 +247,7 @@ class ScoringPipeline:
         )
 
     async def _publish_score(self, session: CallSession) -> RiskAssessment:
-        assessment = assess(
-            session.signals, weights=self._weights, thresholds=self._thresholds
-        )
+        assessment = assess(session.signals, weights=self._weights, thresholds=self._thresholds)
         await session.emit(
             EventType.SCORE,
             {

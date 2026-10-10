@@ -220,9 +220,7 @@ def _substitutability_errors(
     On ne signale donc que le sens dangereux — l'implémentation plus
     restrictive, ou un paramètre renommé, qui casse un appel légitime.
     """
-    port_params = [
-        p for p in port_signature.parameters.values() if p.name != "self"
-    ]
+    port_params = [p for p in port_signature.parameters.values() if p.name != "self"]
     impl_params = list(impl_signature.parameters.values())
     impl_by_name = {p.name: p for p in impl_params}
     kinds = {p.kind for p in impl_params}
@@ -258,12 +256,11 @@ def _substitutability_errors(
             and actual.default is inspect.Parameter.empty
         ):
             errors.append(
-                f"« {expected.name} » est devenu obligatoire alors que le port "
-                f"lui donne un défaut"
+                f"« {expected.name} » est devenu obligatoire alors que le port lui donne un défaut"
             )
         if expected.kind in _POSITIONAL and actual.kind in _POSITIONAL:
             positional_impl = [p.name for p in impl_params if p.kind in _POSITIONAL]
-            if positional_impl[:index + 1][-1:] != [expected.name]:
+            if positional_impl[: index + 1][-1:] != [expected.name]:
                 errors.append(
                     f"« {expected.name} » n'est plus en position {index} "
                     f"(ordre réel : {positional_impl})"
@@ -278,8 +275,7 @@ def _substitutability_errors(
     ]
     if extra_required:
         errors.append(
-            f"paramètre(s) obligatoire(s) en trop : {extra_required} — le port "
-            f"ne les fournit pas"
+            f"paramètre(s) obligatoire(s) en trop : {extra_required} — le port ne les fournit pas"
         )
     return errors
 
