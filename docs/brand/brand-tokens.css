@@ -1,0 +1,15 @@
+/* Cut the Line — brand tokens */
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap');
+
+:root {
+  --ctl-navy: #0E2A3B;        /* primary: text, dark backgrounds, logo strokes */
+  --ctl-navy-deep: #06141C;   /* hover / deepest shade */
+  --ctl-slate: #3A5363;       /* secondary text on light */
+  --ctl-mist: #C9D6DE;        /* secondary text on navy */
+  --ctl-surface: #F3F6F7;     /* page background */
+  --ctl-white: #FFFFFF;       /* cards */
+  --ctl-cut: #FF5A36;         /* accent: the "cut" — alerts, key highlights only */
+
+  --ctl-font: 'Bricolage Grotesque', 'Helvetica Neue', sans-serif;
+  --ctl-radius: 24px;
+}

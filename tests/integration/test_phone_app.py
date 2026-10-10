@@ -133,7 +133,7 @@ def test_la_page_de_l_app_est_servie(harness) -> None:
     reponse = client.get("/app")
     assert reponse.status_code == 200
     assert reponse.headers["content-type"].startswith("text/html")
-    assert "VocalGuard" in reponse.text
+    assert "Cut the Line" in reponse.text
     # La limite la plus importante de tout le lot doit rester écrite à l'écran :
     # une page web ne sonne que si elle est ouverte.
     assert "Laissez cette page ouverte" in reponse.text

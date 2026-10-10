@@ -6,9 +6,9 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#101d26" />
+    <meta name="theme-color" content="#0E2A3B" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="VocalGuard" />
+    <meta name="apple-mobile-web-app-title" content="Cut the Line" />
     <meta
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
@@ -17,23 +17,41 @@
     <link rel="manifest" href="/app/manifest.webmanifest" />
     <link rel="icon" href="/app/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/app/icon.svg" />
-    <title>VocalGuard · Vos appels, en confiance</title>
+    <title>Cut the Line · Ils pêchent, on coupe la ligne</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap"
+    />
     <style>
+      /* Cut the Line — l'app vit sur le marine de la marque. L'orange « cut »
+         est réservé à ce qui coupe : alertes, raccrocher, moments clés. */
       :root {
         color-scheme: dark;
-        --bg: #101d26;
-        --surface: #1c2b36;
-        --surface-raised: #243541;
-        --ink: #f5f8f8;
-        --muted: #b6c5cf;
-        --line: #394b57;
-        --brand: #a7efd1;
-        --brand-deep: #146c50;
-        --accept: #188759;
-        --reject: #bf3b44;
-        --warning: #f4c47c;
-        --critical: #ff8d96;
+        --ctl-navy: #0e2a3b;
+        --ctl-navy-deep: #06141c;
+        --ctl-slate: #3a5363;
+        --ctl-mist: #c9d6de;
+        --ctl-white: #ffffff;
+        --ctl-cut: #ff5a36;
+        --ctl-font: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+
+        --bg: var(--ctl-navy);
+        --surface: #143648;
+        --surface-raised: #1b4157;
+        --ink: var(--ctl-white);
+        --muted: var(--ctl-mist);
+        --line: #2b5168;
+        --brand: var(--ctl-white);
+        --brand-deep: var(--ctl-navy-deep);
+        --cut: var(--ctl-cut);
+        --accept: #1f9d6b;
+        --reject: var(--ctl-cut);
+        --warning: #f2b84b;
+        --critical: var(--ctl-cut);
         --radius: 24px;
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
       }
       * {
         box-sizing: border-box;
@@ -48,11 +66,8 @@
         background: var(--bg);
       }
       body {
-        font-family:
-          system-ui,
-          -apple-system,
-          "Segoe UI",
-          sans-serif;
+        font-family: var(--ctl-font);
+        font-optical-sizing: auto;
         font-size: 17px;
         line-height: 1.5;
         color: var(--ink);
@@ -92,8 +107,9 @@
       }
       h1,
       h2 {
-        line-height: 1.15;
-        letter-spacing: -0.04em;
+        line-height: 1.08;
+        letter-spacing: -0.045em;
+        font-weight: 800;
       }
       h1 {
         font-size: 36px;
@@ -122,23 +138,26 @@
       .brand {
         display: flex;
         align-items: center;
-        gap: 10px;
-        font-size: 21px;
-        font-weight: 740;
-        letter-spacing: -0.04em;
+        gap: 6px;
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -0.045em;
+        line-height: 1;
       }
       .brand-mark {
         display: grid;
         place-items: center;
-        background: var(--brand);
-        color: #12372c;
-        width: 36px;
-        height: 39px;
-        border-radius: 12px;
+        width: 34px;
+        height: 40px;
+        color: var(--ink);
+      }
+      .brand-mark svg {
+        width: 40px;
+        height: 40px;
       }
       .brand .mark {
-        font-weight: 450;
-        color: var(--brand);
+        font-weight: 400;
+        color: var(--ink);
       }
       .topbar {
         display: flex;
@@ -148,10 +167,10 @@
       }
       .eyebrow {
         text-transform: uppercase;
-        letter-spacing: 0.13em;
+        letter-spacing: 0.14em;
         font-size: 12px;
-        font-weight: 750;
-        color: var(--brand);
+        font-weight: 700;
+        color: var(--muted);
       }
       .aide,
       .note {
@@ -214,11 +233,11 @@
         flex: none;
       }
       .erreur {
-        color: #ffd0d4;
+        color: #ffd2c6;
         font-size: 15px;
         border-left: 3px solid var(--critical);
         padding: 10px 12px;
-        background: #482b35;
+        background: #3b2620;
         border-radius: 0 10px 10px 0;
       }
       .space {
@@ -236,14 +255,14 @@
         height: 14px;
       }
       .hero {
-        padding: 52px 0 26px;
+        padding: 36px 0 26px;
       }
       .hero h1 {
         max-width: 340px;
         font-size: 42px;
       }
       .hero h1 span {
-        color: var(--brand);
+        color: var(--cut);
       }
       .hero .aide {
         margin-top: 16px;
@@ -268,8 +287,8 @@
         min-height: 62px;
         letter-spacing: 0.35em;
         font-size: 25px;
-        background: #14232e;
-        border: 1px solid #59707c;
+        background: #0a2130;
+        border: 1px solid #4a6c80;
         border-radius: 13px;
         padding: 12px 16px;
         color: var(--ink);
@@ -315,12 +334,12 @@
       .shield-orbit {
         width: 134px;
         height: 134px;
-        border: 1px solid #2e6e59;
+        border: 1px solid #2b5168;
         border-radius: 50%;
         margin: 0 auto 28px;
         display: grid;
         place-items: center;
-        background: radial-gradient(circle, #234438 0, #172c2e 68%);
+        background: var(--surface);
         position: relative;
       }
       .shield-orbit:before {
@@ -328,7 +347,7 @@
         position: absolute;
         inset: 12px;
         border-radius: 50%;
-        border: 1px solid #416a5a;
+        border: 1px solid #35607a;
       }
       .shield-orbit svg {
         width: 58px;
@@ -359,7 +378,7 @@
       .puce {
         width: 8px;
         height: 8px;
-        background: #687b87;
+        background: #5d7a8c;
         border-radius: 50%;
         flex: none;
       }
@@ -404,15 +423,15 @@
         margin-top: 25px;
       }
       .waiting-note strong {
-        color: #dde6ea;
+        color: #e8f0f4;
         font-weight: 650;
       }
       .call-body {
         background: radial-gradient(
-          ellipse at 50% 28%,
-          #283f4a 0%,
-          #182b37 37%,
-          #101d26 77%
+          ellipse at 50% 26%,
+          #1b4157 0%,
+          #12334a 40%,
+          #0e2a3b 78%
         );
       }
       #ecran-appel {
@@ -430,7 +449,7 @@
         gap: 8px;
         font-size: 12px;
         letter-spacing: 0.025em;
-        color: #c8d7df;
+        color: var(--muted);
       }
       .call-header svg {
         width: 16px;
@@ -438,8 +457,9 @@
         color: var(--brand);
       }
       .call-header strong {
-        color: #eef4f6;
-        font-weight: 650;
+        color: var(--ink);
+        font-weight: 800;
+        letter-spacing: -0.02em;
       }
       .call-status {
         margin-top: 24px;
@@ -460,11 +480,11 @@
         place-items: center;
         border-radius: 50%;
         margin: 0 auto 23px;
-        background: linear-gradient(145deg, #466474, #293e4b);
-        border: 1px solid #658594;
-        color: #e6f1f5;
+        background: var(--surface-raised);
+        border: 1px solid #3e6880;
+        color: var(--ink);
         font-size: 32px;
-        font-weight: 650;
+        font-weight: 800;
         letter-spacing: -0.04em;
       }
       .avatar svg {
@@ -472,15 +492,15 @@
         height: 41px;
       }
       .nom {
-        font-size: 34px;
-        font-weight: 650;
-        letter-spacing: -0.04em;
+        font-size: 36px;
+        font-weight: 800;
+        letter-spacing: -0.045em;
         line-height: 1.2;
         overflow-wrap: anywhere;
       }
       .numero {
         font-size: 17px;
-        color: #c8d7df;
+        color: var(--muted);
         font-variant-numeric: tabular-nums;
         margin-top: 8px;
       }
@@ -493,44 +513,45 @@
         display: inline-flex;
         align-items: center;
         gap: 7px;
-        border: 1px solid #557483;
+        border: 1px solid #3e6880;
         border-radius: 99px;
-        background: #263d47;
+        background: var(--surface);
         padding: 7px 11px;
         font-size: 12px;
         font-weight: 550;
         margin-top: 17px;
-        color: #d9e4e9;
+        color: #e8f0f4;
       }
       .badge svg {
         width: 15px;
         height: 15px;
       }
       .badge[data-confiance="1"] {
-        border-color: #47826c;
-        background: #213f36;
-        color: #c0f5dc;
+        border-color: var(--ink);
+        background: var(--ink);
+        color: var(--ctl-navy);
       }
       .badge[data-confiance="0"] {
-        border-color: #947647;
-        background: #3b362b;
-        color: #ffda9e;
+        border-color: var(--warning);
+        background: #2e3530;
+        color: #ffd58a;
       }
       .risque {
-        border: 1px solid #527664;
-        border-radius: 15px;
+        border: 1px solid #3e6880;
+        border-radius: 16px;
         padding: 13px 15px;
         margin-top: 13px;
-        background: #203b33;
+        background: var(--surface);
+        transition: background 300ms var(--ease-out), border-color 300ms var(--ease-out);
       }
       .risque[data-niveau="watch"] {
-        border-color: #94764e;
-        background: #3b352b;
+        border-color: #b98a3a;
+        background: #2e3530;
       }
       .risque[data-niveau="alert"],
       .risque[data-niveau="intervene"] {
-        border-color: #b4636b;
-        background: #432c35;
+        border-color: var(--cut);
+        background: #3b2620;
       }
       .risque .entete {
         display: flex;
@@ -560,7 +581,7 @@
         height: 100%;
         background: var(--brand);
         width: 0;
-        transition: width 250ms ease;
+        transition: width 450ms var(--ease-out);
       }
       .risque[data-niveau="watch"] .jauge > span {
         background: var(--warning);
@@ -605,7 +626,7 @@
       }
       .round-action.accepter .circle {
         background: var(--accept);
-        box-shadow: 0 0 0 9px #2c9a6e17;
+        box-shadow: 0 0 0 9px #1f9d6b26;
         animation: pulse 2s ease-in-out infinite;
       }
       .round-action.refuser .circle {
@@ -654,12 +675,12 @@
       .phone-action[aria-pressed="true"] .circle {
         background: var(--brand);
         border-color: var(--brand);
-        color: #13352b;
+        color: var(--ctl-navy);
       }
       .phone-action.verify .circle {
-        background: #3e6658;
-        border-color: #739b87;
-        color: #d4f7e8;
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--ctl-navy);
       }
       .phone-action[disabled] .circle {
         opacity: 0.75;
@@ -694,8 +715,8 @@
         margin-top: 14px;
         text-align: center;
         font-size: 14px;
-        color: #dde8ed;
-        background: #263b48;
+        color: #e8f0f4;
+        background: var(--surface-raised);
         border-radius: 12px;
         padding: 12px;
       }
@@ -705,8 +726,8 @@
         padding: 50px 0;
       }
       .call-ended .avatar {
-        background: #2c3b45;
-        border-color: #4b5f6c;
+        background: var(--surface);
+        border-color: var(--line);
       }
       .call-ended h1 {
         font-size: 30px;
@@ -723,7 +744,7 @@
       .overlay {
         position: fixed;
         inset: 0;
-        background: #071218b8;
+        background: #06141ccc;
         z-index: 20;
         display: flex;
         align-items: flex-end;
@@ -735,17 +756,17 @@
         width: min(100%, 532px);
         max-height: 88dvh;
         overflow: auto;
-        border: 1px solid #516976;
-        background: #1c2d39;
+        border: 1px solid var(--line);
+        background: #12334a;
         border-radius: 28px 28px 0 0;
         padding: 13px 24px calc(26px + env(safe-area-inset-bottom));
         box-shadow: 0 -12px 70px #0005;
-        animation: slide-in 0.22s ease-out;
+        animation: slide-in 0.36s var(--ease-out);
       }
       .handle {
         width: 42px;
         height: 4px;
-        background: #758b96;
+        background: #4a6c80;
         border-radius: 99px;
         margin: 0 auto 17px;
       }
@@ -774,8 +795,8 @@
         margin-top: 23px;
       }
       .code .chiffres {
-        font-size: 51px;
-        font-weight: 750;
+        font-size: 54px;
+        font-weight: 800;
         letter-spacing: 0.1em;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
@@ -790,10 +811,11 @@
         font-size: 20px;
         font-weight: 650;
         line-height: 1.35;
-        color: #c4f7de;
+        color: var(--ctl-navy-deep);
+        font-weight: 700;
         margin-top: 24px;
         padding: 17px;
-        background: #294c3e;
+        background: var(--cut);
         border-radius: 16px;
       }
       .code-target {
@@ -807,16 +829,20 @@
         padding: 24px;
       }
       .alerte {
-        background: #6d2733;
-        border-color: #b96773;
+        background: var(--cut);
+        border-color: var(--cut);
+        color: var(--ctl-navy-deep);
+        position: relative;
+        overflow: hidden;
         border-radius: 28px;
         padding: 28px 24px;
         text-align: center;
         width: min(100%, 460px);
       }
       .alert-icon {
-        background: #ffffff17;
-        border: 1px solid #edacb366;
+        background: #06141c1a;
+        border: 2px solid var(--ctl-navy-deep);
+        color: var(--ctl-navy-deep);
         border-radius: 50%;
         width: 68px;
         height: 68px;
@@ -840,12 +866,12 @@
       }
       .alerte .detail {
         font-size: 15px;
-        color: #ffdde2;
+        color: var(--ctl-navy-deep);
         margin: 0 0 23px;
       }
       .alerte .principal {
-        background: #ffedf0;
-        color: #671e2a;
+        background: var(--ctl-navy-deep);
+        color: var(--ink);
       }
       .keypad-display {
         font-variant-numeric: tabular-nums;
@@ -868,14 +894,14 @@
         flex-direction: column;
         min-height: 64px;
         border-radius: 18px;
-        border: 1px solid #546a77;
-        background: #314551;
+        border: 1px solid #3e6880;
+        background: var(--surface-raised);
         font-size: 27px;
       }
       .keypad-grid button small {
         font-size: 9px;
         letter-spacing: 0.18em;
-        color: #d2e0e7;
+        color: var(--muted);
       }
       .audio-options {
         display: flex;
@@ -886,10 +912,10 @@
       .audio-options button {
         min-height: 56px;
         text-align: left;
-        border: 1px solid #526d7c;
+        border: 1px solid #3e6880;
         padding: 14px;
         border-radius: 12px;
-        background: #2c424f;
+        background: var(--surface-raised);
         color: var(--ink);
       }
       .audio-options button[aria-pressed="true"] {
@@ -924,7 +950,7 @@
       .history-group {
         font-size: 12px;
         font-weight: 700;
-        color: #bdcdd5;
+        color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.1em;
         padding: 14px 0 10px;
@@ -947,8 +973,8 @@
         display: grid;
         place-items: center;
         border-radius: 50%;
-        background: #2a414e;
-        color: #c9e3ee;
+        background: var(--surface-raised);
+        color: #e8f0f4;
         font-size: 15px;
         font-weight: 650;
       }
@@ -968,7 +994,7 @@
         overflow-wrap: anywhere;
       }
       .history-row.missed .history-name {
-        color: #ffadb3;
+        color: #ff8a6e;
       }
       .history-origin {
         font-size: 13px;
@@ -997,26 +1023,26 @@
         gap: 5px;
         align-items: center;
         padding: 3px 7px;
-        background: #29483d;
-        color: #c1f0d8;
+        background: var(--surface-raised);
+        color: #e8f0f4;
         white-space: nowrap;
       }
       .level-chip[data-level="watch"] {
-        background: #493c28;
-        color: #ffda9e;
+        background: #3a3524;
+        color: #ffd58a;
       }
       .level-chip[data-level="alert"] {
-        background: #573640;
-        color: #ffd0d6;
+        background: #4a2a22;
+        color: #ffb39e;
       }
       .level-chip[data-level="intervene"] {
-        background: #342734;
-        border: 1px solid #967988;
-        color: #f7d3e4;
+        background: var(--cut);
+        border: 1px solid var(--cut);
+        color: var(--ctl-navy-deep);
       }
       .level-chip[data-level="unknown"] {
-        background: #2b3d4b;
-        color: #c8d7e0;
+        background: var(--surface);
+        color: var(--muted);
       }
       .empty-state {
         text-align: center;
@@ -1118,7 +1144,7 @@
       }
       .timeline-bar {
         height: 7px;
-        background: #485d69;
+        background: var(--line);
         border-radius: 99px;
         margin: 15px 6px 10px;
         position: relative;
@@ -1129,16 +1155,16 @@
         transform: translateX(-50%);
         width: 17px;
         height: 17px;
-        border: 3px solid #1c2b36;
+        border: 3px solid var(--surface);
         border-radius: 50%;
         background: var(--warning);
       }
       .timeline-marker[data-level="alert"] {
-        background: #ff9c9f;
+        background: #ff8a6e;
       }
       .timeline-marker[data-level="intervene"] {
-        background: #fff;
-        border-color: #784759;
+        background: var(--cut);
+        border-color: var(--surface);
       }
       .timeline-range {
         display: flex;
@@ -1158,7 +1184,7 @@
         font-size: 12px;
         color: var(--muted);
         text-align: center;
-        background: #263945;
+        background: var(--surface-raised);
         border-radius: 10px;
         padding: 9px 3px;
       }
@@ -1170,10 +1196,10 @@
         font-variant-numeric: tabular-nums;
       }
       .threshold[data-level="alert"] strong {
-        color: #ffabb4;
+        color: #ff8a6e;
       }
       .threshold[data-level="intervene"] strong {
-        color: #f2d6e2;
+        color: var(--cut);
       }
       .threshold.not-crossed strong {
         color: var(--muted);
@@ -1195,7 +1221,7 @@
         font-size: 12px;
       }
       .signal-bar {
-        background: #3c505d;
+        background: var(--line);
         border-radius: 8px;
         height: 6px;
         margin-top: 8px;
@@ -1208,13 +1234,13 @@
         border-radius: 8px;
       }
       .signal:nth-child(3) .signal-bar > span {
-        background: #a8cdeb;
+        background: #9cc3d8;
       }
       .signal:nth-child(4) .signal-bar > span {
-        background: #dac8ec;
+        background: var(--muted);
       }
       .signal:nth-child(5) .signal-bar > span {
-        background: #edc4a5;
+        background: var(--warning);
       }
       .signal-note {
         font-size: 12px;
@@ -1228,14 +1254,14 @@
         flex-wrap: wrap;
       }
       .tag {
-        background: #344854;
-        border: 1px solid #556b77;
+        background: var(--surface-raised);
+        border: 1px solid #3e6880;
         font-size: 12px;
         padding: 5px 9px;
         border-radius: 99px;
       }
       .detail-copy {
-        color: #d8e3e9;
+        color: #e8f0f4;
         font-size: 14px;
         line-height: 1.65;
         overflow-wrap: anywhere;
@@ -1244,7 +1270,7 @@
         list-style: none;
         padding: 0;
         margin: 0;
-        color: #d8e3e9;
+        color: #e8f0f4;
         font-size: 13px;
       }
       .actions-list li {
@@ -1293,9 +1319,146 @@
         white-space: nowrap;
         border: 0;
       }
+      /* ---- Signature Cut the Line : la ligne se coupe ------------------- */
+      .hero-mark {
+        width: 64px;
+        height: 144px;
+        margin: 0 0 22px -6px;
+        color: var(--ink);
+      }
+      .hero-mark svg {
+        width: 64px;
+        height: 144px;
+        overflow: visible;
+      }
+      .ctl-draw {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+        animation: ctl-draw 0.7s var(--ease-out) forwards;
+      }
+      .ctl-draw.d1 {
+        animation-delay: 0.12s;
+      }
+      .ctl-draw.d2 {
+        animation-delay: 0.22s;
+      }
+      .ctl-draw.d3 {
+        animation-delay: 0.32s;
+      }
+      .ctl-draw.d4 {
+        animation-delay: 0.42s;
+      }
+      .ctl-draw.d5 {
+        animation-delay: 0.52s;
+      }
+      .ctl-draw.d6 {
+        animation-delay: 0.62s;
+      }
+      .ctl-cut {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+        animation: ctl-draw 0.32s cubic-bezier(0.7, 0, 0.3, 1) 1.05s forwards;
+      }
+      .ctl-hook {
+        transform-box: fill-box;
+        transform-origin: 80% 0%;
+        animation: ctl-drop 0.9s var(--ease-out) 1.3s forwards;
+      }
+      @keyframes ctl-draw {
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+      @keyframes ctl-drop {
+        to {
+          transform: translate(0, 14px) rotate(6deg);
+          opacity: 0.5;
+        }
+      }
+      /* Écrans : entrée sobre, sans fondu générique sur chaque carte. */
+      main > section:not([hidden]) {
+        animation: screen-in 0.45s var(--ease-out);
+      }
+      @keyframes screen-in {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+      }
+      /* Appel entrant : l'avatar « sonne », pas l'écran entier. */
+      body.call-body:not(.in-call) .appelant .avatar {
+        animation: ring 2.2s var(--ease-out) infinite;
+      }
+      @keyframes ring {
+        0% {
+          box-shadow:
+            0 0 0 0 #ffffff40,
+            0 0 0 0 #ffffff26;
+        }
+        70%,
+        100% {
+          box-shadow:
+            0 0 0 22px #ffffff00,
+            0 0 0 40px #ffffff00;
+        }
+      }
+      /* L'alerte arrive comme une coupure : un trait marine barre la feuille. */
+      .alert-overlay .alerte {
+        animation: alert-in 0.42s var(--ease-out);
+      }
+      .alerte::before {
+        content: "";
+        position: absolute;
+        left: -8%;
+        top: 22px;
+        width: 116%;
+        height: 7px;
+        border-radius: 7px;
+        background: var(--ctl-navy-deep);
+        opacity: 0.16;
+        transform: rotate(-9deg) scaleX(0);
+        transform-origin: left center;
+        animation: slash 0.5s cubic-bezier(0.7, 0, 0.3, 1) 0.18s forwards;
+      }
+      @keyframes alert-in {
+        from {
+          opacity: 0;
+          transform: scale(0.94) translateY(12px);
+        }
+      }
+      @keyframes slash {
+        to {
+          transform: rotate(-9deg) scaleX(1);
+        }
+      }
+      /* Onglet actif : le petit trait orange de la marque. */
+      .phone-tabs > button[aria-selected="true"]::after {
+        content: "";
+        position: absolute;
+        bottom: 4px;
+        width: 18px;
+        height: 3px;
+        border-radius: 3px;
+        background: var(--cut);
+        transform: rotate(-12deg);
+      }
+      .principal,
+      .phone-action .circle,
+      .round-action .circle,
+      .dialer-keypad > button {
+        transition:
+          transform 160ms var(--ease-out),
+          background 200ms var(--ease-out);
+      }
+      .empty-state > svg.empty-mark {
+        width: 56px;
+        height: 66px;
+        color: var(--ink);
+        margin-bottom: 8px;
+      }
       @keyframes pulse {
         50% {
-          box-shadow: 0 0 0 16px #2c9a6e08;
+          box-shadow: 0 0 0 18px #1f9d6b00;
         }
       }
       @keyframes slide-in {
@@ -1314,6 +1477,13 @@
         *:after {
           animation: none !important;
           transition: none !important;
+        }
+        .ctl-draw,
+        .ctl-cut {
+          stroke-dashoffset: 0;
+        }
+        .alerte::before {
+          transform: rotate(-9deg) scaleX(1);
         }
       }
       @media (max-width: 360px) {
@@ -1422,9 +1592,9 @@
         width: min(100%, 560px);
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        background: #14242fef;
+        background: #0b2433f0;
         backdrop-filter: blur(20px);
-        border-top: 1px solid #4b626e73;
+        border-top: 1px solid #2b516899;
         padding: 10px 12px calc(13px + env(safe-area-inset-bottom));
         gap: 3px;
       }
@@ -1439,7 +1609,7 @@
         border: 0;
         border-radius: 13px;
         background: none;
-        color: #a8bdca;
+        color: #9fb6c4;
         font-size: 11px;
         font-weight: 600;
         padding: 6px 2px;
@@ -1449,15 +1619,16 @@
         height: 23px;
       }
       .phone-tabs > button[aria-selected="true"] {
-        background: #a7efd112;
-        color: var(--brand);
+        background: #ffffff14;
+        color: var(--ink);
       }
       .tab-badge {
         position: absolute;
         top: 0;
         right: 24%;
-        background: #d54152;
-        color: #fff;
+        background: var(--cut);
+        color: var(--ctl-navy-deep);
+        font-weight: 700;
         font-size: 10px;
         border-radius: 99px;
         min-width: 15px;
@@ -1479,8 +1650,8 @@
       }
       .segmented {
         display: flex;
-        background: #223541;
-        border: 1px solid #405562;
+        background: #12334a;
+        border: 1px solid var(--line);
         border-radius: 11px;
         padding: 3px;
         gap: 3px;
@@ -1491,13 +1662,13 @@
         border: 0;
         border-radius: 8px;
         background: none;
-        color: #bdccd5;
+        color: var(--muted);
         font-size: 13px;
         font-weight: 600;
       }
       .segmented > button[aria-pressed="true"] {
-        background: #526c79;
-        color: #fff;
+        background: var(--ink);
+        color: var(--ctl-navy);
       }
       .phone-shell .history-list {
         margin-top: 11px;
@@ -1522,12 +1693,12 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        background: #213541;
-        border: 1px solid #405562;
+        background: #12334a;
+        border: 1px solid var(--line);
         border-radius: 13px;
         padding: 0 13px;
         min-height: 48px;
-        color: #aac0ce;
+        color: #9fb6c4;
       }
       .search-field svg {
         width: 19px;
@@ -1543,7 +1714,7 @@
         outline-offset: 2px;
       }
       .search-field input::placeholder {
-        color: #a5b8c4;
+        color: #8fa9b9;
       }
       .contacts-list,
       .voicemail-list {
@@ -1594,8 +1765,8 @@
         width: 45px;
         height: 45px;
         border-radius: 50%;
-        border: 1px solid #527265;
-        background: #264638;
+        border: 1px solid #3e6880;
+        background: var(--surface-raised);
         color: var(--brand);
         display: grid;
         place-items: center;
@@ -1631,7 +1802,7 @@
       }
       .dialer-number::placeholder {
         font-size: 23px;
-        color: #8aa2b2;
+        color: #8fa9b9;
       }
       .dialer-edit {
         display: flex;
@@ -1661,9 +1832,9 @@
         height: 76px;
         border-radius: 50%;
         margin: auto;
-        background: #283e4b;
-        border: 1px solid #47606e;
-        color: #f5f8fa;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        color: var(--ink);
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -1676,7 +1847,7 @@
         font-size: 10px;
         letter-spacing: 0.16em;
         margin-top: 3px;
-        color: #c6d7df;
+        color: var(--muted);
       }
       .dialer-call {
         display: grid;
@@ -1684,7 +1855,7 @@
         width: 76px;
         height: 76px;
         border-radius: 50%;
-        background: #188759;
+        background: var(--accept);
         color: #fff;
         border: 0;
         margin: 20px auto 5px;
@@ -1695,7 +1866,7 @@
       }
       .dialer-status {
         font-size: 14px;
-        color: #dbe8ee;
+        color: #e8f0f4;
         margin: 12px 0 4px;
         line-height: 1.6;
       }
@@ -1779,9 +1950,9 @@
         padding-left: 18px;
       }
       .voicemail-listen {
-        border: 1px solid #4d7865;
-        background: #234539;
-        color: #cbf6dd;
+        border: 1px solid #3e6880;
+        background: var(--surface-raised);
+        color: var(--ink);
         border-radius: 11px;
         min-height: 43px;
         padding: 9px 13px;
@@ -1796,9 +1967,9 @@
         height: 16px;
       }
       .voicemail-call {
-        border: 1px solid #496270;
-        background: #233844;
-        color: #d3e2e8;
+        border: 1px solid #3e6880;
+        background: var(--surface);
+        color: #e8f0f4;
         border-radius: 11px;
         min-height: 43px;
         width: 43px;
@@ -1922,126 +2093,38 @@
   </head>
   <body>
     <svg hidden aria-hidden="true">
-      <symbol id="i-bouclier" viewBox="0 0 24 24">
-        <path
-          d="M12 2l8 2.7v6.1c0 4.6-3.3 8.3-8 11-4.7-2.7-8-6.4-8-11V4.7L12 2zm-1.2 13.2l5-5-1.5-1.4-3.5 3.5-1.8-1.8L7.5 12l3.3 3.2z"
-        />
-      </symbol>
-      <symbol id="i-telephone" viewBox="0 0 24 24">
-        <path
-          d="M6.6 2.5l2.6-.4c.6-.1 1.2.3 1.3.9l.8 3.6c.1.5-.1 1-.6 1.3l-1.9 1c.6 2 2.2 3.9 4.3 5.1l1.3-1.6c.3-.4.9-.6 1.4-.4l3.4 1.4c.5.2.8.9.6 1.4l-1 2.5c-.2.6-.9 1-1.5.8C11.4 16.9 6.1 11.8 4.6 5.3c-.2-.7.2-1.4.9-1.6.4-.1.7-.2 1.1-.2z"
-        />
-      </symbol>
-      <symbol id="i-raccrocher" viewBox="0 0 24 24">
-        <path
-          d="M12 6c-3 0-5.9.7-8.4 2.1-.9.5-1.3 1.6-1 2.6l.7 2.1c.2.7 1 1.1 1.7.9l2.8-.9c.6-.2 1-.8 1-1.4v-1.2c2.1-.6 4.3-.6 6.4 0v1.2c0 .6.4 1.2 1 1.4l2.8.9c.7.2 1.5-.2 1.7-.9l.7-2.1c.3-1-.1-2.1-1-2.6C17.9 6.7 15 6 12 6z"
-        />
-      </symbol>
-      <symbol id="i-pause" viewBox="0 0 24 24">
-        <path d="M7 4h4v16H7zM13 4h4v16h-4z" />
-      </symbol>
-      <symbol id="i-reprendre" viewBox="0 0 24 24">
-        <path d="M7 4l13 8-13 8z" />
-      </symbol>
-      <symbol id="i-cle" viewBox="0 0 24 24">
-        <path
-          d="M14 2a7 7 0 00-6.7 9L2 16.3V22h5.7l1.4-1.4V18h2.3l1.4-1.4v-2.3h1.6A7 7 0 1014 2zm2.5 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"
-        />
-      </symbol>
-      <symbol id="i-ok" viewBox="0 0 24 24">
-        <path
-          d="M12 2a10 10 0 100 20 10 10 0 000-20zm-1.3 14.6l-4-4 1.6-1.6 2.4 2.4 5.1-5.1 1.6 1.6-6.7 6.7z"
-        />
-      </symbol>
-      <symbol id="i-oeil" viewBox="0 0 24 24">
-        <path
-          d="M12 5C7 5 2.9 8.1 1 12c1.9 3.9 6 7 11 7s9.1-3.1 11-7c-1.9-3.9-6-7-11-7zm0 11a4 4 0 110-8 4 4 0 010 8zm0-2a2 2 0 100-4 2 2 0 000 4z"
-        />
-      </symbol>
-      <symbol id="i-attention" viewBox="0 0 24 24">
-        <path d="M12 2.5L23 21H1L12 2.5zM11 9v6h2V9h-2zm0 8v2h2v-2h-2z" />
-      </symbol>
-      <symbol id="i-danger" viewBox="0 0 24 24">
-        <path
-          d="M8.3 2h7.4L22 8.3v7.4L15.7 22H8.3L2 15.7V8.3L8.3 2zM11 7v7h2V7h-2zm0 9v2h2v-2h-2z"
-        />
-      </symbol>
-      <symbol id="i-inconnu" viewBox="0 0 24 24">
-        <path
-          d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2v2zm1.8-6.2l-.9.9c-.6.6-.9 1.1-.9 2.3h-2v-.5c0-.9.4-1.7 1-2.3l1.2-1.3c.4-.3.6-.8.6-1.4a2 2 0 10-4 0H8a4 4 0 118 0c0 .9-.4 1.6-1.2 2.3z"
-        />
-      </symbol>
-
-      <symbol id="i-personne" viewBox="0 0 24 24">
-        <path
-          d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-5 0-9 2.5-9 6v2h18v-2c0-3.5-4-6-9-6z"
-        />
-      </symbol>
-      <symbol id="i-micro" viewBox="0 0 24 24">
-        <path
-          d="M12 15a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v7a3 3 0 0 0 3 3zm-6-3H4a8 8 0 0 0 7 7.9V22h2v-2.1A8 8 0 0 0 20 12h-2a6 6 0 0 1-12 0z"
-        />
-      </symbol>
-      <symbol id="i-audio" viewBox="0 0 24 24">
-        <path
-          d="M3 9v6h4l5 4V5L7 9H3zm13-2-1.4 1.4a5 5 0 0 1 0 7.2L16 17a7 7 0 0 0 0-10zm3-3-1.4 1.4a9.3 9.3 0 0 1 0 13.2L19 20a11.3 11.3 0 0 0 0-16z"
-        />
-      </symbol>
-      <symbol id="i-clavier" viewBox="0 0 24 24">
-        <path
-          d="M5 2h4v4H5zm10 0h4v4h-4zM5 10h4v4H5zm10 0h4v4h-4zM5 18h4v4H5zm10 0h4v4h-4zM10 2h4v4h-4zm0 8h4v4h-4zm0 8h4v4h-4z"
-        />
-      </symbol>
-      <symbol id="i-historique" viewBox="0 0 24 24">
-        <path
-          d="M12 3a9 9 0 1 1-8.5 12H6a6.5 6.5 0 1 0 1.4-7H11v2H3V2h2v3.5A9 9 0 0 1 12 3zm-1 4h2v5l3 2-1.1 1.7L11 13V7z"
-        />
-      </symbol>
-      <symbol id="i-fleche" viewBox="0 0 24 24">
-        <path d="m15 4-8 8 8 8 1.5-1.5L10 12l6.5-6.5L15 4z" />
-      </symbol>
-      <symbol id="i-chevron" viewBox="0 0 24 24">
-        <path d="m9 5 7 7-7 7-1.5-1.5L13 12 7.5 6.5 9 5z" />
-      </symbol>
-      <symbol id="i-fermer" viewBox="0 0 24 24">
-        <path d="m6 4 6 6 6-6 2 2-6 6 6 6-2 2-6-6-6 6-2-2 6-6-6-6 2-2z" />
-      </symbol>
-      <symbol id="i-cadenas" viewBox="0 0 24 24">
-        <path
-          d="M6 9V7a6 6 0 0 1 12 0v2h2v13H4V9h2zm2 0h8V7a4 4 0 0 0-8 0v2zm3 4v5h2v-5h-2z"
-        />
-      </symbol>
-      <symbol id="i-recherche" viewBox="0 0 24 24">
-        <path
-          d="M10 2a8 8 0 1 0 5 14l5.5 5.5 1.5-1.5-5.5-5.5A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"
-        />
-      </symbol>
-      <symbol id="i-messagerie" viewBox="0 0 24 24">
-        <path
-          d="M6 5a6 6 0 1 0 4.5 10h3a6 6 0 1 0-1.5-4c0 .7.1 1.4.4 2h-1.8c.3-.6.4-1.3.4-2a6 6 0 0 0-5-6zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm12 0a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"
-        />
-      </symbol>
-      <symbol id="i-effacer" viewBox="0 0 24 24">
-        <path
-          d="M8 4h14v16H8L1 12l7-8zm1 2-5.3 6L9 18h11V6H9zm2 2 3 3 3-3 1.4 1.4-3 3 3 3L17 17l-3-3-3 3-1.4-1.4 3-3-3-3L11 8z"
-        />
-      </symbol>
-      <symbol id="i-actualiser" viewBox="0 0 24 24">
-        <path d="M18 4v3A8 8 0 1 0 20 15h-2a6 6 0 1 1-1-6h-4v2h7V4h-2z" />
-      </symbol>
-      <symbol id="i-corbeille" viewBox="0 0 24 24">
-        <path
-          d="M8 2h8v2h5v2H3V4h5V2zm-3 6h14l-1 14H6L5 8zm4 2v9h2v-9H9zm4 0v9h2v-9h-2z"
-        />
-      </symbol>
+      <symbol id="i-marque" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1.5v4.2"/><ellipse cx="12" cy="6.6" rx="2.6" ry="1"/><ellipse cx="12" cy="8.6" rx="2.6" ry="1"/><ellipse cx="12" cy="10.6" rx="2.6" ry="1"/><path d="M12 11.6v2"/><path d="M12.6 15.2v4.3a2.6 2.6 0 0 1-5.2 0v-1.4l1.1 1"/></g><path d="M8 15.6l7.6-2.7" fill="none" stroke="#ff5a36" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-bouclier" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1.5v4.2"/><ellipse cx="12" cy="6.6" rx="2.6" ry="1"/><ellipse cx="12" cy="8.6" rx="2.6" ry="1"/><ellipse cx="12" cy="10.6" rx="2.6" ry="1"/><path d="M12 11.6v2"/><path d="M12.6 15.2v4.3a2.6 2.6 0 0 1-5.2 0v-1.4l1.1 1"/></g><path d="M8 15.6l7.6-2.7" fill="none" stroke="#ff5a36" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-telephone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.2 3.5h3.1l1.6 4.1-2.1 1.4a11.5 11.5 0 0 0 7.2 7.2l1.4-2.1 4.1 1.6v3.1a1.9 1.9 0 0 1-2 1.9A16.3 16.3 0 0 1 3.3 5.5a1.9 1.9 0 0 1 1.9-2z"/></g></symbol>
+      <symbol id="i-raccrocher" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 14.2c5.2-5 13.6-5 18.8 0l-1.7 2.7-3.9-1.4v-2.6a12.6 12.6 0 0 0-7.6 0v2.6l-3.9 1.4z"/></g></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5v13M15 5.5v13"/></g></symbol>
+      <symbol id="i-reprendre" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5l10.5 6.5L8 18.5z"/></g></symbol>
+      <symbol id="i-cle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15.5" r="4.2"/><path d="M11 12.5l8.8-8.8M16.8 6.7l2.4 2.4M14.6 8.9l2 2"/></g></symbol>
+      <symbol id="i-ok" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.8 2.8 5.2-5.6"/></g></symbol>
+      <symbol id="i-oeil" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></g></symbol>
+      <symbol id="i-attention" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 22 20.2H2z"/><path d="M12 9.8v4.6M12 17.2v.1"/></g></symbol>
+      <symbol id="i-danger" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.4 2.6h7.2l5.8 5.8v7.2l-5.8 5.8H8.4l-5.8-5.8V8.4z"/><path d="M12 7.8v5.4M12 16.4v.1"/></g></symbol>
+      <symbol id="i-inconnu" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.4a2.7 2.7 0 1 1 3.9 2.4c-.8.4-1.3 1-1.3 1.9v.4M12 17v.1"/></g></symbol>
+      <symbol id="i-personne" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20.5c1.4-3.8 4.3-5.8 8-5.8s6.6 2 8 5.8"/></g></symbol>
+      <symbol id="i-micro" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.8" width="6" height="11.4" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3.3"/></g></symbol>
+      <symbol id="i-audio" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5h3.6L12 5.6v12.8l-4.9-3.9H3.5z"/><path d="M15.6 9a4.2 4.2 0 0 1 0 6M18.6 6.4a8 8 0 0 1 0 11.2"/></g></symbol>
+      <symbol id="i-clavier" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></g><g fill="currentColor"><circle cx="6" cy="5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><circle cx="18" cy="5" r="1.6"/><circle cx="6" cy="11" r="1.6"/><circle cx="12" cy="11" r="1.6"/><circle cx="18" cy="11" r="1.6"/><circle cx="6" cy="17" r="1.6"/><circle cx="12" cy="17" r="1.6"/><circle cx="18" cy="17" r="1.6"/><circle cx="12" cy="22" r="1.4"/></g></symbol>
+      <symbol id="i-historique" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 12a8.4 8.4 0 1 0 2.5-6"/><path d="M3.2 3.4V8h4.6M12 7.6V12l3.2 2"/></g></symbol>
+      <symbol id="i-fleche" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></g></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></g></symbol>
+      <symbol id="i-fermer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g></symbol>
+      <symbol id="i-cadenas" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.6"/><path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9M12 14.4v2.4"/></g></symbol>
+      <symbol id="i-recherche" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.4 15.4 5.3 5.3"/></g></symbol>
+      <symbol id="i-messagerie" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="12" r="3.6"/><circle cx="17.5" cy="12" r="3.6"/><path d="M6.5 15.6h11"/></g></symbol>
+      <symbol id="i-effacer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 5H21v14H8.6L2.6 12z"/><path d="m12 9.4 5 5.2M17 9.4l-5 5.2"/></g></symbol>
+      <symbol id="i-actualiser" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.6v4.6h-4.6"/></g></symbol>
+      <symbol id="i-corbeille" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16M9 6.5V4h6v2.5M6.4 6.5l1 13.6h9.2l1-13.6M10.4 10.4v6M13.6 10.4v6"/></g></symbol>
     </svg>
     <main>
       <section id="ecran-pin">
         <div class="topbar">
           <div class="brand">
-            <span class="brand-mark"
-              ><svg aria-hidden="true"><use href="#i-bouclier" /></svg></span
-            ><span>Vocal<span class="mark">Guard</span></span>
+            <span class="brand-mark"><svg aria-hidden="true"><use href="#i-marque" /></svg></span><span>Cut <span class="mark">the</span> Line</span>
           </div>
           <span class="status-chip"
             ><svg aria-hidden="true" style="width: 13px; height: 13px">
@@ -2051,13 +2134,28 @@
           >
         </div>
         <div class="hero">
-          <p class="eyebrow" style="margin-bottom: 17px">
-            La sérénité, au bout du fil
+          <div class="hero-mark" aria-hidden="true">
+            <svg viewBox="58 6 84 188">
+              <g fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+                <path class="ctl-draw" pathLength="1" d="M100 12 V51" />
+                <ellipse class="ctl-draw d1" pathLength="1" cx="100" cy="58" rx="13" ry="5" />
+                <ellipse class="ctl-draw d2" pathLength="1" cx="100" cy="67" rx="13" ry="5" />
+                <ellipse class="ctl-draw d3" pathLength="1" cx="100" cy="76" rx="13" ry="5" />
+                <ellipse class="ctl-draw d4" pathLength="1" cx="100" cy="85" rx="13" ry="5" />
+                <ellipse class="ctl-draw d5" pathLength="1" cx="100" cy="94" rx="13" ry="5" />
+                <path class="ctl-draw d6" pathLength="1" d="M100 100 V114" />
+                <g class="ctl-hook"><g transform="rotate(16 104 134)"><path class="ctl-draw d6" pathLength="1" d="M104 134 V168 A16 16 0 0 1 72 168 V157 L80 164" /></g></g>
+              </g>
+              <path class="ctl-cut" pathLength="1" d="M76 131 L128 113" fill="none" stroke="#ff5a36" stroke-width="7" stroke-linecap="round" />
+            </svg>
+          </div>
+          <p class="eyebrow" style="margin-bottom: 14px">
+            Détection d'arnaques vocales en temps réel
           </p>
-          <h1>Vos appels.<br /><span>En confiance.</span></h1>
+          <h1>Ils pêchent.<br /><span>On coupe la ligne.</span></h1>
           <p class="aide">
-            Une protection attentive pour repérer les signes de fraude pendant
-            vos appels.
+            Vos appels passent par Cut the Line. Les inconnus sont analysés
+            pendant l'appel, vos proches jamais.
           </p>
         </div>
         <div class="carte pin-card">
@@ -2100,9 +2198,7 @@
       <section id="ecran-attente" class="phone-shell" hidden>
         <div class="topbar shell-brand">
           <div class="brand">
-            <span class="brand-mark"
-              ><svg aria-hidden="true"><use href="#i-bouclier" /></svg></span
-            ><span>Vocal<span class="mark">Guard</span></span>
+            <span class="brand-mark"><svg aria-hidden="true"><use href="#i-marque" /></svg></span><span>Cut <span class="mark">the</span> Line</span>
           </div>
           <button
             id="connexion-chip"
@@ -2174,7 +2270,7 @@
             aria-label="Appels récents"
           ></ul>
           <div id="historique-vide" class="empty-state" hidden>
-            <svg aria-hidden="true"><use href="#i-historique" /></svg>
+            <svg aria-hidden="true" class="empty-mark" viewBox="0 0 24 24"><use href="#i-marque" /></svg>
             <h2 id="historique-vide-titre">Aucun appel pour le moment</h2>
             <p id="historique-vide-texte">
               Les prochains appels apparaîtront ici, avec leurs moments clés.
@@ -2413,7 +2509,7 @@
       <section id="ecran-appel" hidden>
         <p class="call-header">
           <svg aria-hidden="true"><use href="#i-bouclier" /></svg
-          ><strong>VocalGuard</strong> ·
+          ><strong>Cut the Line</strong> ·
           <span id="appel-protection-statut">appel protégé</span>
         </p>
         <p id="appel-statut" class="call-status" role="status">Appel entrant</p>
@@ -2460,7 +2556,7 @@
               padding: 7px 0;
               min-height: 44px;
               font-size: 13px;
-              color: #ffd5db;
+              color: #ffb39e;
             "
             hidden
           >

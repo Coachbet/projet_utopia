@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VocalGuard — surveillance d'appel en direct</title>
+<title>Cut the Line — surveillance d'appel en direct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap">
 <style>
 /* ------------------------------------------------------------------------
    Palette : instance de référence du système dataviz.
@@ -23,14 +26,15 @@
    ------------------------------------------------------------------------ */
 .viz-root {
   color-scheme: light;
-  --surface-1:      #fcfcfb;
-  --plane:          #f9f9f7;
-  --text-primary:   #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted:     #898781;
-  --gridline:       #e1e0d9;
-  --baseline:       #c3c2b7;
-  --border:         rgba(11,11,11,0.10);
+  --surface-1:      #ffffff;
+  --plane:          #f3f6f7;
+  --text-primary:   #0e2a3b;
+  --text-secondary: #3a5363;
+  --text-muted:     #5f7686;
+  --gridline:       #dde5ea;
+  --baseline:       #b7c6cf;
+  --border:         rgba(14,42,59,0.12);
+  --cut:            #ff5a36;
 
   --series-1: #2a78d6;  /* contenu / Claude */
   --series-2: #d9551f;  /* mots-clés */
@@ -46,14 +50,14 @@
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) .viz-root {
     color-scheme: dark;
-    --surface-1:      #1a1a19;
-    --plane:          #0d0d0d;
-    --text-primary:   #f0efec;
-    --text-secondary: #c3c2b7;
-    --text-muted:     #898781;
-    --gridline:       #2c2c2a;
-    --baseline:       #383835;
-    --border:         rgba(255,255,255,0.10);
+    --surface-1:      #0e2a3b;
+    --plane:          #06141c;
+    --text-primary:   #ffffff;
+    --text-secondary: #c9d6de;
+    --text-muted:     #93aab8;
+    --gridline:       #1f3d50;
+    --baseline:       #2b5168;
+    --border:         rgba(255,255,255,0.12);
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;
@@ -62,14 +66,14 @@
 }
 :root[data-theme="dark"] .viz-root {
   color-scheme: dark;
-  --surface-1:      #1a1a19;
-  --plane:          #0d0d0d;
-  --text-primary:   #f0efec;
-  --text-secondary: #c3c2b7;
-  --text-muted:     #898781;
-  --gridline:       #2c2c2a;
-  --baseline:       #383835;
-  --border:         rgba(255,255,255,0.10);
+  --surface-1:      #0e2a3b;
+  --plane:          #06141c;
+  --text-primary:   #ffffff;
+  --text-secondary: #c9d6de;
+  --text-muted:     #93aab8;
+  --gridline:       #1f3d50;
+  --baseline:       #2b5168;
+  --border:         rgba(255,255,255,0.12);
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-3: #199e70;
@@ -79,8 +83,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: var(--plane, #f9f9f7);
+  font-family: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  background: var(--plane, #f3f6f7);
 }
 .viz-root {
   background: var(--plane);
@@ -91,8 +95,10 @@ body {
 
 /* --- en-tête ----------------------------------------------------------- */
 .head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; margin-bottom: 18px; }
-.brand { font-size: 23px; font-weight: 650; letter-spacing: -0.01em; }
-.brand .mark { color: var(--text-secondary); font-weight: 500; }
+.brand { font-size: 24px; font-weight: 800; letter-spacing: -0.04em; display: flex; align-items: center; gap: 8px; }
+.brand .the { font-weight: 400; }
+.brand .mark { color: var(--text-secondary); font-weight: 500; font-size: 16px; letter-spacing: 0; margin-left: 6px; }
+.brand svg.logo { width: 30px; height: 30px; flex: none; }
 .callid {
   font-size: 14px; color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -426,7 +432,7 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
 
 <header class="head">
   <div>
-    <div class="brand">VocalGuard <span class="mark">· surveillance d'appel en direct</span></div>
+    <div class="brand"><svg class="logo" viewBox="56 6 88 190" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M100 12 V51"/><ellipse cx="100" cy="58" rx="13" ry="5"/><ellipse cx="100" cy="67" rx="13" ry="5"/><ellipse cx="100" cy="76" rx="13" ry="5"/><ellipse cx="100" cy="85" rx="13" ry="5"/><ellipse cx="100" cy="94" rx="13" ry="5"/><path d="M100 100 V114"/><g transform="rotate(16 104 134)"><path d="M104 134 V168 A16 16 0 0 1 72 168 V157 L80 164"/></g></g><path d="M76 131 L128 113" fill="none" stroke="#ff5a36" stroke-width="8" stroke-linecap="round"/></svg><span>Cut <span class="the">the</span> Line</span><span class="mark">· surveillance d'appel en direct</span></div>
     <div class="callid" id="callid">en attente d'appel</div>
   </div>
   <div class="head-right">
@@ -438,7 +444,7 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
 </header>
 
 <form id="dashboard-auth" class="card" style="margin:20px;max-width:520px">
-  <label for="dashboard-pin">Code d'accès VocalGuard</label>
+  <label for="dashboard-pin">Code d'accès Cut the Line</label>
   <div style="display:flex;gap:12px;margin-top:12px">
     <input id="dashboard-pin" type="password" inputmode="numeric" autocomplete="off"
       minlength="6" required aria-describedby="dashboard-auth-error"
