@@ -50,19 +50,26 @@ def harness():
         yield client, app, transcriber, sink
 
 
-def _start_frame(custom_parameters: dict[str, str] | None = None) -> str:
+def _start_frame(
+    custom_parameters: dict[str, str] | None = None,
+    *,
+    call_sid: str = CALL_ID,
+    stream_sid: str = STREAM_SID,
+) -> str:
     """La trame `start` de Twilio. `customParameters` est vide par défaut : c'est
-    littéralement ce que `inbound_call_twiml` produit aujourd'hui, son `<Stream>`
-    ne déclare aucun `<Parameter>`."""
+    le chemin DÉGRADÉ, celui où le flux média arrive sans que le webhook entrant
+    soit passé. Le `<Stream>` de `inbound_call_twiml` déclare bien un
+    `<Parameter name="caller_number">` ; les tests du chemin nominal le passent
+    explicitement en argument."""
     return json.dumps(
         {
             "event": "start",
             "sequenceNumber": "1",
-            "streamSid": STREAM_SID,
+            "streamSid": stream_sid,
             "start": {
-                "streamSid": STREAM_SID,
+                "streamSid": stream_sid,
                 "accountSid": "ACxxx",
-                "callSid": CALL_ID,
+                "callSid": call_sid,
                 "tracks": ["inbound", "outbound"],
                 "customParameters": custom_parameters or {},
                 "mediaFormat": {"encoding": "audio/x-mulaw", "sampleRate": 8000, "channels": 1},
@@ -324,6 +331,25 @@ def test_fermeture_du_media_stream_libere_l_appel(harness):
     assert client.get("/healthz").json()["active_calls"] == []
 
 
+def test_une_seconde_trame_start_ne_laisse_pas_la_premiere_session_orpheline(harness):
+    """Robustesse, pas cas réel : Twilio n'envoie qu'un `start` par connexion.
+
+    La boucle ne garde qu'une session courante et le `finally` ne libère que
+    celle-là : sans libération de la précédente, le premier appel restait dans
+    `registry.active()` avec ses streams Transcribe ouverts, jusqu'au prochain
+    redémarrage.
+    """
+    client, app, _, _ = harness
+
+    with client.websocket_connect("/ws/media") as ws:
+        ws.send_text(_start_frame(call_sid="CA_premier"))
+        ws.send_text(_media_frame("inbound", 0))
+        ws.send_text(_start_frame(call_sid="CA_second", stream_sid="MZ_second"))
+        ws.send_text(_media_frame("inbound", 1))
+
+    assert app.state.registry.active() == []
+
+
 def test_le_second_appel_refait_sa_verification_de_reputation(harness):
     """La régression qui compterait devant le jury : rejouer la démo.
 
@@ -422,8 +448,10 @@ def test_une_ouverture_tardive_recupere_le_numero_de_la_trame_start(harness):
 def test_une_ouverture_tardive_sans_numero_le_dit_bruyamment(harness, caplog):
     """Sans `<Parameter>`, l'appel doit survivre mais la perte doit s'entendre.
 
-    C'est le cas réel aujourd'hui : `inbound_call_twiml` ne déclare aucun
-    `<Parameter>` dans son `<Stream>`, donc `customParameters` arrive vide.
+    Ce n'est pas le cas nominal — `inbound_call_twiml` déclare bien un
+    `<Parameter name="caller_number">` — mais le chemin DÉGRADÉ : flux média
+    ouvert sans TwiML de chez nous (test manuel `wscat`, rejeu, ordre inversé),
+    donc `customParameters` arrive vide et personne ne connaît le `From`.
     """
     client, app, _, _ = harness
 
@@ -451,9 +479,10 @@ def test_le_flux_media_n_ecrase_jamais_le_numero_du_webhook(harness, caplog):
     """La régression la plus dangereuse de la correction.
 
     Sur le chemin NORMAL (webhook entrant puis flux média), le `From` du webhook
-    est la seule source fiable. Une ouverture tardive qui repasserait par
-    `registry.open` avec le numéro de la trame — vide, puisque le `<Stream>` ne
-    le déclare pas — remplacerait un signal réputation vivant par rien.
+    est la source de vérité. Une ouverture tardive qui repasserait par
+    `registry.open` avec le numéro de la trame — vide ici, comme chaque fois que
+    le `<Stream>` n'est pas celui de `inbound_call_twiml` — remplacerait un
+    signal réputation vivant par rien.
     """
     client, app, _, _ = harness
     client.post(

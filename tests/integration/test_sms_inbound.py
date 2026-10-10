@@ -179,6 +179,37 @@ def test_un_corps_incompris_ne_declenche_rien(client, appels_recus, body):
     assert appels_recus == []
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        # « non » et « jamais » sont d'abord des particules de discours en
+        # français : les chercher n'importe où dans le message faisait de chacun
+        # de ces SMS rassurants un démenti.
+        "Non mais oui c'est moi",
+        "il n'y a aucun problème, non ?",
+        "non je n'ai pas eu le temps, mais c'est bien moi",
+        "mais non c'est bien moi mamie",
+        "Oui c'est moi, je n'ai jamais eu de souci",
+        # « si » est ici une conjonction, pas un acquiescement : pas de démenti,
+        # et pas non plus de « le proche confirme » dans le journal.
+        "Si tu veux je te rappelle",
+    ],
+)
+def test_un_message_rassurant_n_est_pas_un_dementi(client, appels_recus, body):
+    """LE faux positif qui met en attente un vrai petit-fils.
+
+    Tous ces corps portent un mot négatif ET un mot affirmatif, ou un négatif en
+    position de remplissage. Les lire comme un démenti ferait mettre en attente
+    le vrai Lucas qui vient de confirmer être l'appelant — précisément le dégât
+    que `/twilio/sms/inbound` existe pour éviter.
+    """
+    _ouvrir_appel(client)
+
+    _sms(client, body)
+
+    assert appels_recus == [], f"« {body} » ne doit PAS compter comme un démenti"
+
+
 def test_sms_d_un_numero_etranger_ne_declenche_rien(client, appels_recus):
     """LE test de sécurité : notre numéro Twilio est public.
 

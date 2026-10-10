@@ -7,6 +7,22 @@ décision n'est prise ici : pas de seuil, pas de message, pas de choix d'action.
 Le point délicat est l'idempotence. Le score oscille naturellement d'un segment
 au suivant ; sans garde, un score qui passe de 66 à 70 à 67 répéterait l'annonce
 dans l'oreille de la victime toutes les deux secondes pendant la démo.
+
+Mais l'idempotence ne porte que sur ce qui a **réussi**. Une action ratée doit
+rester rejouable, parce que l'échec le plus fréquent est purement temporel : la
+victime décroche plusieurs secondes après l'appelant, et `announce_to_victim`
+exige que le participant victime soit déjà dans la conférence. Il suffit que le
+scammeur débite son texte pendant la sonnerie pour que le score atteigne 85
+avant le décroché — l'appelant partirait en attente et la victime n'entendrait
+plus jamais rien. On suit donc le détail des actions abouties
+(`CallSession.actions_done`) et pas un simple palier atteint.
+
+Le déclencheur idéal pour rejouer une annonce en attente n'est pas un score mais
+l'arrivée de la victime : `/twilio/conference/status` reçoit déjà l'événement
+`participant-join` (le TwiML déclare `statusCallbackEvent="start end join
+leave"`) et n'en fait qu'un `log.info`. Le brancher sur une relance d'annonce
+appartient à `interface/http/webhooks.py`, hors du périmètre de ce module ;
+signalé, pas codé.
 """
 
 from __future__ import annotations
@@ -106,32 +122,68 @@ class InterventionRunner:
             logger.exception("événement score ingérable, ignoré")
 
     async def handle_score(self, session: CallSession, assessment: RiskAssessment) -> None:
-        if assessment.level <= session.acted_level:
-            # Déjà traité à ce niveau : on ne refait rien d'audible.
+        level = assessment.level
+        if level <= session.acted_level:
+            # Palier déjà entièrement abouti : on ne refait rien d'audible.
             return
 
         actions = plan_actions(
-            assessment.level,
+            level,
             contact_name=self._contact_name(session),
             already_held=session.caller_held,
+            contact_already_texted=session.contact_texted,
         )
-        # Marqué avant exécution : deux événements `score` traités en parallèle
-        # ne doivent pas déclencher deux fois la même annonce.
-        session.acted_level = assessment.level
+
+        done = session.actions_done.setdefault(level, set())
+        # Réservation : on filtre puis on marque sans aucun `await` entre les
+        # deux, donc deux événements `score` traités en parallèle ne peuvent pas
+        # réserver la même action — c'est la propriété que donnait l'ancien
+        # `acted_level` marqué avant exécution, en plus fin.
+        #
+        # `done` est aussi ce qui évite une deuxième mise en attente : il
+        # mémorise HOLD_CALLER même après que l'opérateur a repris l'appel à la
+        # main (`interface/http/control.py` remet `caller_held` à False sans
+        # toucher `acted_level`, donc `plan_actions` replanifie le hold). La
+        # décision humaine l'emporte toujours sur le score, comme documenté
+        # là-bas, et elle y survit même si `acted_level` est resté en arrière à
+        # cause d'une action ratée.
+        pending = tuple(action for action in actions if action.kind not in done)
+        done.update(action.kind for action in pending)
+
+        if not pending:
+            # Rien à faire : tout a abouti, ou tout est en vol dans une autre
+            # tâche. On ne touche pas à `acted_level`, c'est à la tâche qui
+            # exécute réellement de dire si le palier est complet.
+            return
+
         logger.info(
-            "appel %s → %s (score %d) : %d action(s)",
+            "appel %s → %s (score %d) : %d action(s) sur %d à exécuter",
             session.call_id,
-            assessment.level.wire,
+            level.wire,
             assessment.score,
+            len(pending),
             len(actions),
         )
 
-        for action in actions:
+        all_ok = True
+        for action in pending:
             ok = await self._execute(session, action)
+            if not ok:
+                # On rend la réservation : un score suivant rejouera cette seule
+                # action. C'est ainsi que l'annonce finit par être entendue quand
+                # la victime a rejoint la conférence.
+                done.discard(action.kind)
+                all_ok = False
             await session.emit(
                 EventType.ACTION,
                 {"action": action.kind.value, "target": action.target, "ok": ok},
             )
+
+        if all_ok:
+            # Le palier n'avance que si tout a réussi. Sinon il reste en arrière
+            # pour qu'un prochain score repasse ici — avec, grâce à `done`, les
+            # seules actions manquantes.
+            session.acted_level = max(session.acted_level, level)
 
     def _contact_name(self, session: CallSession) -> str | None:
         """Le nom prononcé dans l'annonce d'intervention (« prévenu Lucas »).
@@ -171,7 +223,12 @@ class InterventionRunner:
                             "TRUSTED_CONTACT_PHONE_NUMBER vide : pas de SMS de vérification"
                         )
                         return False
-                    return await self._controller.send_sms(number, action.message)
+                    ok = await self._controller.send_sms(number, action.message)
+                    if ok:
+                        # Seul un SMS *parti* ferme la porte : un envoi refusé par
+                        # Twilio doit pouvoir être retenté au score suivant.
+                        session.contact_texted = True
+                    return ok
                 case ActionKind.NOTIFY_DASHBOARD:
                     # Le dashboard reçoit déjà tous les événements : rien à pousser.
                     return True

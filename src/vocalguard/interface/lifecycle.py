@@ -63,10 +63,21 @@ async def release_call(state: Any, call_id: str) -> None:
 
     # On n'attend délibérément PAS `pipeline.aclose()` : il attendrait les
     # requêtes Bedrock en vol, soit plusieurs secondes, et Twilio coupe le
-    # webhook bien avant. Conséquence assumée : une analyse LLM en vol peut
-    # encore émettre un `score` pour un appel déjà oublié. L'événement part au
-    # dashboard et s'arrête là — l'intervention ne trouvera plus de session, et
-    # un point de frise en trop sur un appel terminé ne coûte rien.
+    # webhook bien avant. Le choix reste le bon, mais la conséquence n'est pas
+    # anodine — une analyse LLM qui revient APRÈS cette purge fait trois choses
+    # dans `ScoringPipeline._run_llm`, toutes sur un appel mort :
+    #   - elle réinsère `_claimed_identity[call_id]`, et plus personne ne le
+    #     retirera : les deux déclencheurs de libération sont déjà passés. C'est
+    #     exactement la fuite que ce module existe pour éviter ;
+    #   - si l'identité revendiquée a changé, elle relance `_check_reputation`,
+    #     donc une requête Twilio Lookup v2 FACTURÉE pour un appel raccroché ;
+    #   - elle publie un `score`, sur lequel `InterventionRunner.handle_event` ne
+    #     trouve plus de session et logge « score reçu pour un appel inconnu » —
+    #     un WARNING qui ressemble à une panne alors que c'est la normale.
+    # La correction n'appartient pas ici mais à `application/scoring.py` : un
+    # garde `self._registry.get(call_id) is not None` dans `_run_llm`, avant
+    # d'écrire l'état, de vérifier la réputation et de publier le score. Fichier
+    # de Dev 2 : ne pas le modifier depuis ce côté-ci.
 
     if known:
         log.info("Appel %s libéré (%s)", call_id, ", ".join(freed))

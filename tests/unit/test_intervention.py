@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from vocalguard.application.intervention import InterventionRunner
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.config import Settings
-from vocalguard.domain.alerts import ANNOUNCE_ALERT, SMS_VERIFY_CONTACT
+from vocalguard.domain.alerts import ANNOUNCE_ALERT, SMS_VERIFY_CONTACT, AlertLevel
 from vocalguard.domain.events import Event, EventType
 from vocalguard.domain.models import ContentSignal
 from vocalguard.infrastructure.fakes.call_controller import LoggingCallController
@@ -91,14 +92,174 @@ async def test_une_aggravation_declenche_le_niveau_suivant() -> None:
     await runner.handle_event(_score_event(70, "alert"))
     await runner.handle_event(_score_event(90, "intervene"))
 
+    # Le SMS de vérification ne part qu'une fois : il figure dans les deux
+    # paliers, mais le proche ne doit pas recevoir deux fois la même question.
     assert [call[0] for call in controller.calls] == [
         "announce_to_victim",
         "send_sms",
         "hold_caller",
         "announce_to_victim",
-        "send_sms",
     ]
     assert session.caller_held is True
+    assert session.contact_texted is True
+
+
+async def test_le_sms_de_verification_ne_part_qu_une_fois_de_65_a_85() -> None:
+    """Le scénario exact de la démo : 65 puis 85. Sans la garde
+    `contact_already_texted`, le vrai proche reçoit deux fois « Est-ce toi qui
+    appelles en ce moment ? » à quelques secondes d'intervalle."""
+    runner, _, controller, sink = await _setup()
+
+    await runner.handle_event(_score_event(65, "alert"))
+    await runner.handle_event(_score_event(85, "intervene"))
+
+    envois = [call for call in controller.calls if call[0] == "send_sms"]
+    assert envois == [("send_sms", CONTACT, SMS_VERIFY_CONTACT)]
+    actions = [event.data["action"] for event in sink.by_type(EventType.ACTION)]
+    assert actions.count("sms_contact") == 1
+
+
+async def test_un_sms_en_echec_est_retente_au_score_suivant() -> None:
+    """Symétrie de la garde : seul un SMS *parti* ferme la porte."""
+
+    class SmsFlaky(LoggingCallController):
+        def __init__(self) -> None:
+            super().__init__()
+            self.tentatives = 0
+
+        async def send_sms(self, to_number: str, message: str) -> bool:
+            self.tentatives += 1
+            if self.tentatives == 1:
+                return False
+            return await super().send_sms(to_number, message)
+
+    controller = SmsFlaky()
+    runner, session, _, _ = await _setup(controller=controller)
+
+    await runner.handle_event(_score_event(70, "alert"))
+    assert session.contact_texted is False
+
+    await runner.handle_event(_score_event(72, "alert"))
+
+    assert controller.tentatives == 2
+    assert session.contact_texted is True
+    # L'annonce, elle, avait réussi du premier coup : elle n'est pas rejouée.
+    assert [call[0] for call in controller.calls].count("announce_to_victim") == 1
+
+
+async def test_une_annonce_ratee_est_rejouee_quand_la_victime_a_rejoint() -> None:
+    """La condition de course la plus dangereuse de la démo.
+
+    L'appelant parle pendant la sonnerie, le score atteint 90 avant que la
+    victime décroche : `announce_to_victim` échoue parce que le participant
+    victime n'est pas encore dans la conférence. Sans cette correction, le
+    palier `intervene` était marqué atteint et la victime n'entendait plus
+    jamais rien — appelant en attente, téléphone muet.
+    """
+
+    class AnnounceFailsUntilVictimJoins(LoggingCallController):
+        def __init__(self) -> None:
+            super().__init__()
+            self.victime_presente = False
+
+        async def announce_to_victim(self, call_id: str, message: str) -> bool:
+            if not self.victime_presente:
+                return False
+            return await super().announce_to_victim(call_id, message)
+
+    controller = AnnounceFailsUntilVictimJoins()
+    runner, session, _, sink = await _setup(controller=controller)
+
+    await runner.handle_event(_score_event(90, "intervene"))
+    assert [call[0] for call in controller.calls] == ["hold_caller", "send_sms"]
+    assert session.acted_level is AlertLevel.NONE, "un palier raté ne doit pas être marqué atteint"
+
+    controller.victime_presente = True
+    await runner.handle_event(_score_event(95, "intervene"))
+
+    # L'annonce finit par être jouée, et rien d'autre n'est rejoué : ni une
+    # seconde mise en attente, ni un second SMS.
+    assert [call[0] for call in controller.calls] == [
+        "hold_caller",
+        "send_sms",
+        "announce_to_victim",
+    ]
+    assert session.acted_level is AlertLevel.INTERVENE
+    annonces = [
+        event.data["ok"]
+        for event in sink.by_type(EventType.ACTION)
+        if event.data["action"] == "announce_victim"
+    ]
+    assert annonces == [False, True]
+
+
+async def test_une_annonce_reussie_n_est_pas_rejouee_par_un_score_qui_oscille() -> None:
+    """L'autre moitié du contrat, aussi importante : le palier ne se rejoue que
+    pour ce qui a ÉCHOUÉ. Ici le SMS échoue indéfiniment (numéro refusé) et le
+    score oscille — l'annonce ne doit pas être répétée dans l'oreille de la
+    victime à chaque score."""
+
+    class SmsAlwaysFails(LoggingCallController):
+        def __init__(self) -> None:
+            super().__init__()
+            self.tentatives_sms = 0
+
+        async def send_sms(self, to_number: str, message: str) -> bool:
+            self.tentatives_sms += 1
+            return False
+
+    controller = SmsAlwaysFails()
+    runner, session, _, _ = await _setup(controller=controller)
+
+    for score in (90, 86, 92, 88):
+        await runner.handle_event(_score_event(score, "intervene"))
+
+    kinds = [call[0] for call in controller.calls]
+    assert kinds.count("announce_to_victim") == 1
+    assert kinds.count("hold_caller") == 1
+    # Seule l'action en échec est retentée, à chaque score.
+    assert controller.tentatives_sms == 4
+    assert session.acted_level is AlertLevel.NONE
+
+
+async def test_deux_scores_en_parallele_ne_doublent_pas_les_actions() -> None:
+    """L'ancien code marquait `acted_level` avant exécution pour ça : la
+    réservation par action doit garder la propriété."""
+    runner, _, controller, _ = await _setup()
+
+    await asyncio.gather(
+        runner.handle_event(_score_event(90, "intervene")),
+        runner.handle_event(_score_event(91, "intervene")),
+    )
+
+    kinds = [call[0] for call in controller.calls]
+    assert kinds == ["hold_caller", "announce_to_victim", "send_sms"]
+
+
+async def test_une_reprise_manuelle_ne_remet_pas_l_appelant_en_attente() -> None:
+    """`interface/http/control.py` remet `caller_held` à False sans toucher
+    `acted_level` : la décision humaine l'emporte sur le score. Elle doit y
+    survivre même quand `acted_level` est resté en arrière à cause d'une action
+    ratée — sinon le prochain score remettrait le scammeur en attente."""
+
+    class AnnounceFails(LoggingCallController):
+        async def announce_to_victim(self, call_id: str, message: str) -> bool:
+            return False
+
+    controller = AnnounceFails()
+    runner, session, _, _ = await _setup(controller=controller)
+
+    await runner.handle_event(_score_event(90, "intervene"))
+    assert session.caller_held is True
+    assert session.acted_level is AlertLevel.NONE
+
+    # L'opérateur conclut au faux positif et rend la parole à l'appelant.
+    session.caller_held = False
+
+    await runner.handle_event(_score_event(95, "intervene"))
+
+    assert [call[0] for call in controller.calls].count("hold_caller") == 1
+    assert session.caller_held is False
 
 
 async def test_le_nom_du_proche_vient_de_l_identite_revendiquee() -> None:

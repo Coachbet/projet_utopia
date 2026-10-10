@@ -24,7 +24,8 @@ import logging
 import re
 from typing import Any
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from twilio.request_validator import RequestValidator
 
 from vocalguard.infrastructure.contacts.book import normalize_number
 from vocalguard.infrastructure.keywords.detector import normalize as fold_text
@@ -39,9 +40,89 @@ from vocalguard.interface.lifecycle import release_call
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/twilio", tags=["twilio"])
-
 XML = "application/xml"
+
+SIGNATURE_HEADER = "X-Twilio-Signature"
+
+
+async def verify_twilio_signature(request: Request) -> None:
+    """Authentifie l'appelant comme étant bien Twilio, si le réglage l'exige.
+
+    Pourquoi c'est nécessaire : derrière un tunnel public, quiconque connaît
+    l'URL peut poster sur `/twilio/voice/status` (ce qui libère une session en
+    cours) ou forger un `From` sur `/twilio/sms/inbound` (la garde expéditeur de
+    cette route est sa SEULE authentification). Twilio signe chaque requête avec
+    le compte-token ; la signature est la seule preuve d'origine qu'on puisse
+    vérifier hors ligne.
+
+    Pourquoi c'est éteint par défaut : cf. `Settings.twilio_validate_signature`.
+    Réglage faux = retour immédiat, zéro changement de comportement.
+
+    L'URL validée est reconstruite depuis `settings.public_base_url` + le chemin,
+    JAMAIS `request.url` : la signature de Twilio porte sur l'URL PUBLIQUE qu'il
+    a appelée, alors que derrière ngrok le serveur ne voit qu'un
+    `http://localhost:8000/...` (hôte réécrit, schéma perdu). C'est exactement à
+    cet endroit que la validation échoue en pratique — d'où le log explicite.
+    """
+    settings = request.app.state.settings
+    if not getattr(settings, "twilio_validate_signature", False):
+        return
+
+    token = settings.twilio_auth_token
+    if not token:
+        # Fermé plutôt que silencieux : avec un token vide, `RequestValidator`
+        # signerait avec une clé vide, donc n'importe qui pourrait produire une
+        # signature « valide ». Refuser est la seule lecture honnête d'un
+        # « valide les signatures » demandé sans de quoi les valider. On ne lève
+        # pas au démarrage pour autant : la démo doit pouvoir booter.
+        log.error(
+            "TWILIO_VALIDATE_SIGNATURE=true mais TWILIO_AUTH_TOKEN est vide : "
+            "webhook %s refusé. Renseigner le token, ou remettre le réglage à false.",
+            request.url.path,
+        )
+        raise HTTPException(status_code=403, detail="Signature Twilio non vérifiable")
+
+    signature = request.headers.get(SIGNATURE_HEADER, "")
+
+    # Le corps du formulaire participe à la signature : Twilio concatène l'URL
+    # puis les champs triés par nom. `request.form()` est mis en cache par
+    # Starlette, la route le relira sans relire le corps du socket.
+    params: dict[str, str] = {}
+    if request.method == "POST":
+        form = await request.form()
+        params = {key: str(value) for key, value in form.items()}
+
+    url = f"{settings.public_base_url}{request.url.path}"
+    if request.url.query:
+        # Twilio signe l'URL complète, query string incluse.
+        url = f"{url}?{request.url.query}"
+
+    if RequestValidator(token).validate(url, params, signature):
+        return
+
+    log.warning(
+        "Signature Twilio invalide sur %s : requête refusée (403). À vérifier, "
+        "dans cet ordre : l'URL collée dans la console Twilio doit être "
+        "exactement « %s » ; PUBLIC_HOSTNAME doit valoir l'hôte public (ngrok) ; "
+        "sinon repasser TWILIO_VALIDATE_SIGNATURE à false — derrière un tunnel, "
+        "l'échec vient presque toujours de l'URL, pas d'un attaquant. "
+        "En-tête %s %s.",
+        request.url.path,
+        url,
+        SIGNATURE_HEADER,
+        "absent" if not signature else "présent mais non concordant",
+    )
+    raise HTTPException(status_code=403, detail="Signature Twilio invalide")
+
+
+# Garde posée sur le router : elle couvre toutes les routes `/twilio/**` de ce
+# module, présentes et futures, sans avoir à y penser route par route — oublier
+# `/voice/status` suffirait à laisser un inconnu libérer un appel en cours.
+router = APIRouter(
+    prefix="/twilio",
+    tags=["twilio"],
+    dependencies=[Depends(verify_twilio_signature)],
+)
 
 _background: set[asyncio.Task] = set()
 """Les tâches de fond sont retenues ici : une `Task` sans référence peut être
@@ -62,26 +143,39 @@ jamais."""
 # attente un vrai petit-fils qui appelait sa grand-mère, c'est-à-dire exactement
 # le faux positif que tout le reste du système s'applique à éviter. L'asymétrie
 # est assumée : on préfère être sourd que menteur.
+#
+# Le démenti est donc contraint deux fois (cf. `_reply_is_denial`) : il lui faut
+# un marqueur négatif ET aucun marqueur affirmatif dans le même message. Chercher
+# « non » n'importe où suffisait à lire un démenti dans « Non mais oui c'est
+# moi », « mais non c'est bien moi mamie » ou « il n'y a aucun problème, non ? ».
 
-_DENIAL_TERMS = (
+_DENIAL_ANCHORED = (
     "non",
     "nan",
     "no",
+    "jamais",
+)
+"""Négations ambiguës : ces mots sont aussi des PARTICULES DE DISCOURS en
+français (« non mais oui c'est moi », « je n'ai jamais eu de souci », « ... non
+? » en fin de question rassurante). Elles ne comptent donc qu'en TÊTE de
+message, la seule position où elles répondent vraiment à la question posée."""
+
+_DENIAL_ANYWHERE = (
     "nope",
     "negatif",
-    "jamais",
     "pas moi",
     "c est pas moi",
     "ce n est pas moi",
     "pas du tout",
     "surtout pas",
 )
-"""Le SEUL cas qui déclenche quelque chose : le proche dit que ce n'est pas lui."""
+"""Démentis non ambigus : aucun ne s'emploie en remplissage de phrase, donc leur
+position dans le message ne change pas leur sens. Ce sont eux qui rattrapent
+« Non, c'est pas moi » quand la négation de tête est noyée."""
 
 _AFFIRMATION_TERMS = (
     "oui",
     "ouais",
-    "si",
     "yes",
     "yep",
     "yeah",
@@ -89,9 +183,17 @@ _AFFIRMATION_TERMS = (
     "c est moi",
     "c est bien moi",
 )
-"""Reconnues pour pouvoir les logguer comme telles : un « oui » n'est pas un
-corps incompris, et savoir lequel des deux est arrivé change tout au débogage
-d'une démo (« le proche a-t-il répondu ? » vs « a-t-on su le lire ? »)."""
+"""Reconnues pour deux raisons : les logguer comme telles — un « oui » n'est pas
+un corps incompris, et savoir lequel des deux est arrivé change tout au débogage
+d'une démo (« le proche a-t-il répondu ? » vs « a-t-on su le lire ? ») — et
+surtout VETO sur le démenti : leur présence interdit de mettre l'appelant en
+attente."""
+
+_AFFIRMATION_ALONE = ("si",)
+"""« Si » n'est un acquiescement que SEUL (« Si. », réponse à une question
+négative). Ailleurs c'est une conjonction, et « Si tu veux je te rappelle »
+n'est pas une confirmation d'identité : hors message d'un seul mot, ce corps
+reste incompris plutôt que lu comme un « oui »."""
 
 _NON_WORD = re.compile(r"[^a-z0-9]+")
 
@@ -276,7 +378,8 @@ async def sms_inbound(request: Request) -> Response:
         return _xml(empty_twiml())
 
     # 2. Interpréter le corps. Un affirmatif rassure et ne déclenche rien ; un
-    # corps incompris ne déclenche rien non plus (cf. `_DENIAL_TERMS`).
+    # corps incompris — ou contradictoire — ne déclenche rien non plus
+    # (cf. `_reply_is_denial`).
     denial = _reply_is_denial(body)
     if denial is None:
         log.warning(
@@ -330,18 +433,55 @@ def _reply_is_denial(body: str) -> bool | None:
     """`True` si le proche nie être l'appelant, `False` s'il le confirme, `None` si
     on n'a pas su lire.
 
-    Le négatif est testé d'abord : « non, c'est pas moi » contient les deux
-    familles, et c'est la négation qui porte le sens. L'ordre inverse lirait
-    « oui » dans « oui enfin non ce n'est pas moi ».
+    Un démenti n'est retenu QUE si le message porte un marqueur négatif et AUCUN
+    marqueur affirmatif. C'est l'application littérale du principe annoncé plus
+    haut (« en cas de doute, ne rien faire ») : un seul `True` de trop met en
+    attente un vrai petit-fils, alors qu'un `True` manqué ne coûte qu'un signal
+    sur un score qui monte déjà seul.
+
+    Les deux familles dans le même message (« non mais oui c'est moi ») rendent
+    donc la réponse INCOMPRISE, pas confirmée : on ne sait pas laquelle porte le
+    sens, et prétendre dans le journal que « le proche confirme » serait aussi
+    faux que de l'accuser.
     """
     folded = _fold_words(body)
     if not folded.strip():
         return None
-    if any(f" {term} " in folded for term in _DENIAL_TERMS):
+
+    affirmed = _has_affirmation(folded)
+    denied = _has_denial(folded)
+
+    if denied and affirmed:
+        return None
+    if denied:
         return True
-    if any(f" {term} " in folded for term in _AFFIRMATION_TERMS):
+    if affirmed:
         return False
     return None
+
+
+def _has_denial(folded: str) -> bool:
+    """Marqueur négatif dans un corps déjà replié par `_fold_words`.
+
+    Deux régimes, parce que les négations françaises n'ont pas toutes le même
+    pouvoir : les particules ambiguës ne valent qu'en tête (`folded` est bordé
+    d'espaces, donc `startswith` teste bien le PREMIER mot), les expressions non
+    ambiguës valent partout.
+    """
+    return any(folded.startswith(f" {term} ") for term in _DENIAL_ANCHORED) or any(
+        f" {term} " in folded for term in _DENIAL_ANYWHERE
+    )
+
+
+def _has_affirmation(folded: str) -> bool:
+    """Marqueur d'accord dans un corps déjà replié par `_fold_words`.
+
+    `_AFFIRMATION_ALONE` est comparé au message ENTIER : ces mots-là ne veulent
+    dire « oui » que s'ils constituent toute la réponse.
+    """
+    return any(f" {term} " in folded for term in _AFFIRMATION_TERMS) or (
+        folded.strip() in _AFFIRMATION_ALONE
+    )
 
 
 def _fold_words(body: str) -> str:

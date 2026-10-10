@@ -23,9 +23,10 @@ router = APIRouter()
 _CALLER_NUMBER_PARAMETERS = ("caller_number", "from")
 """Noms de `<Parameter>` acceptés pour le numéro de l'appelant, par ordre de
 préférence. Deux et pas un : `caller_number` est le nom de chez nous (celui du
-champ de `CallSession`), `from` celui du champ Twilio qui le porte côté webhook.
-Aucun des deux n'est envoyé aujourd'hui par `inbound_call_twiml` — la liste est
-là pour que l'ajout du `<Parameter>` côté TwiML suffise, sans toucher ici."""
+champ de `CallSession`, et celui que `inbound_call_twiml` déclare effectivement
+dans son `<Stream>`), `from` celui du champ Twilio qui le porte côté webhook. Le
+second est une tolérance : il couvre un TwiML écrit à la main ou un rejeu qui
+reprendrait le nom Twilio, sans qu'il faille toucher ici."""
 
 
 @router.websocket("/ws/media")
@@ -48,9 +49,18 @@ async def media_stream(websocket: WebSocket) -> None:
                 continue
 
             if isinstance(frame, StreamStart):
-                session = await _attach(registry, frame)
-                if session is None:
+                nouvelle = await _attach(registry, frame)
+                if nouvelle is None:
                     continue
+                if session is not None and session.call_id != nouvelle.call_id:
+                    # Twilio n'envoie qu'une trame `start` par connexion, donc ce
+                    # chemin ne devrait jamais servir — mais sans lui, le `finally`
+                    # ne libère que la DERNIÈRE session et la première resterait
+                    # dans `registry.active()` avec ses streams Transcribe ouverts.
+                    # Deux lignes dans une branche parcourue une fois par appel,
+                    # pas dans le chemin chaud des trames média.
+                    await release_call(websocket.app.state, session.call_id)
+                session = nouvelle
 
             if session is not None:
                 await session.on_frame(frame)

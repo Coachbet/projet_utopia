@@ -86,30 +86,48 @@ def plan_actions(
     *,
     contact_name: str | None = None,
     already_held: bool = False,
+    contact_already_texted: bool = False,
 ) -> tuple[PlannedAction, ...]:
     """Traduit un niveau en actions Twilio concrètes.
 
     Jamais de raccrochage automatique : un faux positif sur un vrai appel
     d'urgence serait grave. La mise en attente protège autant et laisse la
     décision à la victime.
+
+    `already_held` et `contact_already_texted` décrivent ce qui a *déjà abouti*
+    sur cet appel. Ils sont nécessaires parce que le SMS de vérification et la
+    mise en attente apparaissent dans plusieurs paliers : sans eux, un score qui
+    monte de 65 à 85 — le scénario exact de la démo — enverrait deux fois « Est-ce
+    toi qui appelles en ce moment ? » au vrai proche, à quelques secondes
+    d'intervalle. Un seul SMS par appel : c'est une question qu'on ne pose qu'une
+    fois, et deux copies sont incompréhensibles pour celui qui les reçoit.
+
+    Les deux sont keyword-only avec un défaut : le contrat est partagé avec les
+    autres moitiés de l'équipe, un appelant qui ne sait rien de l'état de l'appel
+    continue de recevoir le plan complet.
     """
     if level <= AlertLevel.WATCH:
         # Vigilance : rien d'audible. Le dashboard passe à l'orange.
         return ()
 
     if level is AlertLevel.ALERT:
-        return (
-            PlannedAction(ActionKind.ANNOUNCE_VICTIM, "victim", ANNOUNCE_ALERT),
-            PlannedAction(ActionKind.SMS_CONTACT, "trusted_contact", SMS_VERIFY_CONTACT),
-        )
+        actions: list[PlannedAction] = [
+            PlannedAction(ActionKind.ANNOUNCE_VICTIM, "victim", ANNOUNCE_ALERT)
+        ]
+        if not contact_already_texted:
+            actions.append(
+                PlannedAction(ActionKind.SMS_CONTACT, "trusted_contact", SMS_VERIFY_CONTACT)
+            )
+        return tuple(actions)
 
     # Intervention : le scammeur en attente d'abord, pour que l'annonce qui suit
     # ne puisse pas être entendue par lui même si l'announce_url fuite.
-    actions: list[PlannedAction] = []
+    actions = []
     if not already_held:
         actions.append(PlannedAction(ActionKind.HOLD_CALLER, "caller"))
     actions.append(
         PlannedAction(ActionKind.ANNOUNCE_VICTIM, "victim", announce_intervene(contact_name))
     )
-    actions.append(PlannedAction(ActionKind.SMS_CONTACT, "trusted_contact", SMS_VERIFY_CONTACT))
+    if not contact_already_texted:
+        actions.append(PlannedAction(ActionKind.SMS_CONTACT, "trusted_contact", SMS_VERIFY_CONTACT))
     return tuple(actions)

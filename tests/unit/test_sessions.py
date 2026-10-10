@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from vocalguard.application.sessions import MAX_HISTORY, CallSession, SessionRegistry
@@ -61,6 +62,83 @@ async def test_media_chunk_atteint_le_stream_du_bon_locuteur() -> None:
 
     assert transcriber.bytes_received["caller"] == 2 * len(ULAW_FRAME)
     assert transcriber.bytes_received["victim"] == 0
+
+
+async def test_les_deux_transcriptions_s_ouvrent_en_parallele() -> None:
+    """`start()` est dans le chemin de réponse du webhook `/twilio/voice/inbound`.
+
+    En série, le TwiML attendait la somme des ouvertures ; avec des identifiants
+    expirés les retries de Transcribe approchent le timeout Twilio de 15 s et
+    l'appelant entend « an application error has occurred ». Le test mesure que
+    la latence est celle de la plus lente, pas celle des deux.
+    """
+    barriere = asyncio.Barrier(2)
+
+    class ConcurrentTranscriber(FakeTranscriber):
+        async def open(self, *, speaker: Any, on_segment: Any) -> Any:
+            # Ne se débloque que si les deux ouvertures sont en vol en même
+            # temps : en série, ce `wait` expire.
+            await asyncio.wait_for(barriere.wait(), timeout=1.0)
+            return await super().open(speaker=speaker, on_segment=on_segment)
+
+    transcriber = ConcurrentTranscriber()
+    session = CallSession(
+        call_id="CA1", transcriber=transcriber, sink=InMemoryEventSink(), settings=_settings()
+    )
+
+    await session.start()
+
+    assert set(transcriber.streams) == {"caller", "victim"}
+
+
+async def test_une_piste_qui_refuse_de_s_ouvrir_laisse_vivre_l_autre() -> None:
+    """Une transcription refusée ne doit jamais tuer l'appel, et le passage en
+    parallèle ne doit pas laisser `_streams` incohérent."""
+
+    class VictimRefused(FakeTranscriber):
+        async def open(self, *, speaker: Any, on_segment: Any) -> Any:
+            if speaker == "victim":
+                raise RuntimeError("AccessDeniedException : rôle workshop")
+            return await super().open(speaker=speaker, on_segment=on_segment)
+
+    transcriber = VictimRefused()
+    session = CallSession(
+        call_id="CA1", transcriber=transcriber, sink=InMemoryEventSink(), settings=_settings()
+    )
+
+    await session.start()
+
+    assert set(transcriber.streams) == {"caller"}
+    # L'audio de l'appelant passe quand même, celui de la victime est ignoré.
+    await session.on_media(_chunk())
+    await session.on_media(_chunk(track="outbound", speaker="victim"))
+    assert transcriber.bytes_received["caller"] == 2 * len(ULAW_FRAME)
+    await session.aclose()
+
+
+async def test_un_appel_termine_pendant_l_ouverture_ne_laisse_pas_de_stream_ouvert() -> None:
+    """`start()` n'est plus instantané : un `StreamStop` peut arriver pendant
+    l'ouverture. Le stream qui atterrit après `aclose()` doit être refermé, pas
+    déposé dans un dictionnaire déjà vidé."""
+    lent = asyncio.Event()
+
+    class SlowTranscriber(FakeTranscriber):
+        async def open(self, *, speaker: Any, on_segment: Any) -> Any:
+            await lent.wait()
+            return await super().open(speaker=speaker, on_segment=on_segment)
+
+    transcriber = SlowTranscriber()
+    session = CallSession(
+        call_id="CA1", transcriber=transcriber, sink=InMemoryEventSink(), settings=_settings()
+    )
+
+    ouverture = asyncio.create_task(session.start())
+    await asyncio.sleep(0)
+    await session.aclose()
+    lent.set()
+    await ouverture
+
+    assert all(stream.closed for stream in transcriber.streams.values())
 
 
 async def test_piste_inconnue_ignoree() -> None:
