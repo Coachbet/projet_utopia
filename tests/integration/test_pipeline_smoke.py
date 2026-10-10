@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 from xml.etree import ElementTree
 
 import pytest
@@ -19,8 +20,9 @@ from fastapi.testclient import TestClient
 
 from vocalguard.config import Settings
 from vocalguard.domain.events import Event, EventType
+from vocalguard.domain.ports import Transcriber, TranscriptionStream
 from vocalguard.infrastructure.fakes.event_sink import InMemoryEventSink
-from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
+from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber, FakeTranscriptionStream
 from vocalguard.infrastructure.telephony.client import TwilioCallController
 from vocalguard.interface.app import create_app
 from vocalguard.interface.lifecycle import release_call
@@ -48,7 +50,10 @@ def harness():
         yield client, app, transcriber, sink
 
 
-def _start_frame() -> str:
+def _start_frame(custom_parameters: dict[str, str] | None = None) -> str:
+    """La trame `start` de Twilio. `customParameters` est vide par défaut : c'est
+    littéralement ce que `inbound_call_twiml` produit aujourd'hui, son `<Stream>`
+    ne déclare aucun `<Parameter>`."""
     return json.dumps(
         {
             "event": "start",
@@ -59,7 +64,7 @@ def _start_frame() -> str:
                 "accountSid": "ACxxx",
                 "callSid": CALL_ID,
                 "tracks": ["inbound", "outbound"],
-                "customParameters": {},
+                "customParameters": custom_parameters or {},
                 "mediaFormat": {"encoding": "audio/x-mulaw", "sampleRate": 8000, "channels": 1},
             },
         }
@@ -103,6 +108,32 @@ def test_appel_entrant_branche_ecoute_et_conference(harness):
     assert CALL_ID in (conference.text or ""), "une conférence par appel"
 
     assert app.state.registry.get(CALL_ID) is not None
+
+
+def test_le_webhook_entrant_transporte_le_numero_jusqu_au_stream(harness):
+    """Le maillon entre le webhook et `/ws/media`.
+
+    `_attach` sait lire un `<Parameter name="caller_number">`, mais il faut encore
+    que quelqu'un l'y mette : Twilio ne met pas le `From` dans la trame `start`.
+    Ce test ferme la chaîne — sans lui, les deux moitiés peuvent être justes
+    séparément et le numéro n'arriver jamais.
+    """
+    client, _, _, _ = harness
+    caller = "+33755555555"
+
+    response = client.post(
+        "/twilio/voice/inbound",
+        data={"CallSid": CALL_ID, "From": caller, "To": "+15550002222"},
+    )
+
+    stream = ElementTree.fromstring(response.text).find("./Start/Stream")
+    assert stream is not None
+    parameters = {p.get("name"): p.get("value") for p in stream.findall("Parameter")}
+    assert parameters.get("caller_number") == caller, (
+        "sans ce paramètre, une session ouverte depuis le flux média n'a pas de "
+        "numéro appelant : réputation inerte et coupe-circuit paiement + identité "
+        "incapable de s'armer"
+    )
 
 
 def test_audio_mulaw_arrive_au_bon_locuteur(harness):
@@ -359,3 +390,107 @@ def test_liberer_un_appel_inconnu_ne_leve_pas(harness):
     asyncio.run(release_call(app.state, CALL_ID))
     asyncio.run(release_call(app.state, CALL_ID))
     assert app.state.registry.active() == []
+
+
+# --- Ouverture tardive par le flux média -----------------------------------
+#
+# Le flux média peut arriver sans que `/twilio/voice/inbound` soit passé (ordre
+# inversé, test manuel avec `wscat`, rejeu du webhook). `_attach` ouvre alors la
+# session lui-même, et c'est le seul chemin où personne ne connaît le `From` :
+# sans numéro appelant, `ScoringPipeline._check_reputation` sort immédiatement,
+# donc le coupe-circuit `payment_request_with_identity_mismatch` — celui qui
+# force le score à 85 — ne peut structurellement pas s'armer.
+
+_LOGGER_MEDIA = "vocalguard.interface.ws.media"
+
+
+def test_une_ouverture_tardive_recupere_le_numero_de_la_trame_start(harness):
+    """Si le `<Stream>` déclare le numéro en `<Parameter>`, c'est la bonne source."""
+    client, app, _, _ = harness
+
+    with client.websocket_connect("/ws/media") as ws:
+        ws.send_text(_start_frame({"caller_number": "+33755555555"}))
+        ws.send_text(_media_frame("inbound", 0))
+
+        session = app.state.registry.get(CALL_ID)
+        assert session is not None, "l'ouverture tardive doit quand même ouvrir la session"
+        # Le signal réputation (15 points) et le coupe-circuit paiement + identité
+        # ne tiennent qu'à ce champ.
+        assert session.caller_number == "+33755555555"
+
+
+def test_une_ouverture_tardive_sans_numero_le_dit_bruyamment(harness, caplog):
+    """Sans `<Parameter>`, l'appel doit survivre mais la perte doit s'entendre.
+
+    C'est le cas réel aujourd'hui : `inbound_call_twiml` ne déclare aucun
+    `<Parameter>` dans son `<Stream>`, donc `customParameters` arrive vide.
+    """
+    client, app, _, _ = harness
+
+    with caplog.at_level(logging.WARNING, logger=_LOGGER_MEDIA):
+        with client.websocket_connect("/ws/media") as ws:
+            ws.send_text(_start_frame())
+            ws.send_text(_media_frame("inbound", 0))
+
+            session = app.state.registry.get(CALL_ID)
+            # Perdre un signal est acceptable, perdre l'appel ne l'est pas :
+            # l'audio continue d'arriver même sans numéro.
+            assert session is not None
+            assert session.caller_number == ""
+
+    messages = [r.getMessage() for r in caplog.records if r.name == _LOGGER_MEDIA]
+    bruit = "\n".join(messages)
+    assert "sans numéro appelant" in bruit
+    # Le warning doit nommer la CONSÉQUENCE et la CAUSE, pas seulement le symptôme :
+    # un log qui dit « pas de numéro » n'apprend rien à qui relit la démo ratée.
+    assert "réputation" in bruit and "coupe-circuit" in bruit
+    assert "webhook entrant" in bruit
+
+
+def test_le_flux_media_n_ecrase_jamais_le_numero_du_webhook(harness, caplog):
+    """La régression la plus dangereuse de la correction.
+
+    Sur le chemin NORMAL (webhook entrant puis flux média), le `From` du webhook
+    est la seule source fiable. Une ouverture tardive qui repasserait par
+    `registry.open` avec le numéro de la trame — vide, puisque le `<Stream>` ne
+    le déclare pas — remplacerait un signal réputation vivant par rien.
+    """
+    client, app, _, _ = harness
+    client.post(
+        "/twilio/voice/inbound",
+        data={"CallSid": CALL_ID, "From": "+33755555555", "To": "+33600000000"},
+    )
+
+    with caplog.at_level(logging.WARNING, logger=_LOGGER_MEDIA):
+        with client.websocket_connect("/ws/media") as ws:
+            ws.send_text(_start_frame())
+            ws.send_text(_media_frame("inbound", 0))
+
+            session = app.state.registry.get(CALL_ID)
+            assert session is not None
+            assert session.caller_number == "+33755555555"
+
+    # Et rien ne doit s'alarmer : ce chemin n'est pas dégradé.
+    assert [r.getMessage() for r in caplog.records if r.name == _LOGGER_MEDIA] == []
+
+
+# --- Conformité des ports de transcription ---------------------------------
+
+
+def test_les_ports_de_transcription_sont_verifiables_a_l_execution():
+    """`Transcriber` et `TranscriptionStream` échappaient au contrôle `isinstance`.
+
+    Ils étaient les seuls ports du domaine sans `@runtime_checkable`, ce qui
+    faisait IGNORER quatre tests de `test_port_conformance.py` : la moitié Dev 1
+    du contrat n'était donc pas vérifiée du tout sur ce niveau. Le drapeau
+    `_is_runtime_protocol` est exactement la condition de `pytest.skip` là-bas.
+    """
+    assert getattr(Transcriber, "_is_runtime_protocol", False)
+    assert getattr(TranscriptionStream, "_is_runtime_protocol", False)
+
+    transcriber = FakeTranscriber()
+    assert isinstance(transcriber, Transcriber)
+    assert isinstance(FakeTranscriptionStream(transcriber, "caller"), TranscriptionStream)
+
+    # Le contrôle doit aussi savoir refuser, sinon il ne prouve rien.
+    assert not isinstance(object(), Transcriber)

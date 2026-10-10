@@ -36,6 +36,32 @@ class TestInboundCall:
         assert stream.get("track") == "both_tracks"
         assert stream.get("url") == STREAM_URL
 
+    def test_le_numero_appelant_voyage_dans_le_stream(self) -> None:
+        """Twilio ne met pas le `From` dans la trame `start` : ce `<Parameter>` est
+        la seule source du numéro appelant pour une session ouverte depuis
+        `/ws/media`. Sans lui, le signal de réputation reste inerte et le
+        coupe-circuit « paiement + identité » ne peut jamais s'armer."""
+        stream = root(
+            inbound_call_twiml(
+                stream_url=STREAM_URL,
+                conference_name=CONFERENCE,
+                caller_number="+33755555555",
+            )
+        ).find("Start/Stream")
+        assert stream is not None
+        parameters = {p.get("name"): p.get("value") for p in stream.findall("Parameter")}
+        assert parameters == {"caller_number": "+33755555555"}
+
+    def test_pas_de_parametre_vide_quand_le_numero_manque(self) -> None:
+        """Un appelant masqué ne doit pas produire `<Parameter value="">` : côté
+        lecture ça donnerait un numéro vide indistinguable d'un paramètre absent,
+        mais en masquant la cause réelle."""
+        stream = root(inbound_call_twiml(stream_url=STREAM_URL, conference_name=CONFERENCE)).find(
+            "Start/Stream"
+        )
+        assert stream is not None
+        assert stream.findall("Parameter") == []
+
     def test_stream_comes_before_dial(self) -> None:
         """Ordre imposé : brancher le flux après le `<Dial>` perdrait les premières
         secondes, celles où l'appelant annonce son identité."""
