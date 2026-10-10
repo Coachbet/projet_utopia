@@ -31,6 +31,7 @@ import pytest
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.application.verification import (
     REASON_ALREADY_ACTIVE,
+    REASON_ATTEMPTS_EXHAUSTED,
     REASON_CALLER_IS_TARGET,
     REASON_NO_CONTACT,
     REASON_SMS_REFUSED,
@@ -469,9 +470,8 @@ async def test_un_sms_refuse_laisse_la_verification_rejouable() -> None:
         ("mille deux cent trente-quatre", "1234"),
         ("deux mille", "2000"),
         ("neuf mille neuf cent quatre-vingt-dix-neuf", "9999"),
-        # Zéros de tête : par chiffres, ou par le nombre qu'ils cachent.
+        # Les zéros de tête doivent être prononcés.
         ("zéro quatre huit un", "0481"),
-        ("quatre cent quatre-vingt-un", "0481"),
         ("zéro zéro quarante-huit", "0048"),
         # Ce que Transcribe écrit en chiffres.
         ("4821", "4821"),
@@ -502,6 +502,11 @@ def test_un_code_dicte_en_francais_est_reconnu(texte: str, code: str) -> None:
         ("quatre huit deux", "4821"),
         ("quatre huit deux neuf", "4821"),
         ("quarante-huit vingt-deux", "4821"),
+        ("quatre cent quatre-vingt-un", "0481"),
+        ("948210", "4821"),
+        ("4821 ou 1357", "4821"),
+        ("1357 puis 4821", "4821"),
+        ("4821 ou 4821", "4821"),
         # Des mots qui contiennent des nombres sans en être.
         ("je n'ai pas reçu de message", "4821"),
         ("un instant, je cherche mes lunettes", "0001"),
@@ -526,7 +531,7 @@ def test_les_mots_de_liaison_ne_deviennent_pas_des_tentatives_de_code() -> None:
 def test_la_lecture_des_groupes_se_concatene_dans_l_ordre() -> None:
     assert "4821" in codes_entendus("quarante-huit vingt et un")
     assert codes_entendus("quatre-vingt-un") == ("81",)
-    assert "0481" in codes_entendus("quatre cent quatre-vingt-un")
+    assert codes_entendus("quatre cent quatre-vingt-un") == ("481",)
 
 
 # --- Résultats de la vérification -------------------------------------------
@@ -575,9 +580,11 @@ async def test_un_code_faux_fait_repeter_sans_rien_conclure() -> None:
     assert banc.pipeline.denied == [], "rien n'est conclu sur un seul code mal entendu"
     assert [a["action"] for a in banc.actions()] == ["verify_requested"]
 
-    # Répété, il ne doit pas occuper la ligne au moment où elle écoute.
+    # Le second essai ferme immédiatement la vérification et escalade.
     await _dire(banc, "caller", f"je répète, {faux}")
     assert banc.annonces().count(ANNOUNCE_VERIFY_WRONG) == 1
+    assert banc.pipeline.denied == [CALL_ID]
+    assert [a for a in banc.actions() if a["action"] == "identity_verified"][-1]["ok"] is False
 
 
 async def test_un_code_faux_puis_la_fin_de_la_fenetre_escalade() -> None:
@@ -594,6 +601,61 @@ async def test_un_code_faux_puis_la_fin_de_la_fenetre_escalade() -> None:
     assert echecs and echecs[-1]["ok"] is False
     # Même effet qu'un démenti du proche, par LE chemin existant.
     assert banc.pipeline.denied == [CALL_ID]
+
+
+async def test_le_second_essai_correct_est_accepte() -> None:
+    banc = await _banc(caller=LUCAS)
+    result = await banc.verifier.request(CALL_ID)
+    wrong = "1357" if result.code != "1357" else "2468"
+    await _dire(banc, "caller", wrong)
+    await _dire(banc, "caller", result.code)
+    assert banc.pipeline.denied == []
+    assert banc.actions()[-1]["action"] == "identity_verified"
+    assert banc.actions()[-1]["ok"] is True
+    await banc.verifier.aclose()
+
+
+async def test_deux_essais_epuisent_le_budget_de_tout_l_appel() -> None:
+    banc = await _banc(caller=LUCAS)
+    result = await banc.verifier.request(CALL_ID)
+    wrong = "1357" if result.code != "1357" else "2468"
+    # Chaque liste contenant aussi le bon code est un essai refusé.
+    await _dire(banc, "caller", f"{wrong} ou {result.code}")
+    await _dire(banc, "caller", f"{result.code} ou {wrong}")
+    assert banc.pipeline.denied == [CALL_ID]
+    await _dire(banc, "caller", result.code)
+    retry = await banc.verifier.request(CALL_ID)
+    assert retry.ok is False and retry.reason == REASON_ATTEMPTS_EXHAUSTED
+    assert retry.code is None
+    assert len(banc.sms()) == 1
+    assert not any(a.get("ok") for a in banc.actions() if a["action"] == "identity_verified")
+    banc.minuteur.fermer_la_fenetre()
+    await banc.verifier.aclose()
+    assert banc.pipeline.denied == [CALL_ID]
+
+
+async def test_un_code_recu_apres_expiration_ne_valide_jamais() -> None:
+    banc = await _banc(caller=LUCAS)
+    now = [0.0]
+    banc.verifier._clock = lambda: now[0]
+    result = await banc.verifier.request(CALL_ID)
+    now[0] = 121.0
+    await _dire(banc, "caller", result.code)
+    assert banc.pipeline.denied == [CALL_ID]
+    assert not any(a.get("ok") for a in banc.actions() if a["action"] == "identity_verified")
+    banc.minuteur.fermer_la_fenetre()
+    await banc.verifier.aclose()
+
+
+async def test_deux_tentatives_concurrentes_ne_permettent_pas_un_troisieme_essai() -> None:
+    banc = await _banc(caller=LUCAS)
+    result = await banc.verifier.request(CALL_ID)
+    wrong = "1357" if result.code != "1357" else "2468"
+    await asyncio.gather(_dire(banc, "caller", wrong), _dire(banc, "caller", wrong))
+    await _dire(banc, "caller", result.code)
+    assert banc.pipeline.denied == [CALL_ID]
+    assert len([a for a in banc.actions() if a["action"] == "identity_verified"]) == 1
+    await banc.verifier.aclose()
 
 
 async def test_une_fenetre_vide_sur_un_appel_ecoute_escalade() -> None:

@@ -60,6 +60,7 @@ def harness():
     """Une app complète câblée sur des doublures, et de quoi l'inspecter."""
     settings = Settings(
         _env_file=None,
+        app_pin="432198",
         transcribe_backend="fake",
         public_hostname="demo.ngrok-free.app",
         victim_phone_number="+33600000000",
@@ -68,7 +69,7 @@ def harness():
     )
     sink = InMemoryEventSink()
     app = create_app(settings, sink=sink, transcriber_factory=FakeTranscriber)
-    with TestClient(app) as client:
+    with TestClient(app, headers={"X-App-Pin": "432198"}) as client:
         yield client, app, sink
 
 

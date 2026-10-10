@@ -13,6 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from vocalguard.domain.alerts import DEFAULT_THRESHOLDS, Thresholds
@@ -72,9 +73,8 @@ class Settings(BaseSettings):
     du SDK Voice se signent avec une API Key, pas avec le token de compte."""
 
     twilio_twiml_app_sid: str = ""
-    """TwiML App (`AP…`) portée par le `VoiceGrant`. Nous ne l'utilisons que pour
-    les appels ENTRANTS vers l'app, donc son Voice URL n'a pas besoin de servir
-    quoi que ce soit — mais le grant la réclame."""
+    """TwiML App (`AP…`) portée par le `VoiceGrant`. Voice URL pour les sortants :
+    /twilio/voice/outbound (POST). /voice/inbound accepte aussi les appels SDK autorisés."""
 
     app_pin: str = ""
     """Code d'accès à `POST /app/token`. L'URL ngrok est publique : sans lui,
@@ -122,7 +122,7 @@ class Settings(BaseSettings):
     qui ment sur l'identité de l'appelant ne doit jamais pouvoir agir en
     silence."""
 
-    caller_notice_text: str = "Cet appel est analysé par un service de protection contre la fraude."
+    caller_notice_text: str = "This call is being analyzed by a fraud protection service."
     """Phrase dite à l'APPELANT inconnu, à lui seul, avant tout flux audio.
 
     C'est la pièce centrale du montage juridique : on n'analyse que ce qui suit
@@ -130,20 +130,21 @@ class Settings(BaseSettings):
     D'où l'ordre imposé dans `inbound_call_twiml` : `<Say>` puis `<Start><Stream>`
     puis la conférence, jamais l'inverse."""
 
-    twilio_validate_signature: bool = False
-    """Vérifie `X-Twilio-Signature` sur les routes `/twilio/**`. FAUX par défaut,
-    et c'est une décision, pas un oubli.
+    caller_notice_language: str = "en-US"
+    caller_notice_bilingual: bool = False
 
-    Allumée, elle fait répondre 403 à TOUS les webhooks dès que l'URL signée par
-    Twilio ne correspond pas exactement à celle qu'on reconstruit. C'est le cas
-    normal derrière un tunnel ngrok : l'hôte est réécrit, le schéma n'arrive que
-    dans `X-Forwarded-Proto`, et le serveur ne voit plus qu'un
-    `http://localhost:8000/...`. À une heure du jury, le remède serait plus
-    dangereux que le mal — on livre le code prêt, éteint.
+    voicemail_enabled: bool = True
+    voicemail_path: Path = Path("data/voicemail.sqlite")
+    voicemail_retention_days: int = Field(default=30, ge=1)
+    """Seuls les messages déposés après le bip sont enregistrés chez Twilio.
+    SQLite garde leurs métadonnées ; purge distante au démarrage puis chaque heure."""
 
-    À allumer quand `PUBLIC_HOSTNAME` et l'URL collée dans la console Twilio sont
-    identiques au caractère près, et que `TWILIO_AUTH_TOKEN` est renseigné (sans
-    lui, la garde refuse tout plutôt que de laisser passer en silence)."""
+    twilio_validate_signature: bool = True
+    """Vérifie les webhooks et le handshake audio avant toute session.
+
+    L'URL signée est reconstruite avec PUBLIC_HOSTNAME, jamais avec l'hôte local
+    réécrit par ngrok. Token ou hôte absent : accès refusé. Le mode false est
+    réservé aux tests hors ligne qui simulent Twilio."""
 
     twilio_lookup_enabled: bool = False
     """Faux par défaut : Lookup v2 est facturé à la requête. C'est `.env` qui
@@ -151,6 +152,11 @@ class Settings(BaseSettings):
 
     # --- AWS ---------------------------------------------------------------
     aws_region: str = "us-west-2"
+    aws_access_key_id: SecretStr = Field(default=SecretStr(""), repr=False)
+    aws_secret_access_key: SecretStr = Field(default=SecretStr(""), repr=False)
+    aws_session_token: SecretStr = Field(default=SecretStr(""), repr=False)
+    """Exports prioritaires sur `.env`, sans modifier l'environnement global.
+    Vides : boto3 utilise le profil local ou sa chaîne habituelle."""
 
     # --- Transcribe (Dev 1) ------------------------------------------------
     transcribe_region: str = "us-west-2"
@@ -195,6 +201,9 @@ class Settings(BaseSettings):
 
     # --- Données -----------------------------------------------------------
     contacts_path: Path = Path("data/contacts.json")
+    history_enabled: bool = True
+    history_path: Path = Path("data/calls.sqlite")
+    history_retention_days: int = Field(default=30, ge=1)
     persist_transcripts: bool = False
     persist_audio: bool = False
 

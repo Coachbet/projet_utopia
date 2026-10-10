@@ -16,7 +16,7 @@ alors par notre serveur, qui décide :
 | L'appelant est… | Ce qui se passe |
 |---|---|
 | **au carnet d'adresses** (famille, médecin) | l'appel est **transmis tel quel**. Aucune annonce, aucun flux audio, aucune transcription. La famille n'est pas écoutée — c'est la promesse produit, pas un réglage |
-| **inconnu, masqué, ou au carnet en `mode: "analyze"`** | annonce **à lui seul** (« cet appel est analysé par un service de protection contre la fraude »), **puis** l'analyse démarre : transcription, quatre signaux, score, alertes, mise en attente, SMS au proche |
+| **inconnu, masqué, ou au carnet en `mode: "analyze"`** | annonce **à lui seul** en anglais (« This call is being analyzed by a fraud protection service. »), **puis** l'analyse démarre : transcription, quatre signaux, score, alertes, mise en attente, SMS au proche |
 | **un de nos propres numéros** | refusé. C'est la boucle du renvoi, et chaque tour coûterait deux jambes facturées |
 
 L'ordre `<Say>` → `<Start><Stream>` → `<Conference>` n'est pas cosmétique : **on
@@ -27,6 +27,10 @@ montage juridique (ePrivacy art. 5, secret des correspondances).
 code à 4 chiffres**. Le code part par SMS au numéro que **le carnet** connaît pour le
 proche revendiqué — jamais au numéro affiché par l'appel. Usurper un numéro ne donne
 pas la réception de ses SMS : un arnaqueur ne peut pas lire ce code.
+
+Seul un candidat de quatre chiffres exactement est comparé, avec deux essais au
+maximum par appel. Une liste de codes ne compte jamais comme une preuve. À l'écran :
+**« Ne dites jamais ce code. C'est à lui de vous le lire. »**
 
 ### Les numéros, et l'app (à ne jamais confondre)
 
@@ -64,6 +68,58 @@ Ami / arnaqueur ──compose──▶ n° public (vrai mobile de la personne pr
 > fermée → repli sur `VICTIM_PHONE_NUMBER`. L'app native (CallKit iOS /
 > ConnectionService Android, compte Apple Developer payant) est la roadmap.
 
+La jambe vers l'app sonne au maximum 25 secondes. En cas de non-réponse,
+d'occupation ou d'échec, VocalGuard appelle la ligne de secours une seule fois.
+Cette ligne doit être différente du numéro public renvoyé et du numéro Twilio.
+Sans secours joignable, la messagerie propose un dépôt vocal après une annonce
+d'enregistrement et un bip, si elle est activée. Sinon, l'appelant entend
+« The person is not available. » puis l'appel se termine. Une tonalité de retour
+d'appel accompagne l'attente.
+
+## App Téléphone et historique local
+
+`/app` s'ouvre sur **Récents**, avec une navigation **Contacts · Clavier · Messagerie**.
+Le carnet est recherchable et le clavier permet de composer un appel sortant via
+Twilio. Le serveur autorise chaque destination par un jeton de 60 secondes lié au
+PIN et à l'identité Voice ; les retries du même appel sont idempotents. Les appels
+sortants ne sont ni analysés ni enregistrés. Leur numéro affiché est le numéro
+Twilio, et leur direction est indiquée dans les récents.
+
+Pendant l'appel, l'app présente l'appelant, sa provenance, le chronomètre, les commandes Muet,
+Clavier, Vérifier et Attente. La sélection de sortie audio apparaît uniquement
+sur les navigateurs qui la permettent. Sonnerie et vibration démarrent après
+l'activation ; le maintien de l'écran allumé dépend du support Wake Lock.
+
+L'écran **Historique** donne accès aux appels récents et à leur détail : provenance,
+durée, appel pris ou manqué, pic de risque, première seconde de franchissement des
+trois seuils, pics des quatre signaux, tactiques, explication courte et vérification.
+Le pays désigne le plan de numérotation déduit de l'indicatif, pas la position
+physique de l'appelant. Un indicatif partagé peut rester sans pays identifié.
+
+SQLite conserve ces métadonnées dans `data/calls.sqlite`, exclu de Git. Aucun audio,
+transcript ni code de vérification n'entre en base. Les appels de confiance sont
+enregistrés avec des métriques de score vides. La rétention est de 30 jours, purgée
+au démarrage. L'effacement depuis l'app demande une confirmation et couvre aussi
+les appels en cours. `HISTORY_ENABLED=false` désactive le stockage.
+
+La **messagerie vocale** conserve uniquement les messages déposés après le bip
+(120 secondes maximum), avec écoute, état lu/non lu et suppression confirmée.
+Ces fichiers sont stockés chez Twilio ; `data/voicemail.sqlite` ne conserve que
+leurs métadonnées. Le navigateur récupère l'audio par une route protégée par PIN,
+sans recevoir les identifiants ni les URL Twilio. Supprimer un message supprime
+d'abord son audio distant. La purge de rétention s'exécute au démarrage puis chaque
+heure lorsque le serveur tourne ; un échec réseau est réessayé. Les conversations
+analysées restent sans enregistrement. `VOICEMAIL_ENABLED=false` désactive le dépôt.
+
+La PWA gère les appels VocalGuard lorsque sa page est ouverte. Elle ne remplace pas
+l'app Téléphone système, les appels de la SIM ou les appels d'urgence ; cette
+intégration nécessite une application native.
+
+Le PIN doit contenir au moins six chiffres. Cinq échecs consécutifs bloquent tous
+les accès protégés pendant dix minutes. Le PIN reste en mémoire dans le navigateur.
+Ce MVP utilise un seul processus serveur ; les compteurs de blocage sont locaux
+à ce processus et sont réinitialisés lors de son redémarrage.
+
 > **Coût à connaître.** Le renvoi d'appel est facturé par l'opérateur du numéro renvoyé,
 > donc **à la personne protégée**, comme un appel vers les États-Unis — souvent hors
 > forfait. Vérifier le forfait avant la démo et faire des appels courts. La réponse de
@@ -94,6 +150,22 @@ Les documents opérationnels :
 |---|---|
 | [`docs/terrain.md`](docs/terrain.md) | les sept vérifications à faire **avec un vrai téléphone**, avant de se fier au montage |
 | [`docs/script_demo.md`](docs/script_demo.md) | les trois scénarios de démo, minutés, avec leurs plans B |
+| [`docs/RECETTE_MVP.md`](docs/RECETTE_MVP.md) | validation, captures de l'app et procédure de test au téléphone |
+| [`artifacts/evaluation/offline/report.md`](artifacts/evaluation/offline/report.md) | 22 scénarios locaux ; résultats de la doublure, pas de Claude |
+
+Pour évaluer les faux positifs et les arnaques manquées sur les scénarios FR/EN :
+
+```bash
+make evaluate                             # hors ligne, modèle factice explicitement nommé
+make evaluate EVAL_MODE=keywords           # filet de mots-clés seul
+make evaluate EVAL_MODE=bedrock            # vrai Claude, identifiants AWS requis
+```
+
+Le rapport indique la matrice de confusion, la couverture et les latences. Les
+conversations du jeu sont synthétiques ; elles ne prouvent pas une précision en
+conditions réelles. Les modes locaux n'évaluent pas Claude, la transcription,
+la voix clonée ou Lookup. Le mode Bedrock utilise le prompt et le scoring du service,
+sans passer d'appel téléphonique ni exporter les transcripts dans ses rapports.
 
 ## Les quatre signaux
 
@@ -121,7 +193,9 @@ un plafond l'empêche de dépasser 64 à elle seule, ce qui limite les faux posi
 
 Trois règles empêchent un signal très fort d'être dilué par la moyenne :
 
-1. Paiement inhabituel **et** identité revendiquée qui ne correspond pas au numéro → score ≥ 85.
+1. Paiement inhabituel **et** identité revendiquée qui ne correspond pas au numéro,
+   avec risque de contenu ≥ 0,65 → score ≥ 85. Une mention de paiement ou un numéro
+   prêté ne suffisent pas. Ce seuil reste une heuristique du MVP.
 2. Risque Claude ≥ 0,9 → score ≥ 65, quels que soient les autres signaux.
 3. La voix synthétique seule ne fait jamais dépasser 64.
 
@@ -200,14 +274,31 @@ Tout le reste, Twilio le rappelle tout seul à partir du TwiML qu'on lui renvoie
 | `/twilio/voice/announce/{call_id}` | Phrase dite à la victime seule (`announce_url`) |
 | `/twilio/voice/hold-music` | Ce qu'entend le scammeur en attente |
 | `/twilio/voice/status` | Fin d'appel : libère la session |
-| `GET /dashboard` · `wss://…/ws/dashboard` | L'écran de démo et son flux d'événements |
+| `GET /dashboard` · `wss://…/ws/dashboard?pin=…` | Page avec saisie du PIN ; flux refusé sans PIN valide |
 | `GET /app` | **L'app sur le téléphone** (PWA). `GET /app/manifest.webmanifest` pour l'installer. |
 | `POST /app/token` | Access Token Voice, derrière `APP_PIN`. L'URL ngrok est publique. |
 | `POST /app/incoming` | Qui appelle, pour l'app : nom, numéro, confiance. Même PIN. |
+| `POST /app/contacts` | Carnet de contacts ; PIN dans le corps JSON |
+| `POST /app/outgoing` | Autorisation éphémère pour un appel sortant ; PIN et numéro |
+| `POST /app/history` · `/app/history/{call_id}` · `/app/history/clear` | Liste paginée (50), détail et effacement ; PIN dans le corps JSON |
+| `POST /app/voicemail` · `/app/voicemail/{id}/audio` · `/heard` · `/delete` | Messages vocaux, audio privé, état lu et suppression ; PIN dans le corps JSON |
+| `POST /twilio/voice/outbound` | Voice URL de la TwiML App pour les appels du clavier ; signature et autorisation obligatoires |
+| `POST /twilio/voicemail/status` · `/done` | Callbacks de dépôt vocal signés par Twilio |
 | `POST /control/calls/{id}/verify` | **Vérification d'identité par code.** Marche aussi sur un appel de confiance. |
 | `POST /control/calls/{id}/hold` · `/resume` | Surcharges humaines depuis l'app ou le dashboard |
 | `POST /control/calls/{id}/contact-denied` | Le proche dément, saisi à la main : le chemin qui ne dépend pas du SMS |
 | `GET /healthz` | Backend choisi, Twilio configuré ou non, appels en cours |
+
+Toutes les routes `/control/*` exigent l'en-tête `X-App-Pin`. L'app et le dashboard
+le transmettent automatiquement. Le PIN de connexion WebSocket est masqué dans les
+logs d'accès Uvicorn.
+
+`TWILIO_VALIDATE_SIGNATURE=true` est activé par défaut : les webhooks et la
+connexion audio vérifient leur origine Twilio avant de toucher les appels.
+`PUBLIC_HOSTNAME` doit être exactement l'hôte des URLs configurées dans Twilio,
+y compris après un changement de tunnel ngrok. La valeur `false` est réservée
+aux tests locaux qui simulent Twilio. Les appels sortants et dépôts vocaux exigent
+une signature valide même dans ce mode.
 
 Deux paramètres de query sur `/twilio/voice/inbound`, réservés à la démo sortante de
 `scripts/lancer_appel_demo.py` (où Twilio appelle l'arnaqueur, donc où `From` vaut notre
@@ -252,7 +343,16 @@ par défaut qui expose quoi que ce soit.
 | `CALLER_NOTICE_TEXT` | la phrase dite à l'appelant inconnu | une phrase par défaut qui nomme l'analyse |
 | `VOICE_CLIENT_IDENTITY` | l'identité du client Voice JS : l'app sonne | repli téléphonique sur `VICTIM_PHONE_NUMBER` |
 | `TWILIO_API_KEY_SID` · `_SECRET` · `TWILIO_TWIML_APP_SID` | signent l'Access Token Voice | `/app/token` refuse, en nommant le réglage manquant |
-| `APP_PIN` | protège `/app/token` et `/app/incoming` | **la route refuse tout** plutôt que de distribuer des jetons |
+| `APP_PIN` | protège l'app, l'historique, les contrôles et le flux du dashboard | vide ou moins de six chiffres : accès refusé |
+| `CALLER_NOTICE_LANGUAGE` | langue de l'annonce à l'appelant uniquement | `en-US` ; annonces à la personne protégée en `fr-FR` |
+| `CALLER_NOTICE_BILINGUAL` | ajoute l'annonce française après l'anglaise | `false` |
+| `HISTORY_ENABLED` | active la conservation locale des métadonnées | `true` |
+| `HISTORY_RETENTION_DAYS` | purge des anciens appels au démarrage | `30` |
+| `HISTORY_PATH` | emplacement SQLite local | `data/calls.sqlite` |
+| `VOICEMAIL_ENABLED` | propose un dépôt vocal après non-réponse | `true`, si Twilio est configuré |
+| `VOICEMAIL_RETENTION_DAYS` | suppression des fichiers vocaux distants | `30`, serveur en fonctionnement |
+| `VOICEMAIL_PATH` | métadonnées des messages uniquement | `data/voicemail.sqlite` |
+| `TWILIO_VALIDATE_SIGNATURE` | authentifie les webhooks et le flux audio Twilio | `true` |
 | `VERIFY_CODE_TTL_SECONDS` | fenêtre du code à 4 chiffres | 120 s (mettre ~45 s pour une démo de 90 s) |
 | `TRUSTED_VICTIM_ONLY_ANALYSIS` | sur un appel de confiance, n'écouter que la voix de l'abonnée | `false` — **à valider juridiquement** avant toute activation |
 | `SCAMMER_PHONE_NUMBER` · `DEMO_SPOOF_AS` | usurpation **simulée** pour la démo | vide, et inerte si l'un des deux manque. À revider après la démo |
@@ -323,5 +423,10 @@ Ces vérifications passent avant tout le reste :
 Les identifiants AWS du workshop expirent : les rafraîchir dans `~/.aws/credentials`
 juste avant de passer devant le jury.
 
-Aucun audio ni transcript n'est persisté par défaut (`PERSIST_AUDIO=false`,
-`PERSIST_TRANSCRIPTS=false`) — c'est aussi la réponse à la question vie privée du jury.
+Les conversations analysées ne sont pas enregistrées et leurs transcripts ne sont
+pas persistés. La messagerie enregistre uniquement le message déposé après
+l'annonce et le bip, chez Twilio, pour permettre sa lecture ultérieure. Ce choix
+doit être présenté distinctement dans la démonstration de la vie privée.
+La console affiche les types d'événements et leurs chiffres, sans texte de
+conversation ni contenu des SMS. Le dashboard authentifié affiche les transcripts
+en direct, en mémoire ; le cache serveur est supprimé quand l'appel se termine.

@@ -1,0 +1,28 @@
+{
+  "title": "Usurpation depuis le numéro connu du petit-fils",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_SCAM_KNOWN_IDENTITY",
+  "caller_number": "+33612345678",
+  "evaluation": {
+    "label": "scam",
+    "language": "fr",
+    "expected_decision": "alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Mamie c'est Lucas, j'ai eu un accident. Il faut m'aider tout de suite."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Fais un virement de trois mille euros maintenant et ne dis rien à maman."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Va acheter des cartes cadeaux et donne-moi les codes, reste bien au téléphone."
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
+from vocalguard.config import Settings
 from vocalguard.domain.events import Event, EventType
 from vocalguard.domain.ports import EventSink
 from vocalguard.interface.event_hub import EventHub
@@ -20,6 +21,7 @@ from vocalguard.interface.ws.dashboard import DASHBOARD_HTML, create_dashboard_r
 def app_and_hub() -> tuple[FastAPI, EventHub]:
     hub = EventHub()
     app = FastAPI()
+    app.state.settings = Settings(_env_file=None, app_pin="432198")
     app.include_router(create_dashboard_router(hub))
 
     @app.post("/_emit/{score}")
@@ -39,7 +41,7 @@ def app_and_hub() -> tuple[FastAPI, EventHub]:
 
 def test_live_event_reaches_a_connected_dashboard(app_and_hub):
     app, _ = app_and_hub
-    with TestClient(app) as client, client.websocket_connect("/ws/dashboard") as ws:
+    with TestClient(app) as client, client.websocket_connect("/ws/dashboard?pin=432198") as ws:
         client.post("/_emit/72")
         payload = ws.receive_json()
 
@@ -55,7 +57,7 @@ def test_dashboard_opened_late_receives_a_replay_frame(app_and_hub):
         client.post("/_emit/40")
         client.post("/_emit/90")
 
-        with client.websocket_connect("/ws/dashboard") as ws:
+        with client.websocket_connect("/ws/dashboard?pin=432198") as ws:
             frame = ws.receive_json()
 
     assert frame["type"] == "__replay__"
@@ -64,7 +66,7 @@ def test_dashboard_opened_late_receives_a_replay_frame(app_and_hub):
 
 def test_no_replay_frame_when_there_is_no_history(app_and_hub):
     app, _ = app_and_hub
-    with TestClient(app) as client, client.websocket_connect("/ws/dashboard") as ws:
+    with TestClient(app) as client, client.websocket_connect("/ws/dashboard?pin=432198") as ws:
         client.post("/_emit/55")
         # Première trame = l'événement live, pas un rejeu vide.
         assert ws.receive_json()["type"] == "score"
@@ -73,7 +75,7 @@ def test_no_replay_frame_when_there_is_no_history(app_and_hub):
 def test_disconnecting_unsubscribes(app_and_hub):
     app, hub = app_and_hub
     with TestClient(app) as client:
-        with client.websocket_connect("/ws/dashboard") as ws:
+        with client.websocket_connect("/ws/dashboard?pin=432198") as ws:
             client.post("/_emit/10")
             ws.receive_json()
         client.post("/_emit/20")
@@ -84,8 +86,8 @@ def test_two_dashboards_both_receive_events(app_and_hub):
     app, _ = app_and_hub
     with TestClient(app) as client:
         with (
-            client.websocket_connect("/ws/dashboard") as a,
-            client.websocket_connect("/ws/dashboard") as b,
+            client.websocket_connect("/ws/dashboard?pin=432198") as a,
+            client.websocket_connect("/ws/dashboard?pin=432198") as b,
         ):
             client.post("/_emit/88")
             assert a.receive_json()["data"]["score"] == 88
@@ -96,6 +98,7 @@ def test_dashboard_page_is_served():
     assert DASHBOARD_HTML.exists(), "la page du dashboard est absente"
     hub = EventHub()
     app = FastAPI()
+    app.state.settings = Settings(_env_file=None, app_pin="432198")
     app.include_router(create_dashboard_router(hub))
     with TestClient(app) as client:
         response = client.get("/dashboard")

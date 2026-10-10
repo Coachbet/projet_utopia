@@ -32,5 +32,5 @@ class LoggingCallController:
     def _record(self, method: str, *args: str) -> bool:
         entry = (method, *args)
         self.calls.append(entry)
-        logger.info("[twilio factice] %s", " ".join(entry))
+        logger.info("[twilio factice] %s (contenu privé non journalisé)", method)
         return True

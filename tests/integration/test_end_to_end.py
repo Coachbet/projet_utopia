@@ -331,16 +331,13 @@ async def test_false_authority_breaker_fires_end_to_end(monkeypatch):
 
 
 async def test_dashboard_hub_receives_the_whole_call():
-    """Le hub est abonné par `_subscribe_dashboard` : sans ça la page se
-    connecte et ne reçoit jamais rien."""
-    from vocalguard.interface.ws.dashboard import HUB
-
-    HUB.clear()
-    await _play("scam_01_petit_fils.json")
-
-    types = {e["type"] for e in HUB.replay()}
+    """Le hub de chaque application est isolé et reçoit le pipeline complet."""
+    app = create_app(_settings(), sink=InMemoryEventSink())
+    other = create_app(_settings(), sink=InMemoryEventSink())
+    await _drive(app, SCENARIOS["scam_01_petit_fils.json"])
+    types = {event["type"] for event in app.state.dashboard_hub.replay()}
     assert {"transcript", "keyword", "score", "action"} <= types
-    HUB.clear()
+    assert not tuple(other.state.dashboard_hub.replay())
 
 
 @pytest.mark.parametrize("backend", ["fake"])

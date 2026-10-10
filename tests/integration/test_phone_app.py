@@ -38,7 +38,7 @@ from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
 from vocalguard.infrastructure.telephony.client import TwilioCallController
 from vocalguard.interface.app import create_app
 
-PIN = "4321"
+PIN = "432198"
 MAUVAIS_PIN = "0000"
 
 ACCOUNT_SID = "ACfactice000000000000000000000001"
@@ -159,6 +159,24 @@ def test_l_icone_est_servie(harness) -> None:
 # --- Le code d'accès --------------------------------------------------------
 
 
+def test_contacts_proteges_par_pin_et_sans_alias(harness) -> None:
+    client, _ = harness
+    assert client.post("/app/contacts", json={"pin": MAUVAIS_PIN}).status_code == 403
+    response = client.post("/app/contacts", json={"pin": PIN})
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "items": [
+            {
+                "name": "Lucas Martin",
+                "number": NUMERO_LUCAS,
+                "relation": "petit-fils",
+                "mode": "trusted",
+            }
+        ]
+    }
+
+
 @pytest.mark.parametrize("route", ["/app/token", "/app/incoming"])
 def test_les_routes_protegees_refusent_sans_code(harness, route: str) -> None:
     client, _ = harness
@@ -179,7 +197,7 @@ def test_le_refus_ne_journalise_aucun_code(harness, caplog: pytest.LogCaptureFix
     """Ni le code attendu ni le code reçu. Le reçu est tout aussi sensible que
     l'attendu : à un chiffre près, c'est le même."""
     client, _ = harness
-    with caplog.at_level("WARNING", logger="vocalguard.interface.http.phone_app"):
+    with caplog.at_level("WARNING", logger="vocalguard.interface.auth"):
         client.post("/app/token", json={"pin": MAUVAIS_PIN})
     assert caplog.text, "un refus doit laisser une trace"
     assert PIN not in caplog.text
@@ -253,6 +271,34 @@ def test_un_contact_du_carnet_est_annonce_de_confiance(harness) -> None:
     assert charge["caller_name"] == "Lucas Martin"
     assert charge["relation"] == "petit-fils"
     assert charge["trusted"] is True
+
+
+def test_un_call_id_ambigu_ne_permet_pas_de_controler_une_autre_ligne(harness):
+    client, _ = harness
+    ouvrir_appel(client, NUMERO_INCONNU)
+    client.post("/twilio/voice/inbound", data={"CallSid": "CA_autre", "From": NUMERO_LUCAS})
+    charge = client.post("/app/incoming", json={"pin": PIN}).json()
+    assert charge == {"call_id": None, "ambiguous": True}
+
+
+def test_le_sid_du_sdk_designe_sa_ligne_meme_si_un_autre_appel_est_plus_recent(harness):
+    client, app = harness
+    ouvrir_appel(client, NUMERO_INCONNU)
+    client.post("/twilio/voice/inbound", data={"CallSid": "CA_autre", "From": NUMERO_LUCAS})
+    app.state.controller.call_id_for_leg = lambda sid: CALL_ID if sid == "CA_client" else None
+    charge = client.post("/app/incoming", json={"pin": PIN, "sdk_call_id": "CA_client"}).json()
+    assert charge["call_id"] == CALL_ID
+    assert charge["caller_number"] == NUMERO_INCONNU
+    assert charge["trusted"] is False
+    unknown = client.post("/app/incoming", json={"pin": PIN, "sdk_call_id": "CA_étranger"}).json()
+    assert unknown["call_id"] is None
+
+
+def test_le_jeton_et_les_codes_http_ne_sont_pas_mis_en_cache(harness):
+    client, _ = harness
+    response = client.post("/app/token", json={"pin": PIN})
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
 
 
 # --- `dial_victim` : l'app ou le téléphone ---------------------------------

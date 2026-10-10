@@ -1,0 +1,28 @@
+{
+  "title": "Prévention des fraudes et citation d’une arnaque",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_LEGIT_CARD_SAFETY_EDUCATION",
+  "caller_number": "+33700009108",
+  "evaluation": {
+    "label": "legitimate",
+    "language": "fr",
+    "expected_decision": "below_alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Bonjour, je confirme notre atelier de prévention prévu demain à la mairie."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Nous expliquerons pourquoi il faut refuser quelqu’un qui exige un virement urgent, des cartes cadeaux ou le code reçu par SMS."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Notre atelier est gratuit. Je ne vous demande aucune donnée bancaire ; les inscriptions passent par l’accueil de la mairie."
+    }
+  ]
+}

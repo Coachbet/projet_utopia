@@ -47,39 +47,55 @@ async def release_call(state: Any, call_id: str) -> None:
     # Le registre est la seule source de vérité sur « cet appel a-t-il existé ? » :
     # les deux purges suivantes sont des `discard`/`pop`, indistinguables d'un
     # no-op. On la lit AVANT de fermer, et c'est elle qui porte l'idempotence.
-    known = registry is not None and registry.get(call_id) is not None
+    session = None
+    try:
+        session = registry.get(call_id) if registry is not None else None
+    except Exception:
+        log.warning("Lecture de la session indisponible pour %s", call_id)
+    known = session is not None
+    duration_s = None
+    if session is not None:
+        try:
+            duration_s = session.t()
+        except Exception:
+            log.warning("Durée de la session indisponible pour %s", call_id)
+    freed = ["session"] if known else []
+
+    # Annulation avant le premier await : une réponse Bedrock ou un minuteur
+    # ne doit plus provoquer d'action pendant la fermeture des flux AWS.
+    for name in ("pipeline", "verifier"):
+        if _forget(getattr(state, name, None), call_id, name):
+            freed.append(name)
 
     if registry is not None:
-        # Le registre d'abord : `close()` ferme les streams Transcribe, la seule
-        # ressource réseau en jeu. Les deux purges suivantes ne touchent que des
-        # dictionnaires en mémoire et peuvent bien attendre une milliseconde.
+        # `close()` retire la session du registre et la marque fermée avant
+        # d'attendre AWS. Les callbacks finaux sont alors ignorés, et sa fenêtre
+        # de transcript est effacée même si une tâche garde encore sa référence.
         try:
             await registry.close(call_id)
         except Exception:
             log.exception("Fermeture de la session %s en échec", call_id)
 
-    freed = ["session"] if known else []
-    for name in ("pipeline", "controller", "verifier"):
-        if _forget(getattr(state, name, None), call_id, name):
-            freed.append(name)
+    cancel_ringing = getattr(getattr(state, "controller", None), "cancel_pending_victim", None)
+    if cancel_ringing is not None:
+        try:
+            await cancel_ringing(call_id)
+        except Exception:
+            log.exception("Arrêt de la sonnerie distante en échec pour %s", call_id)
 
-    # On n'attend délibérément PAS `pipeline.aclose()` : il attendrait les
-    # requêtes Bedrock en vol, soit plusieurs secondes, et Twilio coupe le
-    # webhook bien avant. Le choix reste le bon, mais la conséquence n'est pas
-    # anodine — une analyse LLM qui revient APRÈS cette purge fait trois choses
-    # dans `ScoringPipeline._run_llm`, toutes sur un appel mort :
-    #   - elle réinsère `_claimed_identity[call_id]`, et plus personne ne le
-    #     retirera : les deux déclencheurs de libération sont déjà passés. C'est
-    #     exactement la fuite que ce module existe pour éviter ;
-    #   - si l'identité revendiquée a changé, elle relance `_check_reputation`,
-    #     donc une requête Twilio Lookup v2 FACTURÉE pour un appel raccroché ;
-    #   - elle publie un `score`, sur lequel `InterventionRunner.handle_event` ne
-    #     trouve plus de session et logge « score reçu pour un appel inconnu » —
-    #     un WARNING qui ressemble à une panne alors que c'est la normale.
-    # La correction n'appartient pas ici mais à `application/scoring.py` : un
-    # garde `self._registry.get(call_id) is not None` dans `_run_llm`, avant
-    # d'écrire l'état, de vérifier la réputation et de publier le score. Fichier
-    # de Dev 2 : ne pas le modifier depuis ce côté-ci.
+    recorder = getattr(state, "history_recorder", None)
+    if recorder is not None:
+        try:
+            await recorder.finalize(call_id, duration_s=duration_s)
+        except Exception:
+            log.exception("Finalisation de l'historique en échec pour %s", call_id)
+
+    if _forget(getattr(state, "controller", None), call_id, "controller"):
+        freed.append("controller")
+    _forget(getattr(state, "outgoing", None), call_id, "outgoing")
+    # Dernière opération : aucun événement de fermeture ne peut rester dans la
+    # mémoire de rejeu du dashboard après le nettoyage.
+    _forget(getattr(state, "dashboard_hub", None), call_id, "dashboard")
 
     if known:
         log.info("Appel %s libéré (%s)", call_id, ", ".join(freed))

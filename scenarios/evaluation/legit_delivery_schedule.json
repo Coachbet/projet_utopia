@@ -1,0 +1,28 @@
+{
+  "title": "Livraison attendue et code remis au livreur présent",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_LEGIT_DELIVERY_SCHEDULE",
+  "caller_number": "+33700009105",
+  "evaluation": {
+    "label": "legitimate",
+    "language": "fr",
+    "expected_decision": "below_alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Bonjour, le livreur de votre commande passée hier. Je serai à votre adresse vers quinze heures."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Le code de remise du colis se présente quand je suis devant vous. Ne me donnez aucun code bancaire ou de connexion au téléphone."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "La commande est déjà payée. Si vous avez un doute, regardez le suivi dans votre compte habituel."
+    }
+  ]
+}

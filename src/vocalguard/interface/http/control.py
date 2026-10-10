@@ -47,17 +47,18 @@ import inspect
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from vocalguard.domain.alerts import ActionKind
 from vocalguard.domain.events import EventType
+from vocalguard.interface.auth import require_control_pin
 
 if TYPE_CHECKING:
     from vocalguard.application.sessions import CallSession
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/control", tags=["control"])
+router = APIRouter(prefix="/control", tags=["control"], dependencies=[Depends(require_control_pin)])
 
 
 @router.post("/calls/{call_id}/resume")

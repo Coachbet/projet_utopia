@@ -21,9 +21,9 @@ from __future__ import annotations
 from twilio.twiml.voice_response import VoiceResponse
 
 SAY_LANGUAGE = "fr-FR"
-"""Langue de toutes nos synthèses vocales. Partagée plutôt que recopiée : une
-voix anglaise lisant « Cet appel est analysé » est incompréhensible au téléphone,
-et le symptôme ne se voit dans aucun test — il s'entend."""
+"""Langue des annonces entendues par la personne protégée."""
+CALLER_NOTICE_LANGUAGE = "en-US"
+CALLER_NOTICE_FRENCH = "Cet appel est analysé par un service de protection contre la fraude."
 
 STREAM_TRACK_BOTH = "both_tracks"
 """Appelant ET personne protégée : le mode d'un appel inconnu, donc analysé.
@@ -43,8 +43,8 @@ DEFAULT_HOLD_MUSIC_URL = "http://com.twilio.music.classical.s3.amazonaws.com/Bus
 disponible même si notre tunnel ngrok tombe pendant la mise en attente du scammeur."""
 
 _CONFERENCE_COMMON = {
-    # La conférence démarre dès que quelqu'un entre et meurt quand une jambe part :
-    # sans ça, la victime se retrouverait seule en ligne après le départ du scammeur.
+    # La victime démarre la conférence. L'appelant attend son arrivée avec une
+    # tonalité, puis le départ de l'un des participants termine la conférence.
     "start_conference_on_enter": True,
     "end_conference_on_exit": True,
     # Un bip annoncerait notre présence à l'appelant.
@@ -63,6 +63,9 @@ def inbound_call_twiml(
     conference_status_callback: str | None = None,
     caller_number: str = "",
     caller_notice: str = "",
+    caller_notice_language: str = CALLER_NOTICE_LANGUAGE,
+    caller_notice_bilingual: bool = False,
+    caller_wait_url: str | None = None,
     track: str | None = STREAM_TRACK_BOTH,
 ) -> str:
     """Réponse au webhook de l'appel entrant (la jambe de l'appelant).
@@ -92,13 +95,15 @@ def inbound_call_twiml(
         # Premier verbe du document : l'appelant est informé avant que quoi que
         # ce soit d'autre ne commence. Twilio exécute les verbes dans l'ordre, et
         # c'est cet ordre-là, pas un commentaire, qui porte la promesse.
-        response.say(caller_notice, language=SAY_LANGUAGE)
+        response.say(caller_notice, language=caller_notice_language)
+        if caller_notice_bilingual:
+            response.say(CALLER_NOTICE_FRENCH, language=SAY_LANGUAGE)
 
     if track is not None:
         # Pas de `<Parameter name="call_id">` : le message `start` du WebSocket
         # porte déjà le `callSid`, un paramètre de plus serait une seconde
         # source de vérité.
-        stream = response.start().stream(url=stream_url, track=track)
+        stream = response.start().stream(url=stream_url, track=track, name="vocalguard-analysis")
 
         # `caller_number`, en revanche, n'a pas d'autre source : Twilio ne met
         # pas le `From` dans la trame `start`. Sans ce paramètre, une session
@@ -110,15 +115,12 @@ def inbound_call_twiml(
             stream.parameter(name="caller_number", value=caller_number)
 
     conference_kwargs = dict(_CONFERENCE_COMMON)
-    # Chaîne vide et non `None` : `waitUrl=""` coupe la musique d'attente Twilio.
-    # Sinon elle part dans le flux `outbound` et pollue le transcript de la victime
-    # avant même qu'elle décroche.
-    #
-    # Appliqué aussi en mode confiance, où il n'y a pourtant aucun transcript à
-    # polluer : une musique d'attente qui ne se déclencherait que pour les
-    # appelants reconnus apprendrait à qui rappelle deux fois s'il est au carnet
-    # ou non. Le routage ne doit s'entendre d'aucun côté de la ligne.
-    conference_kwargs["wait_url"] = ""
+    conference_kwargs["start_conference_on_enter"] = False
+    # Tonalité pure, aucun contenu vocal susceptible de polluer Transcribe.
+    # Même attente pour les contacts et les inconnus.
+    if caller_wait_url:
+        conference_kwargs["wait_url"] = caller_wait_url
+        conference_kwargs["wait_method"] = "GET"
     if conference_status_callback:
         conference_kwargs["status_callback"] = conference_status_callback
         conference_kwargs["status_callback_event"] = _STATUS_CALLBACK_EVENTS
@@ -211,3 +213,85 @@ def empty_twiml() -> str:
     Utile pour les callbacks de statut, qui attendent du XML valide et pas un 200 vide.
     """
     return str(VoiceResponse())
+
+
+def unavailable_twiml() -> str:
+    """Aucune personne n'a répondu : informer l'appelant et terminer sa jambe.
+
+    Aucun appel en conversation n'est interrompu par cette réponse.
+    """
+    response = VoiceResponse()
+    response.say("The person is not available.", language=CALLER_NOTICE_LANGUAGE)
+    response.hangup()
+    return str(response)
+
+
+def ringback_twiml(audio_url: str) -> str:
+    """Une cadence de retour d'appel répétée jusqu'à l'arrivée de la victime."""
+    response = VoiceResponse()
+    response.play(audio_url)
+    response.redirect("")
+    return str(response)
+
+
+def outgoing_call_twiml(*, number: str, caller_id: str, done_url: str, status_url: str) -> str:
+    """Un appel que la personne protégée compose : aucun flux ni enregistrement."""
+    response = VoiceResponse()
+    dial = response.dial(
+        caller_id=caller_id,
+        answer_on_bridge=True,
+        timeout=25,
+        record="do-not-record",
+        action=done_url,
+        method="POST",
+    )
+    dial.number(
+        number,
+        status_callback=status_url,
+        status_callback_method="POST",
+        status_callback_event="initiated ringing answered completed",
+    )
+    response.hangup()
+    return str(response)
+
+
+def outgoing_done_twiml(status: str) -> str:
+    response = VoiceResponse()
+    if status in {"busy", "failed", "no-answer"}:
+        response.say("Votre correspondant est indisponible.", language=SAY_LANGUAGE)
+    response.hangup()
+    return str(response)
+
+
+def voicemail_twiml(*, done_url: str, status_url: str, stop_analysis: bool = True) -> str:
+    """Dépôt vocal explicitement annoncé ; l'analyse est arrêtée avant de parler."""
+    response = VoiceResponse()
+    if stop_analysis:
+        response.stop().stream(name="vocalguard-analysis")
+    response.say(
+        "The person is not available. You may leave a voicemail after the beep. "
+        "Your message will be recorded. Press the pound key when finished.",
+        language=CALLER_NOTICE_LANGUAGE,
+    )
+    response.record(
+        action=done_url,
+        method="POST",
+        recording_status_callback=status_url,
+        recording_status_callback_method="POST",
+        recording_status_callback_event="completed",
+        max_length=120,
+        timeout=8,
+        play_beep=True,
+        trim="trim-silence",
+        transcribe=False,
+        finish_on_key="#",
+    )
+    response.hangup()
+    return str(response)
+
+
+def voicemail_done_twiml() -> str:
+    response = VoiceResponse()
+    response.say("Thank you. Goodbye.", language=CALLER_NOTICE_LANGUAGE)
+    response.hangup()
+    return str(response)

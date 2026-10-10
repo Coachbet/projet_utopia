@@ -67,6 +67,11 @@ FALSE_AUTHORITY_MIN_RISK = 0.85
 """Seuil de confiance exigé en plus de la conjonction. Sans lui, une hypothèse
 d'autorité peu assurée suffirait à mettre un appelant en attente."""
 
+PAYMENT_IDENTITY_MIN_RISK = 0.65
+"""Un numéro différent ne prouve pas une usurpation : un proche peut utiliser
+un téléphone prêté. Un jugement de fraude au moins modéré est exigé avant de
+forcer une mise en attente. Seuil heuristique du MVP, non calibré statistiquement."""
+
 
 @dataclass(frozen=True, slots=True)
 class BreakerResult:
@@ -96,6 +101,7 @@ def evaluate(signals: SignalSet, weighted_score: float, weights: Weights) -> lis
     #    La conjonction des deux est quasi décisive : on force l'intervention.
     if (
         content is not None
+        and content.risk >= PAYMENT_IDENTITY_MIN_RISK
         and _mentions_payment(content.tactics)
         and reputation is not None
         and reputation.identity_mismatch

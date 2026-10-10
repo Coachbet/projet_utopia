@@ -8,6 +8,7 @@ from typing import Any
 from vocalguard.application.sessions import MAX_HISTORY, CallSession, SessionRegistry
 from vocalguard.config import Settings
 from vocalguard.domain.events import EventType
+from vocalguard.domain.models import TranscriptSegment
 from vocalguard.infrastructure.fakes.event_sink import InMemoryEventSink
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
 from vocalguard.infrastructure.telephony.media_stream import (
@@ -263,6 +264,30 @@ async def test_aclose_deux_fois_ne_leve_pas() -> None:
     await session.aclose()
 
     assert all(stream.closed for stream in transcriber.streams.values())
+
+
+async def test_closed_session_drops_late_transcripts_audio_dtmf_and_actions() -> None:
+    session, transcriber, sink = _session()
+    await session.start()
+    await transcriber.say("caller", "Conversation avant fermeture", t=1)
+    assert session.history
+    previous_events = len(sink.events)
+    digits = []
+
+    async def dtmf(call_id: str, digit: str) -> None:
+        digits.append(digit)
+
+    session.dtmf_hook = dtmf
+    await session.aclose()
+    await transcriber.say("caller", "CODE_SECRET_FINAL_4821", t=2)
+    await session.on_segment(TranscriptSegment("victim", "CODE_SECRET_4821", 2, True))
+    await session.on_media(_chunk())
+    await session._on_dtmf("1")
+    await session.emit(EventType.ACTION, {"action": "verify_requested", "code": "4821"})
+    assert session.history == []
+    assert len(sink.events) == previous_events
+    assert transcriber.bytes_received == {"caller": 0, "victim": 0}
+    assert digits == []
 
 
 async def test_la_frame_stop_ferme_la_session() -> None:

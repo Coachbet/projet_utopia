@@ -206,6 +206,8 @@ class CallSession:
         self._streams[speaker] = stream
 
     async def on_frame(self, frame: Frame) -> None:
+        if self._closed:
+            return
         match frame:
             case StreamStart():
                 self.stream_sid = frame.stream_sid
@@ -227,6 +229,8 @@ class CallSession:
         l'appel ne l'est pas. Un service de vérification en panne ne doit pas
         interrompre la boucle média pour une touche pressée par curiosité.
         """
+        if self._closed:
+            return
         # Tracé AVANT le test du hook, et au niveau INFO : c'est la seule
         # observation qui réponde à la question ouverte du Lot 0 §5 (« Twilio
         # remonte-t-il une touche à travers un `<Start><Stream>` unidirectionnel ? »).
@@ -244,6 +248,8 @@ class CallSession:
             logger.warning("touche %r non traitée sur %s", digit, self.call_id, exc_info=True)
 
     async def on_media(self, chunk: MediaChunk) -> None:
+        if self._closed:
+            return
         speaker = chunk.speaker
         if speaker is None:
             logger.debug("piste inconnue %r ignorée", chunk.track)
@@ -258,6 +264,8 @@ class CallSession:
             except Exception:
                 logger.warning("audio %s perdu pour la transcription", speaker, exc_info=True)
 
+        if self._closed:
+            return
         # Seule la voix de l'appelant est testée pour la synthèse : c'est lui le
         # scammeur présumé, et analyser la victime doublerait le coût CPU pour rien.
         if self.audio_tap is not None and speaker == "caller":
@@ -273,6 +281,10 @@ class CallSession:
         # si `self._settings.persist_audio` est vrai.
 
     async def on_segment(self, segment: TranscriptSegment) -> None:
+        # Transcribe peut livrer ses derniers résultats pendant `close()`.
+        # Ils ne doivent ni ressusciter le dashboard ni réarmer l'analyse.
+        if self._closed:
+            return
         if segment.is_final:
             self.history.append(segment)
             if len(self.history) > MAX_HISTORY:
@@ -305,6 +317,8 @@ class CallSession:
         speaker: Speaker | None = None,
         t: float | None = None,
     ) -> None:
+        if self._closed:
+            return
         event = Event(
             call_id=self.call_id,
             t=self.t() if t is None else max(0.0, t),
@@ -323,6 +337,7 @@ class CallSession:
         if self._closed:
             return
         self._closed = True
+        self.history.clear()
         for speaker, stream in self._streams.items():
             try:
                 await stream.close()

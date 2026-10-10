@@ -19,6 +19,7 @@ import asyncio
 import base64
 import json
 import logging
+from unittest.mock import AsyncMock
 from xml.etree import ElementTree
 
 import pytest
@@ -43,6 +44,7 @@ def harness():
     """Une app complète câblée sur des doublures, et de quoi l'inspecter."""
     settings = Settings(
         _env_file=None,
+        app_pin="432198",
         transcribe_backend="fake",
         public_hostname="demo.ngrok-free.app",
         victim_phone_number="+33600000000",
@@ -52,7 +54,7 @@ def harness():
     transcriber = FakeTranscriber()
     sink = InMemoryEventSink()
     app = create_app(settings, sink=sink, transcriber_factory=lambda: transcriber)
-    with TestClient(app) as client:
+    with TestClient(app, headers={"X-App-Pin": "432198"}) as client:
         yield client, app, transcriber, sink
 
 
@@ -288,6 +290,7 @@ def controller_twilio(harness):
     """
     _, app, _, _ = harness
     controller = TwilioCallController(app.state.settings, announcements=app.state.announcements)
+    controller.dial_victim = AsyncMock(return_value="CA_victim_fixture")
     app.state.controller = controller
     return controller
 

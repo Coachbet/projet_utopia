@@ -1,0 +1,766 @@
+{
+  "generated_at_utc": "2026-10-10T20:12:54.990538+00:00",
+  "mode": "offline",
+  "model": "FakeContentAnalyzer",
+  "evidence": "HORS LIGNE : doublure heuristique, aucune requête Claude/Bedrock.",
+  "configuration": {
+    "thresholds": {
+      "watch": 40,
+      "alert": 65,
+      "intervene": 85
+    },
+    "weights": {
+      "llm": 45,
+      "keywords": 20,
+      "voice": 20,
+      "reputation": 15
+    },
+    "payment_identity_min_risk": 0.65,
+    "voice_signal": "not_measured",
+    "twilio_lookup": "disabled",
+    "routing_exercised": "all_synthetic_transcripts_analyzed",
+    "content_min_interval_seconds": 0,
+    "scenario_clock": "simulated; first_alert_s is not wall-clock latency",
+    "bedrock_region": null
+  },
+  "alert_threshold": 65,
+  "summary": {
+    "total_cases": 22,
+    "evaluated_cases": 22,
+    "unavailable_cases": 0,
+    "confusion_matrix": {
+      "true_positive": 3,
+      "true_negative": 11,
+      "false_positive": 0,
+      "false_negative": 8
+    },
+    "sensitivity": 0.2727,
+    "specificity": 1.0,
+    "precision": 1.0,
+    "accuracy": 0.6364,
+    "classification_errors": [
+      {
+        "id": "scam_bank_mixed",
+        "category": "false_negative",
+        "peak_score": 21
+      },
+      {
+        "id": "scam_delivery_otp",
+        "category": "false_negative",
+        "peak_score": 51
+      },
+      {
+        "id": "scam_family_english",
+        "category": "false_negative",
+        "peak_score": 25
+      },
+      {
+        "id": "scam_insurance_refund",
+        "category": "false_negative",
+        "peak_score": 42
+      },
+      {
+        "id": "scam_invest_crypto",
+        "category": "false_negative",
+        "peak_score": 40
+      },
+      {
+        "id": "scam_police_english",
+        "category": "false_negative",
+        "peak_score": 52
+      },
+      {
+        "id": "scam_support_remote",
+        "category": "false_negative",
+        "peak_score": 43
+      },
+      {
+        "id": "scam_03_fausse_autorite",
+        "category": "false_negative",
+        "peak_score": 52
+      }
+    ],
+    "content_calls": 111,
+    "content_successes": 111,
+    "content_failures": 0,
+    "content_latency_ms": {
+      "samples": 111,
+      "p50": 0.016,
+      "p95": 0.043,
+      "max": 0.268
+    }
+  },
+  "analyzed_route_summary": {
+    "total_cases": 19,
+    "evaluated_cases": 19,
+    "unavailable_cases": 0,
+    "confusion_matrix": {
+      "true_positive": 2,
+      "true_negative": 9,
+      "false_positive": 0,
+      "false_negative": 8
+    },
+    "sensitivity": 0.2,
+    "specificity": 1.0,
+    "precision": 1.0,
+    "accuracy": 0.5789,
+    "classification_errors": [
+      {
+        "id": "scam_bank_mixed",
+        "category": "false_negative",
+        "peak_score": 21
+      },
+      {
+        "id": "scam_delivery_otp",
+        "category": "false_negative",
+        "peak_score": 51
+      },
+      {
+        "id": "scam_family_english",
+        "category": "false_negative",
+        "peak_score": 25
+      },
+      {
+        "id": "scam_insurance_refund",
+        "category": "false_negative",
+        "peak_score": 42
+      },
+      {
+        "id": "scam_invest_crypto",
+        "category": "false_negative",
+        "peak_score": 40
+      },
+      {
+        "id": "scam_police_english",
+        "category": "false_negative",
+        "peak_score": 52
+      },
+      {
+        "id": "scam_support_remote",
+        "category": "false_negative",
+        "peak_score": 43
+      },
+      {
+        "id": "scam_03_fausse_autorite",
+        "category": "false_negative",
+        "peak_score": 52
+      }
+    ],
+    "content_calls": 90,
+    "content_successes": 90,
+    "content_failures": 0,
+    "content_latency_ms": {
+      "samples": 90,
+      "p50": 0.017,
+      "p95": 0.044,
+      "max": 0.268
+    }
+  },
+  "routing_projection": {
+    "evidence": "Projection du routage, sans appel réel : un contact de confiance passe sans alerte ni analyse. La vérification manuelle est hors périmètre.",
+    "summary": {
+      "total_cases": 22,
+      "evaluated_cases": 22,
+      "unavailable_cases": 0,
+      "confusion_matrix": {
+        "true_positive": 2,
+        "true_negative": 11,
+        "false_positive": 0,
+        "false_negative": 9
+      },
+      "sensitivity": 0.1818,
+      "specificity": 1.0,
+      "precision": 1.0,
+      "accuracy": 0.5909,
+      "classification_errors": [
+        {
+          "id": "scam_bank_mixed",
+          "category": "false_negative",
+          "peak_score": 21
+        },
+        {
+          "id": "scam_delivery_otp",
+          "category": "false_negative",
+          "peak_score": 51
+        },
+        {
+          "id": "scam_family_english",
+          "category": "false_negative",
+          "peak_score": 25
+        },
+        {
+          "id": "scam_insurance_refund",
+          "category": "false_negative",
+          "peak_score": 42
+        },
+        {
+          "id": "scam_invest_crypto",
+          "category": "false_negative",
+          "peak_score": 40
+        },
+        {
+          "id": "scam_known_identity",
+          "category": "false_negative",
+          "peak_score": null
+        },
+        {
+          "id": "scam_police_english",
+          "category": "false_negative",
+          "peak_score": 52
+        },
+        {
+          "id": "scam_support_remote",
+          "category": "false_negative",
+          "peak_score": 43
+        },
+        {
+          "id": "scam_03_fausse_autorite",
+          "category": "false_negative",
+          "peak_score": 52
+        }
+      ],
+      "content_calls": 90,
+      "content_successes": 90,
+      "content_failures": 0,
+      "content_latency_ms": {
+        "samples": 90,
+        "p50": 0.017,
+        "p95": 0.044,
+        "max": 0.268
+      }
+    },
+    "trusted_cases": [
+      {
+        "id": "scam_known_identity",
+        "label": "scam",
+        "routed_decision": "no_analysis_no_alert"
+      },
+      {
+        "id": "legit_01_famille",
+        "label": "legitimate",
+        "routed_decision": "no_analysis_no_alert"
+      },
+      {
+        "id": "legit_02_fille_urgence_reelle",
+        "label": "legitimate",
+        "routed_decision": "no_analysis_no_alert"
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "legit_bank_callback",
+      "title": "Vraie banque et rappel par un canal vérifié",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 44,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.268,
+        0.018,
+        0.023
+      ]
+    },
+    {
+      "id": "legit_card_safety_education",
+      "title": "Prévention des fraudes et citation d’une arnaque",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 44,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.011,
+        0.016,
+        0.019
+      ]
+    },
+    {
+      "id": "legit_clinic_urgent",
+      "title": "Cabinet médical : rendez-vous urgent",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 28,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.015,
+        0.021,
+        0.021
+      ]
+    },
+    {
+      "id": "legit_delivery_schedule",
+      "title": "Livraison attendue et code remis au livreur présent",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 5,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.011,
+        0.017,
+        0.021
+      ]
+    },
+    {
+      "id": "legit_invoice_plumber",
+      "title": "Facture normale d’un artisan",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 33,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.01,
+        0.017,
+        0.023
+      ]
+    },
+    {
+      "id": "legit_neighbor_mixed",
+      "title": "Voisine et vraie urgence avec alternance FR/EN",
+      "label": "legitimate",
+      "language": "fr-en",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 5,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.01,
+        0.015,
+        0.023
+      ]
+    },
+    {
+      "id": "legit_tourist_english",
+      "title": "Touriste anglophone perdu",
+      "label": "legitimate",
+      "language": "en",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 15,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.01,
+        0.013,
+        0.02
+      ]
+    },
+    {
+      "id": "legit_urgent_borrowed_phone",
+      "title": "Vraie urgence familiale depuis un téléphone prêté",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 40,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.014,
+        0.016,
+        0.02
+      ]
+    },
+    {
+      "id": "scam_bank_mixed",
+      "title": "Faux banquier avec alternance FR/EN",
+      "label": "scam",
+      "language": "fr-en",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 21,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.011,
+        0.017,
+        0.021
+      ]
+    },
+    {
+      "id": "scam_delivery_otp",
+      "title": "Faux colis et code bancaire",
+      "label": "scam",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 51,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.012,
+        0.014,
+        0.017
+      ]
+    },
+    {
+      "id": "scam_family_english",
+      "title": "Faux proche en anglais",
+      "label": "scam",
+      "language": "en",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 25,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.011,
+        0.013,
+        0.016
+      ]
+    },
+    {
+      "id": "scam_insurance_refund",
+      "title": "Faux remboursement de mutuelle",
+      "label": "scam",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 42,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.011,
+        0.017,
+        0.023
+      ]
+    },
+    {
+      "id": "scam_invest_crypto",
+      "title": "Placement crypto garanti sous pression",
+      "label": "scam",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 40,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.012,
+        0.019,
+        0.023
+      ]
+    },
+    {
+      "id": "scam_known_identity",
+      "title": "Usurpation depuis le numéro connu du petit-fils",
+      "label": "scam",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "trusted_passthrough",
+      "peak_score": 65,
+      "peak_level": "alert",
+      "predicted": "scam",
+      "first_alert_s": 9.0,
+      "breakers": [
+        "llm_high_confidence"
+      ],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "id": "scam_police_english",
+      "title": "Fausse police et rançon en anglais",
+      "label": "scam",
+      "language": "en",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 52,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.01,
+        0.013,
+        0.014
+      ]
+    },
+    {
+      "id": "scam_support_remote",
+      "title": "Faux support technique et prise de contrôle",
+      "label": "scam",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 43,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 3,
+      "content_successes": 3,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.01,
+        0.016,
+        0.018
+      ]
+    },
+    {
+      "id": "legit_01_famille",
+      "title": "Vrai appel de famille (test de faux positif)",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "trusted_passthrough",
+      "peak_score": 11,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 7,
+      "content_successes": 7,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.007,
+        0.007,
+        0.009,
+        0.008,
+        0.013,
+        0.016,
+        0.013
+      ]
+    },
+    {
+      "id": "legit_02_fille_urgence_reelle",
+      "title": "Vraie urgence familiale (test de faux positif le plus dur)",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "trusted_passthrough",
+      "peak_score": 24,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 11,
+      "content_successes": 11,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.01,
+        0.009,
+        0.014,
+        0.013,
+        0.016,
+        0.018,
+        0.022,
+        0.019,
+        0.026,
+        0.025,
+        0.026
+      ]
+    },
+    {
+      "id": "legit_03_vrai_conseiller_bancaire",
+      "title": "Le vrai conseiller bancaire (le faux positif le plus dangereux)",
+      "label": "legitimate",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 34,
+      "peak_level": "none",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 15,
+      "content_successes": 15,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.013,
+        0.015,
+        0.021,
+        0.023,
+        0.027,
+        0.023,
+        0.028,
+        0.044,
+        0.032,
+        0.042,
+        0.044,
+        0.041,
+        0.044,
+        0.048,
+        0.042
+      ]
+    },
+    {
+      "id": "scam_01_petit_fils",
+      "title": "Faux petit-fils en urgence",
+      "label": "scam",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 85,
+      "peak_level": "intervene",
+      "predicted": "scam",
+      "first_alert_s": 15.0,
+      "breakers": [
+        "llm_high_confidence",
+        "payment_request_with_identity_mismatch"
+      ],
+      "content_calls": 9,
+      "content_successes": 9,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.009,
+        0.007,
+        0.012,
+        0.01,
+        0.013,
+        0.013,
+        0.013,
+        0.014,
+        0.015
+      ]
+    },
+    {
+      "id": "scam_02_faux_conseiller_bancaire",
+      "title": "Faux conseiller bancaire",
+      "label": "scam",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 85,
+      "peak_level": "intervene",
+      "predicted": "scam",
+      "first_alert_s": 64.0,
+      "breakers": [
+        "payment_request_with_identity_mismatch"
+      ],
+      "content_calls": 11,
+      "content_successes": 11,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.016,
+        0.013,
+        0.018,
+        0.015,
+        0.021,
+        0.034,
+        0.026,
+        0.049,
+        0.033,
+        0.035,
+        0.037
+      ]
+    },
+    {
+      "id": "scam_03_fausse_autorite",
+      "title": "Fausse autorité — gendarmerie",
+      "label": "scam",
+      "language": "fr",
+      "status": "evaluated",
+      "production_route": "analyzed",
+      "peak_score": 52,
+      "peak_level": "watch",
+      "predicted": "legitimate",
+      "first_alert_s": null,
+      "breakers": [],
+      "content_calls": 10,
+      "content_successes": 10,
+      "content_failures": 0,
+      "content_latency_ms": [
+        0.01,
+        0.008,
+        0.014,
+        0.014,
+        0.017,
+        0.016,
+        0.021,
+        0.029,
+        0.031,
+        0.031
+      ]
+    }
+  ]
+}

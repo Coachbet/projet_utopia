@@ -1,0 +1,28 @@
+{
+  "title": "Touriste anglophone perdu",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_LEGIT_TOURIST_ENGLISH",
+  "caller_number": "+442000009106",
+  "evaluation": {
+    "label": "legitimate",
+    "language": "en",
+    "expected_decision": "below_alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Hello, I am staying in your guesthouse. I lost my passport and I am frightened."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Could you tell me how to reach the police station? I need help quickly."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "I am not asking you to send money. I will go to the station myself and speak with the officers."
+    }
+  ]
+}

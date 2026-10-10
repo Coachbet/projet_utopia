@@ -1,0 +1,28 @@
+{
+  "title": "Vraie urgence familiale depuis un téléphone prêté",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_LEGIT_URGENT_BORROWED_PHONE",
+  "caller_number": "+33700009101",
+  "evaluation": {
+    "label": "legitimate",
+    "language": "fr",
+    "expected_decision": "below_alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Maman, c'est Camille. Mon téléphone est déchargé, une infirmière me prête le sien. Lucas a eu un accident et il est à l'hôpital."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Tu peux rappeler le standard de l'hôpital sur le numéro de son site pour vérifier, ou appeler Thomas."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "J'ai payé la pharmacie, mais je ne te demande pas de virement. Viens quand tu peux, nous sommes avec le médecin."
+    }
+  ]
+}

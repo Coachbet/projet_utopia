@@ -25,8 +25,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import io
 import logging
+import math
 import re
+import struct
+import wave
+from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -44,8 +50,14 @@ from vocalguard.infrastructure.telephony.twiml import (
     hold_music_twiml,
     inbound_call_twiml,
     join_conference_twiml,
+    outgoing_call_twiml,
+    outgoing_done_twiml,
     refusal_twiml,
+    ringback_twiml,
+    unavailable_twiml,
+    voicemail_done_twiml,
 )
+from vocalguard.interface.http.phone_app import outgoing_authorizations, outgoing_number
 from vocalguard.interface.lifecycle import release_call
 
 if TYPE_CHECKING:
@@ -71,8 +83,8 @@ async def verify_twilio_signature(request: Request) -> None:
     le compte-token ; la signature est la seule preuve d'origine qu'on puisse
     vérifier hors ligne.
 
-    Pourquoi c'est éteint par défaut : cf. `Settings.twilio_validate_signature`.
-    Réglage faux = retour immédiat, zéro changement de comportement.
+    Activé par défaut. Un réglage faux permet uniquement les tests locaux
+    qui simulent Twilio sans credentials.
 
     L'URL validée est reconstruite depuis `settings.public_base_url` + le chemin,
     JAMAIS `request.url` : la signature de Twilio porte sur l'URL PUBLIQUE qu'il
@@ -81,6 +93,10 @@ async def verify_twilio_signature(request: Request) -> None:
     cet endroit que la validation échoue en pratique — d'où le log explicite.
     """
     settings = request.app.state.settings
+    # Fichier sonore déterministe et public, aucun état d'appel. Les lecteurs
+    # média Twilio doivent pouvoir le télécharger sans formulaire signé.
+    if request.method == "GET" and request.url.path == "/twilio/voice/ringback.wav":
+        return
     if not getattr(settings, "twilio_validate_signature", False):
         return
 
@@ -93,7 +109,7 @@ async def verify_twilio_signature(request: Request) -> None:
         # pas au démarrage pour autant : la démo doit pouvoir booter.
         log.error(
             "TWILIO_VALIDATE_SIGNATURE=true mais TWILIO_AUTH_TOKEN est vide : "
-            "webhook %s refusé. Renseigner le token, ou remettre le réglage à false.",
+            "webhook %s refusé. Renseigner le token avant de recevoir des appels réels.",
             request.url.path,
         )
         raise HTTPException(status_code=403, detail="Signature Twilio non vérifiable")
@@ -120,7 +136,7 @@ async def verify_twilio_signature(request: Request) -> None:
         "Signature Twilio invalide sur %s : requête refusée (403). À vérifier, "
         "dans cet ordre : l'URL collée dans la console Twilio doit être "
         "exactement « %s » ; PUBLIC_HOSTNAME doit valoir l'hôte public (ngrok) ; "
-        "sinon repasser TWILIO_VALIDATE_SIGNATURE à false — derrière un tunnel, "
+        "derrière un tunnel, "
         "l'échec vient presque toujours de l'URL, pas d'un attaquant. "
         "En-tête %s %s.",
         request.url.path,
@@ -285,6 +301,11 @@ async def voice_inbound(request: Request) -> Response:
         log.warning("Webhook inbound sans CallSid — appel ignoré")
         return _xml(empty_twiml())
 
+    # Compatibilité avec une TwiML App dont l'URL Voice pointait déjà sur cette
+    # route. Un appel SDK ne doit jamais être traité comme un inconnu entrant.
+    if from_number.startswith("client:"):
+        return await _outbound_call(request, form)
+
     # --- 2. Ce que l'appelant PRÉTEND être (démo seulement) ----------------
     #
     # Les deux réécritures se chaînent exprès : le script de démo déclare « c'est
@@ -348,13 +369,24 @@ async def voice_inbound(request: Request) -> Response:
         transcribe=ecoute,
         speakers=locuteurs,
     )
+    recorder = getattr(request.app.state, "history_recorder", None)
+    if recorder is not None:
+        await recorder.start_call(
+            call_sid,
+            caller_number="" if masque else from_number,
+            route="trusted_passthrough" if confiance else "analyzed",
+            started_at=datetime.now(UTC) - timedelta(seconds=session.t()),
+        )
+    remember = getattr(controller, "remember_caller", None)
+    if remember is not None:
+        remember(call_sid, "" if masque else from_number, has_stream=ecoute)
 
     # L'appel de la victime part en tâche de fond : Twilio attend ce TwiML pour
     # placer l'appelant dans la conférence, et un aller-retour REST ici coûterait
     # une seconde d'attente côté scammeur — assez pour qu'il raccroche. Il part
     # aussi pour un appel de confiance : c'est un appel à transmettre, pas à
     # ignorer. Seule la boucle (ci-dessus) n'y a pas droit.
-    task = asyncio.create_task(_dial_victim(controller, call_sid))
+    task = asyncio.create_task(_dial_victim(controller, call_sid, request.app.state))
     _background.add(task)
     task.add_done_callback(_background.discard)
 
@@ -411,6 +443,7 @@ async def voice_inbound(request: Request) -> Response:
                 conference_name=settings.conference_name_for(call_sid),
                 conference_status_callback=conference_status,
                 caller_number=from_number,
+                caller_wait_url=f"{settings.public_base_url}/twilio/voice/ringback",
                 # Aucune annonce : l'appelant de confiance ne doit rien entendre
                 # qui lui apprenne qu'il a été reconnu — ni qu'un service existe.
                 track=STREAM_TRACK_VICTIM_ONLY if ecoute else None,
@@ -443,6 +476,9 @@ async def voice_inbound(request: Request) -> Response:
             # le numéro appelant si ce webhook n'est pas passé le premier.
             caller_number=from_number,
             caller_notice=settings.caller_notice_text,
+            caller_notice_language=settings.caller_notice_language,
+            caller_notice_bilingual=settings.caller_notice_bilingual,
+            caller_wait_url=f"{settings.public_base_url}/twilio/voice/ringback",
             track=STREAM_TRACK_BOTH,
         )
     )
@@ -553,7 +589,7 @@ def _motif_inconnu(contact: Contact | None, from_number: str, *, masque: bool) -
     return f"numéro {from_number} absent du carnet"
 
 
-async def _dial_victim(controller, call_id: str) -> None:
+async def _dial_victim(controller, call_id: str, state: Any = None) -> None:
     # `dial_victim` n'est pas dans le port `CallController` : seul l'adapter
     # Twilio sait passer un appel. Sans lui (démo sans téléphone), on ne fait rien.
     dial = getattr(controller, "dial_victim", None)
@@ -563,6 +599,8 @@ async def _dial_victim(controller, call_id: str) -> None:
     try:
         victim_call_sid = await dial(call_id)
         log.info("Jambe victime créée pour %s : %s", call_id, victim_call_sid)
+        if victim_call_sid is None and state is not None:
+            await release_call(state, call_id)
     except Exception:
         log.exception("Impossible d'appeler la victime pour %s", call_id)
 
@@ -580,6 +618,10 @@ async def voice_join(call_id: str, request: Request) -> Response:
     """
     state = request.app.state
     settings = state.settings
+    if state.registry.get(call_id) is None:
+        # L'appelant a raccroché pendant que la victime décrochait : ne pas
+        # recréer une conférence orpheline.
+        return _xml(unavailable_twiml())
     return _xml(
         join_conference_twiml(
             conference_name=settings.conference_name_for(call_id),
@@ -648,25 +690,234 @@ async def voice_status(request: Request) -> Response:
     est celui de `ws/media.py`. Les deux appellent `release_call`, qui est
     idempotent — c'est voulu, ils arrivent souvent tous les deux.
 
-    Comportement connu et ACCEPTÉ, ne pas « corriger » : la jambe sortante vers
-    la victime poste aussi ici, avec SON PROPRE CallSid (cf. `status_callback`
-    dans `TwilioCallController.dial_victim`). Ce SID n'est pas un `call_id`
-    connu, donc la libération est un no-op inoffensif. Conséquence : si la
-    VICTIME raccroche la première, la session reste ouverte jusqu'à ce que le
-    scammeur raccroche aussi — il reste seul dans la conférence, son propre
-    statut terminal arrive alors et libère l'appel. Nettoyer sur le SID de la
-    victime demanderait de mémoriser la correspondance jambe→appel, pour
-    fermer... un appel dont le scammeur parle peut-être encore.
+    La jambe victime porte maintenant un call_id parent et son type de
+    destination. Son SID est vérifié dans le contrôleur avant tout repli ou fin.
     """
     form = await request.form()
     call_sid = str(form.get("CallSid") or "")
     status = str(form.get("CallStatus") or "")
     log.info("Statut d'appel %s : %s", call_sid, status)
 
+    parent = str(request.query_params.get("call_id") or "")
+    leg = str(request.query_params.get("leg") or "")
+    if parent or leg:
+        state = request.app.state
+        if parent and leg in {"app", "phone"} and state.registry.get(parent) is not None:
+            task = asyncio.create_task(_victim_status(state, parent, call_sid, leg, status))
+            _background.add(task)
+            task.add_done_callback(_background.discard)
+        return _xml(empty_twiml())
+
     if call_sid and status in {"completed", "canceled", "failed", "busy", "no-answer"}:
         await release_call(request.app.state, call_sid)
 
     return _xml(empty_twiml())
+
+
+async def _victim_status(state: Any, parent: str, sid: str, leg: str, status: str) -> None:
+    hook = getattr(state.controller, "victim_status", None)
+    if hook is None or state.registry.get(parent) is None:
+        return
+    try:
+        outcome = await hook(parent, sid, leg=leg, status=status)
+        recorder = getattr(state, "history_recorder", None)
+        # `completed` est aussi une preuve de connexion (les appels sans
+        # réponse ont des statuts terminaux distincts). Le callback answered
+        # peut arriver après le terminal, Twilio ne garantit pas leur ordre.
+        if outcome in {"answered", "completed"} and recorder is not None:
+            await recorder.mark_answered(parent)
+        if outcome in {"unavailable", "completed"}:
+            await release_call(state, parent)
+    except Exception:
+        log.exception("Statut de jambe victime ingérable pour %s", parent)
+
+
+@router.api_route("/voice/ringback", methods=["GET", "POST"])
+async def voice_ringback(request: Request) -> Response:
+    base = request.app.state.settings.public_base_url
+    return _xml(ringback_twiml(f"{base}/twilio/voice/ringback.wav"))
+
+
+@lru_cache(maxsize=1)
+def _ringback_audio() -> bytes:
+    """Cadence téléphonique 440 Hz, 1,5 s de son puis 3,5 s de silence.
+
+    Générée en mémoire, indépendante de tout audio reçu ou donné personnel.
+    """
+    sample_rate = 8000
+    frames = bytearray()
+    for index in range(5 * sample_rate):
+        sample = (
+            int(6000 * math.sin(2 * math.pi * 440 * index / sample_rate))
+            if index < 1.5 * sample_rate
+            else 0
+        )
+        frames.extend(struct.pack("<h", sample))
+    output = io.BytesIO()
+    with wave.open(output, "wb") as sound:
+        sound.setnchannels(1)
+        sound.setsampwidth(2)
+        sound.setframerate(sample_rate)
+        sound.writeframes(frames)
+    return output.getvalue()
+
+
+@router.get("/voice/ringback.wav")
+async def voice_ringback_audio() -> Response:
+    return Response(
+        content=_ringback_audio(),
+        media_type="audio/wav",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+async def _require_private_voice_signature(request: Request) -> None:
+    """Les sortants et dépôts vocaux exigent une vraie signature même en démo.
+
+    Le mode de rejeu des appels entrants ne doit jamais autoriser un appel
+    facturable ni l'ajout d'un enregistrement par un visiteur de l'URL publique.
+    """
+    settings = request.app.state.settings
+    token = settings.twilio_auth_token
+    signature = request.headers.get(SIGNATURE_HEADER, "")
+    if not token or not settings.public_hostname or not signature:
+        raise HTTPException(403, "Signature Twilio requise.")
+    form = await request.form()
+    params = {key: str(value) for key, value in form.items()}
+    url = f"{settings.public_base_url}{request.url.path}"
+    if request.url.query:
+        url += f"?{request.url.query}"
+    if not RequestValidator(token).validate(url, params, signature):
+        # Le nonce d'appel est dans le corps, jamais dans les logs/URLs.
+        raise HTTPException(403, "Signature Twilio invalide.")
+    account = str(form.get("AccountSid") or "")
+    if account and account != settings.twilio_account_sid:
+        raise HTTPException(403, "Compte Twilio incorrect.")
+
+
+@router.post("/voice/outbound")
+async def voice_outbound(request: Request) -> Response:
+    return await _outbound_call(request, await request.form())
+
+
+async def _outbound_call(request: Request, form) -> Response:
+    await _require_private_voice_signature(request)
+    state = request.app.state
+    settings = state.settings
+    identity = str(form.get("From") or "")
+    if identity != settings.voice_client_target:
+        raise HTTPException(403, "Identité Voice non autorisée.")
+    call_id = str(form.get("CallSid") or "")
+    nonce = str(form.get("Authorization") or "")
+    if not call_id or len(form.getlist("Authorization")) != 1:
+        raise HTTPException(403, "Autorisation sortante absente.")
+    authorizations = outgoing_authorizations(state)
+    already_active = authorizations.owns(call_id)
+    number = authorizations.consume(nonce, identity=settings.voice_client_identity, call_id=call_id)
+    if number is None:
+        raise HTTPException(403, "Autorisation sortante expirée ou déjà utilisée.")
+    # Le webhook ignore toute destination envoyée par le client. Vérifier une
+    # seconde fois celle réservée protège aussi un changement de configuration.
+    try:
+        number = outgoing_number(number, settings)
+        if already_active and state.registry.get(call_id) is None:
+            raise HTTPException(409, "Cet appel est terminé.")
+        if not already_active and state.registry.active():
+            raise HTTPException(409, "Un appel est déjà en cours.")
+        if not already_active:
+            session = await state.registry.open(call_id, caller_number=number, transcribe=False)
+            recorder = getattr(state, "history_recorder", None)
+            if recorder is not None:
+                await recorder.start_call(
+                    call_id,
+                    caller_number=number,
+                    route="trusted_passthrough",
+                    direction="outgoing",
+                    started_at=datetime.now(UTC) - timedelta(seconds=session.t()),
+                )
+    except Exception:
+        authorizations.forget(call_id)
+        raise
+    base = settings.public_base_url
+    return _xml(
+        outgoing_call_twiml(
+            number=number,
+            caller_id=settings.twilio_phone_number,
+            done_url=f"{base}/twilio/voice/outbound/done/{call_id}",
+            status_url=f"{base}/twilio/voice/outbound/status/{call_id}",
+        )
+    )
+
+
+@router.post("/voice/outbound/status/{call_id}")
+async def voice_outbound_status(call_id: str, request: Request) -> Response:
+    await _require_private_voice_signature(request)
+    state = request.app.state
+    form = await request.form()
+    authorizations = outgoing_authorizations(state)
+    child_sid = str(form.get("CallSid") or "")
+    parent = str(form.get("ParentCallSid") or "")
+    if parent != call_id or not authorizations.bind_child(call_id, child_sid):
+        return _xml(empty_twiml())
+    status = str(form.get("CallStatus") or "")
+    recorder = getattr(state, "history_recorder", None)
+    if status in {"in-progress", "completed"} and recorder is not None:
+        await recorder.mark_answered(call_id)
+    if status in {"completed", "no-answer", "busy", "failed", "canceled"}:
+        # Pas d'audio/Stream sur un sortant : les callbacks signés portent son
+        # cycle de vie. Le statut parent reste un second filet idempotent.
+        await release_call(state, call_id)
+        authorizations.forget(call_id)
+    return _xml(empty_twiml())
+
+
+@router.post("/voice/outbound/done/{call_id}")
+async def voice_outbound_done(call_id: str, request: Request) -> Response:
+    await _require_private_voice_signature(request)
+    state = request.app.state
+    form = await request.form()
+    authorizations = outgoing_authorizations(state)
+    if str(form.get("CallSid") or "") != call_id:
+        raise HTTPException(403, "Appel sortant incorrect.")
+    status = str(form.get("DialCallStatus") or "")
+    child_sid = str(form.get("DialCallSid") or "")
+    if authorizations.owns(call_id) and (
+        not child_sid or authorizations.bind_child(call_id, child_sid)
+    ):
+        recorder = getattr(state, "history_recorder", None)
+        if status == "completed" and recorder is not None:
+            await recorder.mark_answered(call_id)
+        await release_call(state, call_id)
+        authorizations.forget(call_id)
+    return _xml(outgoing_done_twiml(status))
+
+
+@router.post("/voicemail/status")
+async def voicemail_status(request: Request) -> Response:
+    await _require_private_voice_signature(request)
+    form = await request.form()
+    if str(form.get("RecordingStatus") or "") != "completed":
+        return _xml(empty_twiml())
+    service = getattr(request.app.state, "voicemail", None)
+    if service is None or not service.enabled:
+        return _xml(empty_twiml())
+    duration = str(form.get("RecordingDuration") or "")
+    if not re.fullmatch(r"[0-9]{1,3}", duration) or not 0 < int(duration) <= 120:
+        return _xml(empty_twiml())
+    # Le service exige une attente persistée pour ce call_id. RecordingUrl est
+    # ignorée : aucune URL fournie par le callback ne sera téléchargée.
+    await service.capture(
+        call_id=str(form.get("CallSid") or ""),
+        recording_sid=str(form.get("RecordingSid") or ""),
+        duration_s=int(duration),
+    )
+    return _xml(empty_twiml())
+
+
+@router.post("/voicemail/done")
+async def voicemail_done(request: Request) -> Response:
+    await _require_private_voice_signature(request)
+    return _xml(voicemail_done_twiml())
 
 
 @router.post("/sms/inbound")

@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from twilio.request_validator import RequestValidator
 
 from vocalguard.infrastructure.telephony.media_stream import StreamStart, parse_frame
 from vocalguard.interface.lifecycle import release_call
@@ -31,6 +32,11 @@ reprendrait le nom Twilio, sans qu'il faille toucher ici."""
 
 @router.websocket("/ws/media")
 async def media_stream(websocket: WebSocket) -> None:
+    # Le handshake est le dernier point où l'on peut refuser l'émetteur avant
+    # qu'une trame crée une session, ouvre AWS ou purge un appel existant.
+    if not _valid_media_signature(websocket):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     registry = websocket.app.state.registry
     session = None
@@ -79,6 +85,44 @@ async def media_stream(websocket: WebSocket) -> None:
             # `session.aclose()` : le faire aussi ici serait redondant (inoffensif,
             # `aclose` est idempotent, mais trompeur à relire).
             await release_call(websocket.app.state, session.call_id)
+
+
+def _valid_media_signature(websocket: WebSocket) -> bool:
+    """Authentifie Twilio sur l'URL WSS publique déclarée dans le `<Stream>`.
+
+    Référence : https://www.twilio.com/docs/usage/security#a-few-notes
+    Twilio documente aussi la variante avec un slash final pour les handshakes
+    WSS. Aucun hôte ou protocole d'un en-tête client n'est utilisé : ngrok
+    transporte ici une URL interne différente de celle signée par Twilio.
+    """
+    settings = websocket.app.state.settings
+    if not settings.twilio_validate_signature:
+        # Rejeu/démo locale uniquement, choisi explicitement dans les réglages.
+        return True
+    if not settings.twilio_auth_token or not settings.public_hostname:
+        log.error("Media stream refusé : configuration de signature Twilio incomplète")
+        return False
+    signature = websocket.headers.get("x-twilio-signature", "")
+    if not signature:
+        log.warning("Media stream refusé : signature Twilio absente")
+        return False
+
+    url = settings.media_stream_url
+    query = websocket.scope.get("query_string", b"").decode("latin-1")
+    suffix = f"?{query}" if query else ""
+    validator = RequestValidator(settings.twilio_auth_token)
+    try:
+        if any(
+            validator.validate(candidate + suffix, {}, signature)
+            for candidate in (url, url.rstrip("/") + "/")
+        ):
+            return True
+    except (TypeError, ValueError):
+        # Ne jamais journaliser l'URL, le header ni l'exception : ils peuvent
+        # porter des secrets donnés par un client qui cherche à les faire loguer.
+        pass
+    log.warning("Media stream refusé : signature Twilio invalide")
+    return False
 
 
 async def _attach(registry, frame: StreamStart):

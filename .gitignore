@@ -64,6 +64,8 @@ models/
 data/recordings/
 data/transcripts/
 data/calls/
+data/calls.sqlite*
+data/voicemail.sqlite*
 *.wav
 *.mp3
 *.ulaw

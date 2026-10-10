@@ -1,0 +1,28 @@
+{
+  "title": "Faux proche en anglais",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_SCAM_FAMILY_ENGLISH",
+  "caller_number": "+442000009006",
+  "evaluation": {
+    "label": "scam",
+    "language": "en",
+    "expected_decision": "alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Grandma, it is your grandson. I had an accident and need money urgently."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Send two thousand pounds by bank transfer now. Please do not tell my parents."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Give me the SMS code you just received so I can complete the transfer for you."
+    }
+  ]
+}

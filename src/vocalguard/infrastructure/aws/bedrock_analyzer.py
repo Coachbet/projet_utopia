@@ -11,12 +11,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from collections.abc import Sequence
 from typing import Any
 
-from vocalguard.config import get_settings
+from vocalguard.config import Settings, get_settings
 from vocalguard.domain.models import ContentSignal, TranscriptSegment
+from vocalguard.infrastructure.aws.credentials import aws_session
 from vocalguard.infrastructure.aws.prompts import SYSTEM_PROMPT, build_user_message
 
 logger = logging.getLogger(__name__)
@@ -38,8 +40,10 @@ class BedrockContentAnalyzer:
         max_tokens: int | None = None,
         min_interval_seconds: float | None = None,
         window_turns: int | None = None,
+        settings: Settings | None = None,
     ) -> None:
-        settings = get_settings()
+        settings = settings or get_settings()
+        self._settings = settings
         self._client = client
         self._model_id = model_id or settings.bedrock_model_id
         self._region = region or settings.bedrock_region
@@ -61,9 +65,9 @@ class BedrockContentAnalyzer:
         identifiants AWS, et boto3 échouerait au chargement du module.
         """
         if self._client is None:
-            import boto3
-
-            self._client = boto3.client("bedrock-runtime", region_name=self._region)
+            self._client = aws_session(self._settings, region_name=self._region).client(
+                "bedrock-runtime", region_name=self._region
+            )
         return self._client
 
     # --- Port --------------------------------------------------------------
@@ -88,12 +92,18 @@ class BedrockContentAnalyzer:
             text = _response_text(response)
         # Volontairement large : toute panne dégrade le signal, aucune ne casse l'appel.
         except Exception as exc:
-            logger.warning("Bedrock indisponible, signal de contenu ignoré : %s", exc)
+            # Une erreur du fournisseur peut contenir le corps de la requête.
+            # Le type suffit au diagnostic sans écrire de conversation en log.
+            logger.warning(
+                "Bedrock indisponible, signal de contenu ignoré (%s)", type(exc).__name__
+            )
             return None
 
         signal = parse_content_signal(text)
         if signal is None:
-            logger.warning("Réponse Claude non exploitable : %r", text[:200])
+            # Une sortie mal formée peut recopier le transcript ou un code de
+            # vérification. Elle reste volatile, même pour le débogage.
+            logger.warning("Réponse Claude non exploitable, signal de contenu ignoré")
         return signal
 
     # --- Interne -----------------------------------------------------------
@@ -217,7 +227,10 @@ def _clamped_risk(value: Any) -> float | None:
     """`risk` est la seule donnée obligatoire : sans elle, pas de signal."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    return max(0.0, min(1.0, float(value)))
+    risk = float(value)
+    if not math.isfinite(risk):
+        return None
+    return max(0.0, min(1.0, risk))
 
 
 def _string_tuple(value: Any) -> tuple[str, ...]:

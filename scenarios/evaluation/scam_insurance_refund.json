@@ -1,0 +1,28 @@
+{
+  "title": "Faux remboursement de mutuelle",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_SCAM_INSURANCE_REFUND",
+  "caller_number": "+33700009004",
+  "evaluation": {
+    "label": "scam",
+    "language": "fr",
+    "expected_decision": "alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Service remboursements de votre mutuelle : vous avez mille euros à récupérer."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Pour débloquer les fonds immédiatement, donnez les seize chiffres de votre carte bancaire et le code derrière."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Vous allez recevoir un code de sécurité par SMS : lisez-le moi maintenant, cela doit rester entre nous."
+    }
+  ]
+}

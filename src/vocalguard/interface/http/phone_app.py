@@ -54,15 +54,21 @@ notre propre page qui l'interroge en `fetch()`. Même parti pris que son voisin
 from __future__ import annotations
 
 import logging
-import secrets
+import re
+import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
+
+from vocalguard.application.outgoing import OutgoingAuthorizations
+from vocalguard.domain.history import caller_origin
+from vocalguard.infrastructure.contacts.book import normalize_number
+from vocalguard.interface.auth import require_pin
 
 if TYPE_CHECKING:
     from vocalguard.config import Settings
@@ -87,6 +93,7 @@ class DemandeApp(BaseModel):
     """
 
     pin: str = ""
+    sdk_call_id: str = ""
 
 
 @router.get("/app", include_in_schema=False)
@@ -133,7 +140,7 @@ async def jeton_voice(demande: DemandeApp, request: Request) -> dict[str, object
     se copie-colle.
     """
     settings = request.app.state.settings
-    _exiger_le_code(settings, demande.pin)
+    require_pin(request.app.state, demande.pin)
 
     manquants = reglages_manquants(settings)
     if manquants:
@@ -152,8 +159,8 @@ async def jeton_voice(demande: DemandeApp, request: Request) -> dict[str, object
         )
 
     grant = VoiceGrant(
-        # C'est la seule permission dont l'app a réellement besoin : elle décroche
-        # des appels, elle n'en passe pas.
+        # Les appels sortants exigent en plus une autorisation /app/outgoing,
+        # liée au PIN et à la destination. Le JWT seul ne permet pas de composer.
         incoming_allow=True,
         # La TwiML App est pourtant exigée par le grant, même pour du seul
         # entrant : sans `outgoing_application_sid`, Twilio refuse le jeton.
@@ -192,6 +199,72 @@ async def jeton_voice(demande: DemandeApp, request: Request) -> dict[str, object
     }
 
 
+class DemandeSortante(DemandeApp):
+    number: str = Field(default="", max_length=64)
+
+
+def outgoing_authorizations(state) -> OutgoingAuthorizations:
+    authorizations = getattr(state, "outgoing", None)
+    if authorizations is None:
+        authorizations = OutgoingAuthorizations()
+        state.outgoing = authorizations
+    return authorizations
+
+
+def outgoing_number(raw: str, settings: Settings) -> str:
+    """Valide les seuls caractères de composition et interdit les boucles."""
+    if not raw or re.fullmatch(r"[0-9+().\s-]+", raw) is None:
+        raise HTTPException(422, "Saisissez un numéro de téléphone complet.")
+    # Un seul +, uniquement en tête. Ne jamais normaliser silencieusement une
+    # URL, un nom client, des DTMF ou plusieurs destinations vers un numéro.
+    stripped = raw.strip()
+    if "+" in stripped and (not stripped.startswith("+") or stripped.count("+") != 1):
+        raise HTTPException(422, "Saisissez un numéro de téléphone complet.")
+    number = normalize_number(stripped)
+    if re.fullmatch(r"\+[1-9][0-9]{6,14}", number) is None:
+        raise HTTPException(422, "Saisissez un numéro complet avec son indicatif.")
+    if number in {normalize_number(value) for value in settings.loop_guard_numbers}:
+        raise HTTPException(422, "Ce numéro appartient à votre ligne de protection.")
+    return number
+
+
+@router.post("/app/outgoing")
+async def autoriser_appel_sortant(demande: DemandeSortante, request: Request) -> dict[str, object]:
+    """Prépare un seul appel sans composer ni facturer depuis cette route."""
+    state = request.app.state
+    require_pin(state, demande.pin)
+    settings = state.settings
+    missing = reglages_manquants(settings)
+    missing.extend(
+        name
+        for name, value in (
+            ("TWILIO_AUTH_TOKEN", settings.twilio_auth_token),
+            ("TWILIO_PHONE_NUMBER", settings.twilio_phone_number),
+            ("PUBLIC_HOSTNAME", settings.public_hostname),
+        )
+        if not value
+    )
+    if missing:
+        raise HTTPException(503, "Appels sortants non configurés : " + ", ".join(missing))
+    number = outgoing_number(demande.number, settings)
+    if state.registry.active():
+        raise HTTPException(409, "Terminez l'appel en cours avant d'en passer un autre.")
+    authorizations = outgoing_authorizations(state)
+    authorization = authorizations.issue(identity=settings.voice_client_identity, number=number)
+    if authorization is None:
+        raise HTTPException(409, "Un appel sortant est déjà en cours.")
+    contacts = getattr(state, "contacts", None)
+    contact = contacts.by_number(number) if contacts else None
+    return {
+        "authorization": authorization.token,
+        "number": number,
+        "expires_in": authorizations.ttl_seconds,
+        "caller_name": contact.name if contact else "",
+        "direction": "outgoing",
+        "analyzed": False,
+    }
+
+
 @router.post("/app/incoming")
 async def appel_en_cours(demande: DemandeApp, request: Request) -> dict[str, object]:
     """Qui appelle, en ce moment, et sous quel `call_id`.
@@ -205,33 +278,30 @@ async def appel_en_cours(demande: DemandeApp, request: Request) -> dict[str, obj
     la page interroge cette route au moment où le SDK sonne, et il arrive que le
     webhook entrant n'ait pas encore ouvert la session.
     """
-    settings = request.app.state.settings
-    _exiger_le_code(settings, demande.pin)
+    require_pin(request.app.state, demande.pin)
 
     sessions = request.app.state.registry.active()
     if not sessions:
         return {"call_id": None, "ambiguous": False}
 
-    # Deux appels en vol : rien ici ne permet de savoir lequel fait sonner l'app
-    # (le `CallSid` que voit le SDK est celui de SA jambe, pas celui de l'appel
-    # d'origine). On prend le plus récent — le dictionnaire du registre garde
-    # l'ordre d'insertion — mais on efface le nom et la confiance plutôt que de
-    # risquer d'afficher « Contact de confiance » au-dessus du numéro d'un
-    # inconnu. L'écran dira « Inconnu », ce qui est le sens prudent : au pire la
-    # personne protégée se méfie d'un proche, jamais l'inverse.
-    ambigu = len(sessions) > 1
-    session = sessions[-1]
+    # Le SDK voit le SID de la jambe cliente. On le relie à l'appel d'origine
+    # plutôt que d'attribuer les commandes au plus récent de plusieurs appels.
+    resolver = getattr(request.app.state.controller, "call_id_for_leg", None)
+    parent_id = resolver(demande.sdk_call_id) if resolver and demande.sdk_call_id else None
+    session = request.app.state.registry.get(parent_id) if parent_id else None
+    if demande.sdk_call_id and resolver and session is None:
+        return {"call_id": None, "ambiguous": len(sessions) > 1}
+    ambigu = session is None and len(sessions) > 1
     if ambigu:
-        log.warning(
-            "%d appels actifs : l'app ne peut pas savoir lequel la fait sonner, "
-            "l'appelant est présenté comme inconnu.",
-            len(sessions),
-        )
-
+        return {"call_id": None, "ambiguous": True}
+    session = session or sessions[0]
     contact = None
     contacts = getattr(request.app.state, "contacts", None)
     if contacts is not None and session.caller_number and not ambigu:
         contact = contacts.by_number(session.caller_number)
+
+    origin, country = caller_origin(session.caller_number, is_contact=contact is not None)
+    reputation = session.signals.reputation
 
     return {
         "call_id": session.call_id,
@@ -243,47 +313,88 @@ async def appel_en_cours(demande: DemandeApp, request: Request) -> dict[str, obj
         "trusted": bool(contact and contact.is_trusted),
         "caller_held": bool(session.caller_held),
         "ambiguous": ambigu,
+        "origin": origin,
+        "country": country,
+        "line_type": reputation.line_type.value if reputation else "unknown",
+    }
+
+
+@router.post("/app/contacts")
+async def carnet_contacts(demande: DemandeApp, request: Request) -> dict[str, object]:
+    """Contacts déclarés dans le carnet, sans exposer leurs alias internes."""
+    require_pin(request.app.state, demande.pin)
+    contacts = request.app.state.contacts.all()
+    return {
+        "items": [
+            {
+                "name": contact.name,
+                "number": contact.phone_number,
+                "relation": contact.relation,
+                "mode": contact.mode,
+            }
+            for contact in sorted(contacts, key=lambda contact: contact.name.casefold())
+        ]
     }
 
 
 # --- Garde-fous ------------------------------------------------------------
 
 
-def _exiger_le_code(settings: Settings, pin_recu: str) -> None:
-    """Refuse la requête si le code ne correspond pas exactement à `APP_PIN`.
+class DemandeHistorique(DemandeApp):
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=50, ge=1, le=50)
 
-    `APP_PIN` vide fait refuser TOUT, et c'est le seul comportement défendable :
-    accepter n'importe quel code quand aucun n'est configuré distribuerait des
-    jetons capables de décrocher les appels de la personne protégée à quiconque
-    trouve l'URL ngrok. On préfère une app inutilisable à une app ouverte.
-    """
-    attendu = settings.app_pin
-    if not attendu:
-        log.error(
-            "APP_PIN est vide : /app/token et /app/incoming refusent tout. "
-            "Renseigner APP_PIN dans .env pour que l'app puisse se connecter."
-        )
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "APP_PIN n'est pas configuré sur le serveur : l'app ne peut pas "
-                "obtenir de jeton. Renseigner APP_PIN dans .env puis relancer."
-            ),
-        )
 
-    # `compare_digest` et non `==` : une comparaison naïve s'arrête au premier
-    # caractère faux, donc son temps d'exécution révèle la longueur du préfixe
-    # correct. Sur un code à quatre chiffres derrière une URL publique, ça se
-    # devine chiffre par chiffre.
-    if not secrets.compare_digest(pin_recu.encode("utf-8"), attendu.encode("utf-8")):
-        # Ni le code attendu ni le code reçu : un journal de démo se partage, se
-        # copie-colle et finit dans une capture d'écran. Le code reçu est tout
-        # aussi sensible que l'attendu — à un chiffre près, c'est le même.
-        log.warning(
-            "Code refusé sur %s (aucun code n'est journalisé, ni l'attendu ni le reçu).",
-            "/app",
-        )
-        raise HTTPException(status_code=403, detail="Code incorrect.")
+def _historique(request: Request):
+    store = getattr(request.app.state, "history", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="L'historique n'est pas disponible.")
+    return store
+
+
+@router.post("/app/history")
+async def historique(demande: DemandeHistorique, request: Request) -> dict[str, object]:
+    """Les cinquante appels les plus récents, paginés et protégés par le PIN."""
+    require_pin(request.app.state, demande.pin)
+    store = _historique(request)
+    try:
+        result = await store.list_calls(offset=demande.offset, limit=demande.limit)
+    except (sqlite3.Error, OSError) as error:
+        log.warning("Lecture de l'historique indisponible")
+        raise HTTPException(status_code=503, detail="L'historique n'est pas disponible.") from error
+    return {**result.to_dict(), "enabled": store.enabled}
+
+
+# La route statique doit précéder /{call_id} : sinon « clear » serait un ID.
+@router.post("/app/history/clear")
+async def effacer_historique(demande: DemandeApp, request: Request) -> dict[str, object]:
+    require_pin(request.app.state, demande.pin)
+    store = _historique(request)
+    recorder = getattr(request.app.state, "history_recorder", None)
+    try:
+        deleted = await recorder.clear() if recorder is not None else await store.clear()
+    except (sqlite3.Error, OSError) as error:
+        log.warning("Effacement de l'historique indisponible")
+        raise HTTPException(status_code=503, detail="L'historique n'est pas disponible.") from error
+    return {"ok": True, "deleted": deleted}
+
+
+@router.post("/app/history/{call_id}")
+async def detail_historique(
+    call_id: str,
+    demande: DemandeApp,
+    request: Request,
+) -> dict[str, object]:
+    require_pin(request.app.state, demande.pin)
+    store = _historique(request)
+    try:
+        record = await store.get_call(call_id)
+    except (sqlite3.Error, OSError) as error:
+        log.warning("Lecture d'un appel dans l'historique indisponible")
+        raise HTTPException(status_code=503, detail="L'historique n'est pas disponible.") from error
+    if record is None:
+        raise HTTPException(status_code=404, detail="Appel absent de l'historique.")
+    return record.to_dict()
 
 
 def reglages_manquants(settings: Settings) -> list[str]:

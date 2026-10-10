@@ -1,0 +1,28 @@
+{
+  "title": "Placement crypto garanti sous pression",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_SCAM_INVEST_CRYPTO",
+  "caller_number": "+33700009003",
+  "evaluation": {
+    "label": "scam",
+    "language": "fr",
+    "expected_decision": "alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Je vous propose un rendement garanti de trente pour cent par semaine, sans aucun risque."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "La dernière place expire ce soir. Faites un virement puis achetez des bitcoins et envoyez-les à mon portefeuille."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Gardez cet investissement secret, votre famille ne comprendrait pas cette opportunité."
+    }
+  ]
+}

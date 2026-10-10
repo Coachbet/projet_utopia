@@ -46,9 +46,10 @@ import json
 import sys
 import time
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 # Le paquet est installé par `uv sync`, mais le script doit aussi marcher lancé
 # à la main depuis un clone frais, sans installation.
@@ -60,6 +61,7 @@ from vocalguard.domain.events import Event, EventType
 # Ces modules sont écrits par les deux moitiés de l'équipe. S'ils manquent, on le
 # dit franchement plutôt que de recopier une version locale qui divergerait.
 try:
+    from vocalguard.application.history import HistoryRecorder
     from vocalguard.application.intervention import InterventionRunner
     from vocalguard.application.scoring import ScoringPipeline
     from vocalguard.application.sessions import SessionRegistry
@@ -72,6 +74,7 @@ try:
         InMemoryEventSink,
     )
     from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
+    from vocalguard.infrastructure.history.sqlite import SQLiteCallHistory
     from vocalguard.infrastructure.keywords.detector import KeywordDetector
     from vocalguard.infrastructure.telephony.reputation import TwilioReputationChecker
 except ImportError as exc:  # pragma: no cover - dépend de l'avancement de l'équipe
@@ -299,6 +302,23 @@ async def replay(
         settings=settings,
         clock=scenario_clock,
     )
+    history = SQLiteCallHistory(
+        settings.history_path,
+        enabled=settings.history_enabled,
+        retention_days=settings.history_retention_days,
+    )
+    await history.initialize()
+    if settings.history_enabled:
+        # Chaque exécution est un nouvel appel simulé. Le SID fixe d'un scénario
+        # ne doit pas empêcher d'enregistrer ses relectures après finalisation.
+        scenario = replace(scenario, call_id=f"{scenario.call_id}_{uuid4().hex[:8]}")
+    recorder = HistoryRecorder(
+        store=history,
+        registry=registry,
+        contacts=_contact_book(settings),
+        thresholds=settings.thresholds(),
+    )
+    sink.add(recorder)
 
     # Le runner écrit ses événements `action` dans le même sink : ils s'affichent
     # donc comme le reste. Pas de boucle, `handle_event` ne lit que les `score`.
@@ -340,6 +360,8 @@ async def replay(
         caller_number=scenario.caller_number,
         victim_number=scenario.victim_number,
     )
+    await recorder.start_call(scenario.call_id, caller_number=scenario.caller_number)
+    await recorder.mark_answered(scenario.call_id)
 
     try:
         started = time.monotonic()
@@ -364,6 +386,7 @@ async def replay(
             await pipeline.aclose()
     finally:
         await pipeline.aclose()
+        await recorder.finalize(scenario.call_id, duration_s=scenario_clock())
         await registry.close(scenario.call_id)
         pipeline.forget(scenario.call_id)
 

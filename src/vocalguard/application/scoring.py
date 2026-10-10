@@ -513,7 +513,7 @@ def build_pipeline(
     else:
         from vocalguard.infrastructure.aws.bedrock_analyzer import BedrockContentAnalyzer
 
-        analyzer = BedrockContentAnalyzer()
+        analyzer = BedrockContentAnalyzer(settings=settings)
 
     def voice_factory() -> VoiceDetector:
         from vocalguard.infrastructure.voice.synthetic_detector import (

@@ -1,0 +1,28 @@
+{
+  "title": "Faux support technique et prise de contrôle",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_SCAM_SUPPORT_REMOTE",
+  "caller_number": "+33700009001",
+  "evaluation": {
+    "label": "scam",
+    "language": "fr",
+    "expected_decision": "alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Bonjour, technicien du support informatique. Votre ordinateur est infecté, il faut agir tout de suite."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Installez cette application de contrôle à distance et donnez-moi le code affiché. Ne contactez personne pour le moment."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Payez les frais de déblocage avec des cartes cadeaux, puis lisez-moi leurs codes."
+    }
+  ]
+}

@@ -62,6 +62,12 @@ class EventHub:
     def clear(self) -> None:
         self._history.clear()
 
+    def forget(self, call_id: str) -> None:
+        self._history = deque(
+            (event for event in self._history if event["call_id"] != call_id),
+            maxlen=self._history.maxlen,
+        )
+
     @property
     def subscriber_count(self) -> int:
         return len(self._subscribers)

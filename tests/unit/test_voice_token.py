@@ -40,7 +40,7 @@ API_KEY_SECRET = "secret-dapi-key-totalement-factice-pour-les-tests"
 TWIML_APP_SID = "APfactice000000000000000000000003"
 AUTH_TOKEN = "jeton-de-compte-factice-jamais-envoye-au-navigateur"
 IDENTITE = "mamie"
-PIN = "4321"
+PIN = "432198"
 
 
 def make_settings(**overrides: object) -> Settings:

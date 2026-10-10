@@ -1,0 +1,28 @@
+{
+  "title": "Voisine et vraie urgence avec alternance FR/EN",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_LEGIT_NEIGHBOR_MIXED",
+  "caller_number": "+33700009107",
+  "evaluation": {
+    "label": "legitimate",
+    "language": "fr-en",
+    "expected_decision": "below_alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Bonjour, votre voisine. There is water leaking into the corridor and I need help quickly."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Pouvez-vous contacter le gardien avec le numéro affiché dans le hall ? No payment is needed."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Venez vérifier par vous-même et prévenez votre famille si vous avez besoin d’aide."
+    }
+  ]
+}

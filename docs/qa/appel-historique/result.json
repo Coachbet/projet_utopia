@@ -1,0 +1,36 @@
+{
+  "viewport": "390×844",
+  "mode": "SDK Voice, API et appels simulés",
+  "checks": [
+    "activation",
+    "appel entrant",
+    "acceptation",
+    "chronomètre",
+    "muet",
+    "DTMF",
+    "sortie audio",
+    "attente/reprise avec PIN",
+    "alerte",
+    "code et échec",
+    "fin",
+    "historique",
+    "3 seuils et 4 signaux",
+    "effacement avec confirmation",
+    "absence stockage PIN"
+  ],
+  "screenshots": 17,
+  "passed": true,
+  "additionalChecks": [
+    "4 onglets téléphone",
+    "filtres récents/manqués",
+    "contacts et recherche",
+    "copie numéro",
+    "appel sortant nonce SDK",
+    "sortants sans analyse",
+    "lecture WAV privé avec PIN",
+    "message écouté",
+    "révocation URL blob",
+    "suppression message confirmée",
+    "responsive360/390/480/1024"
+  ]
+}

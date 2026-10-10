@@ -15,12 +15,14 @@ from vocalguard.infrastructure.telephony.twiml import (
     inbound_call_twiml,
     join_conference_twiml,
     refusal_twiml,
+    ringback_twiml,
+    unavailable_twiml,
 )
 
 STREAM_URL = "wss://a1b2.ngrok-free.app/ws/media"
 CONFERENCE = "utopia-guard-CA123"
 CALLBACK = "https://a1b2.ngrok-free.app/twilio/conference/status"
-NOTICE = "Cet appel est analysé par un service de protection contre la fraude."
+NOTICE = "This call is being analyzed by a fraud protection service."
 
 
 def root(xml: str) -> ET.Element:
@@ -81,11 +83,11 @@ class TestInboundCall:
         ).find("Dial/Conference")
         assert conference is not None
         assert conference.text == CONFERENCE
-        assert conference.get("startConferenceOnEnter") == "true"
+        assert conference.get("startConferenceOnEnter") == "false"
         assert conference.get("endConferenceOnExit") == "true"
         assert conference.get("beep") == "false"
-        # waitUrl vide = pas de musique d'attente dans la piste outbound.
-        assert conference.get("waitUrl") == ""
+        # La route fournit une URL publique de retour d'appel.
+        assert conference.get("waitUrl") is None
 
     def test_status_callback_optional(self) -> None:
         without = root(inbound_call_twiml(stream_url=STREAM_URL, conference_name=CONFERENCE)).find(
@@ -129,16 +131,14 @@ class TestAnnonceAlAppelant:
         ]
         assert children.index("Say") < children.index("Start") < children.index("Dial")
 
-    def test_l_annonce_est_dite_en_francais(self) -> None:
-        """Une voix anglaise lisant la phrase française est incompréhensible au
-        téléphone, et le symptôme ne se voit dans aucun test — il s'entend."""
+    def test_l_annonce_est_dite_en_anglais(self) -> None:
         say = root(
             inbound_call_twiml(
                 stream_url=STREAM_URL, conference_name=CONFERENCE, caller_notice=NOTICE
             )
         ).find("Say")
         assert say is not None
-        assert say.get("language") == "fr-FR"
+        assert say.get("language") == "en-US"
         assert say.text == NOTICE
 
     def test_aucune_annonce_sans_texte(self) -> None:
@@ -147,6 +147,54 @@ class TestAnnonceAlAppelant:
         pas lieu."""
         element = root(inbound_call_twiml(stream_url=STREAM_URL, conference_name=CONFERENCE))
         assert element.find("Say") is None
+
+    def test_annonce_bilingue_avant_toute_capture(self) -> None:
+        element = root(
+            inbound_call_twiml(
+                stream_url=STREAM_URL,
+                conference_name=CONFERENCE,
+                caller_notice=NOTICE,
+                caller_notice_bilingual=True,
+            )
+        )
+        assert [child.tag for child in element] == ["Say", "Say", "Start", "Dial"]
+        assert [say.get("language") for say in element.findall("Say")] == ["en-US", "fr-FR"]
+        assert element.findall("Say")[1].text.startswith("Cet appel est analysé")
+
+    def test_langue_configurable_pour_l_appelant_seul(self) -> None:
+        element = root(
+            inbound_call_twiml(
+                stream_url=STREAM_URL,
+                conference_name=CONFERENCE,
+                caller_notice="Cet appel est analysé.",
+                caller_notice_language="fr-FR",
+            )
+        )
+        assert element.find("Say").get("language") == "fr-FR"
+
+
+def test_la_tonalite_attend_la_victime_et_se_repete() -> None:
+    wait_url = "https://demo.example/twilio/voice/ringback"
+    conference = root(
+        inbound_call_twiml(
+            stream_url=STREAM_URL,
+            conference_name=CONFERENCE,
+            caller_wait_url=wait_url,
+        )
+    ).find("Dial/Conference")
+    assert conference.get("startConferenceOnEnter") == "false"
+    assert conference.get("waitUrl") == wait_url
+    assert conference.get("waitMethod") == "GET"
+    waiting = root(ringback_twiml("https://demo.example/ring.wav"))
+    assert [child.tag for child in waiting] == ["Play", "Redirect"]
+    assert waiting.find("Redirect").text is None
+
+
+def test_indisponible_annonce_en_anglais_avant_de_finir_la_jambe() -> None:
+    response = root(unavailable_twiml())
+    assert [child.tag for child in response] == ["Say", "Hangup"]
+    assert response.find("Say").get("language") == "en-US"
+    assert response.find("Say").text == "The person is not available."
 
 
 class TestAppelDeConfiance:
@@ -177,10 +225,10 @@ class TestAppelDeConfiance:
         ).find("Dial/Conference")
         assert conference is not None
         assert conference.text == CONFERENCE
-        assert conference.get("startConferenceOnEnter") == "true"
+        assert conference.get("startConferenceOnEnter") == "false"
         assert conference.get("endConferenceOnExit") == "true"
         assert conference.get("beep") == "false"
-        assert conference.get("waitUrl") == ""
+        assert conference.get("waitUrl") is None
 
     def test_piste_de_la_personne_protegee_seule(self) -> None:
         """Lot 3 : on écoute l'abonnée qui a consenti, jamais son interlocuteur.

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
@@ -29,11 +30,21 @@ from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 
 from vocalguard.infrastructure.telephony.announcements import AnnouncementStore
+from vocalguard.infrastructure.telephony.twiml import unavailable_twiml, voicemail_twiml
 
 if TYPE_CHECKING:
     from vocalguard.config import Settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class _VictimLeg:
+    leg: str
+    sid: str | None = None
+    answered: bool = False
+    terminal: bool = False
+    ready: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 class TwilioCallController:
@@ -51,6 +62,11 @@ class TwilioCallController:
         # Le SID de conférence est mémorisé par appel : le retrouver par nom coûte
         # un aller-retour HTTP, et on agit parfois trois fois en deux secondes.
         self._conference_sids: dict[str, str] = {}
+        self._victim_legs: dict[str, _VictimLeg] = {}
+        self._leg_parents: dict[str, str] = {}
+        self._caller_numbers: dict[str, str] = {}
+        self._caller_streams: set[str] = set()
+        self._voicemail: Any = None
 
         if client is not None:
             self._client: Client | None = client
@@ -249,6 +265,11 @@ class TwilioCallController:
         if not self._ready("dial_victim"):
             return None
 
+        # Réserver avant le premier await : un webhook rejoué ne fait pas
+        # sonner deux fois la personne protégée.
+        if not to_number and call_id in self._victim_legs:
+            return self._victim_legs[call_id].sid
+
         app_target = self._settings.voice_client_target
         destination = to_number or app_target or self._settings.victim_phone_number
         if not destination:
@@ -261,9 +282,12 @@ class TwilioCallController:
                 "VOICE_CLIENT_IDENTITY (l'app sur le téléphone) ou, à défaut, "
                 "VICTIM_PHONE_NUMBER (le repli téléphonique)."
             )
+            await self._notify_unavailable(call_id)
             return None
 
         vers_app = not to_number and bool(app_target)
+        pending = _VictimLeg(leg="app" if vers_app else "phone")
+        self._victim_legs[call_id] = pending
         if vers_app:
             logger.info("Jambe victime vers l'app (%s) pour l'appel %s", destination, call_id)
         else:
@@ -294,18 +318,152 @@ class TwilioCallController:
                     from_=self._settings.twilio_phone_number,
                     url=url,
                     method="POST",
-                    status_callback=f"{base}/twilio/voice/status",
+                    status_callback=(
+                        f"{base}/twilio/voice/status?"
+                        f"{urlencode({'call_id': call_id, 'leg': pending.leg})}"
+                    ),
                     status_callback_method="POST",
+                    status_callback_event=["initiated", "ringing", "answered", "completed"],
+                    timeout=25,
                 )
             )
         except TwilioRestException as exc:
             # En compte d'essai, un numéro non vérifié tombe ici (code 21219).
             logger.warning("Appel vers la victime échoué (code Twilio %s) : %s", exc.code, exc.msg)
-            return None
+            await self._failed_victim_leg(call_id, pending)
+            current = self._victim_legs.get(call_id)
+            return current.sid if current is not None and current is not pending else None
         except Exception:
             logger.warning("Appel vers la victime échoué (panne réseau ?)", exc_info=True)
+            await self._failed_victim_leg(call_id, pending)
+            current = self._victim_legs.get(call_id)
+            return current.sid if current is not None and current is not pending else None
+        # L'appelant a pu raccrocher pendant le create REST. Ne pas réinsérer
+        # une jambe oubliée ; annuler celle qui vient d'être créée.
+        if self._victim_legs.get(call_id) is not pending:
+            await self._cancel_unanswered_leg(call.sid)
             return None
+        pending.sid = call.sid
+        self._leg_parents[call.sid] = call_id
+        pending.ready.set()
         return call.sid
+
+    def call_id_for_leg(self, call_sid: str) -> str | None:
+        """Associe le CallSid du SDK victime à l'appel entrant correspondant."""
+        return self._leg_parents.get(call_sid)
+
+    async def victim_status(self, call_id: str, call_sid: str, *, leg: str, status: str) -> str:
+        """Traite uniquement le statut de la jambe attendue, une seule fois.
+
+        Le retour informe le webhook : `answered`, `fallback`, `unavailable`,
+        `completed` ou `ignored`. Aucun échec de vérification ne termine un appel.
+        """
+        pending = self._victim_legs.get(call_id)
+        if pending is not None and pending.leg == leg:
+            # Le callback peut précéder le retour REST. Attendre son SID réel
+            # avant comparaison : le paramètre call_id seul ne suffit jamais.
+            await pending.ready.wait()
+        if (
+            pending is None
+            or self._victim_legs.get(call_id) is not pending
+            or pending.leg != leg
+            or not call_sid
+            or pending.terminal
+            or pending.sid != call_sid
+        ):
+            return "ignored"
+        if status == "in-progress":
+            if pending.answered:
+                return "ignored"
+            pending.answered = True
+            return "answered"
+        if status in {"no-answer", "failed", "busy", "canceled"}:
+            if pending.answered:
+                pending.terminal = True
+                return "completed"
+            return await self._failed_victim_leg(call_id, pending)
+        if status == "completed":
+            pending.terminal = True
+            return "completed"
+        return "ignored"
+
+    async def _failed_victim_leg(self, call_id: str, pending: _VictimLeg) -> str:
+        if self._victim_legs.get(call_id) is not pending or pending.terminal:
+            return "ignored"
+        pending.terminal = True
+        pending.ready.set()
+        fallback = self._settings.victim_phone_number
+        if pending.leg == "app" and fallback:
+            logger.info("App injoignable pour %s : repli téléphonique", call_id)
+            sid = await self.dial_victim(call_id, to_number=fallback)
+            return "fallback" if sid else "unavailable"
+        await self._notify_unavailable(call_id)
+        return "unavailable"
+
+    async def _notify_unavailable(self, call_id: str) -> bool:
+        """Fin d'une tentative sans réponse, avant toute conversation."""
+        if not self._ready("unavailable"):
+            return False
+        twiml = unavailable_twiml()
+        if self._voicemail is not None and self._voicemail.enabled:
+            try:
+                expected = await self._voicemail.expect(
+                    call_id, caller_number=self._caller_numbers.get(call_id, "")
+                )
+                if expected:
+                    base = self._settings.public_base_url
+                    twiml = voicemail_twiml(
+                        done_url=f"{base}/twilio/voicemail/done",
+                        status_url=f"{base}/twilio/voicemail/status",
+                        stop_analysis=call_id in self._caller_streams,
+                    )
+            except Exception:
+                logger.warning("Messagerie indisponible pour %s", call_id)
+        try:
+            await asyncio.to_thread(
+                lambda: self._client.calls(call_id).update(  # type: ignore[union-attr]
+                    twiml=twiml
+                )
+            )
+        except Exception:
+            logger.warning("Annonce d'indisponibilité impossible pour %s", call_id)
+            return False
+        return True
+
+    def configure_voicemail(self, service: Any) -> None:
+        self._voicemail = service
+
+    def remember_caller(self, call_id: str, caller_number: str, *, has_stream: bool = True) -> None:
+        self._caller_numbers[call_id] = caller_number
+        if has_stream:
+            self._caller_streams.add(call_id)
+        else:
+            self._caller_streams.discard(call_id)
+
+    async def _cancel_unanswered_leg(self, call_sid: str) -> None:
+        try:
+            await asyncio.to_thread(
+                lambda: self._client.calls(call_sid).update(status="canceled")  # type: ignore[union-attr]
+            )
+        except Exception:
+            logger.warning("Annulation de la jambe sans réponse impossible")
+
+    async def cancel_pending_victim(self, call_id: str) -> None:
+        """Arrête la sonnerie si l'appelant est parti avant le décroché.
+
+        Retirer la réservation avant le réseau empêche les callbacks en retard
+        de créer un repli sur un appel terminé. Une jambe déjà en conversation
+        n'est jamais annulée ici ; son départ dépend de la conférence.
+        """
+        pending = self._victim_legs.pop(call_id, None)
+        if pending is None:
+            return
+        pending.ready.set()
+        for sid, parent in tuple(self._leg_parents.items()):
+            if parent == call_id:
+                self._leg_parents.pop(sid, None)
+        if pending.sid and not pending.answered and not pending.terminal:
+            await self._cancel_unanswered_leg(pending.sid)
 
     async def hold_caller(self, call_id: str) -> bool:
         """Met le scammeur en attente, avec musique — il n'entend plus la victime."""
@@ -372,10 +530,12 @@ class TwilioCallController:
                 )
             )
         except TwilioRestException as exc:
-            logger.warning("SMS échoué (code Twilio %s) : %s", exc.code, exc.msg)
+            # Le détail fournisseur peut refléter le body, qui contient parfois
+            # un code privé. Seul le diagnostic numérique est journalisé.
+            logger.warning("SMS échoué (code Twilio %s)", exc.code)
             return False
         except Exception:
-            logger.warning("SMS échoué (panne réseau ?)", exc_info=True)
+            logger.warning("SMS échoué (panne réseau ?)")
             return False
         return True
 
@@ -383,3 +543,11 @@ class TwilioCallController:
         """Fin d'appel : libère le SID de conférence et les annonces en attente."""
         self._conference_sids.pop(call_id, None)
         self._announcements.clear(call_id)
+        self._caller_numbers.pop(call_id, None)
+        self._caller_streams.discard(call_id)
+        pending = self._victim_legs.pop(call_id, None)
+        if pending is not None:
+            pending.ready.set()
+        for sid, parent in tuple(self._leg_parents.items()):
+            if parent == call_id:
+                self._leg_parents.pop(sid, None)

@@ -1,0 +1,28 @@
+{
+  "title": "Facture normale d’un artisan",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_LEGIT_INVOICE_PLUMBER",
+  "caller_number": "+33700009104",
+  "evaluation": {
+    "label": "legitimate",
+    "language": "fr",
+    "expected_decision": "below_alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Bonjour, votre plombier après la réparation prévue hier. Je vous appelle à propos de la facture."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Vous pouvez payer après réception de la facture écrite. Le virement utilise le compte déjà indiqué dans notre contrat."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Prenez le temps de vérifier et de rappeler notre bureau, il n’y a aucune urgence."
+    }
+  ]
+}

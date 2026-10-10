@@ -152,7 +152,7 @@ def announce_verify_code(contact_name: str, code: str) -> str:
     """Ce que la personne protégée entend, elle seule, quand le code est parti."""
     return (
         f"Un code a été envoyé à {contact_name}. Le code est {say_digits(code)}. "
-        "Demandez-lui de vous le lire."
+        "Ne dites jamais ce code. Demandez-lui de vous le lire."
     )
 
 

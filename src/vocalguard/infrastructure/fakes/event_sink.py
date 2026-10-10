@@ -72,7 +72,14 @@ class ConsoleEventSink:
 
     async def emit(self, event: Event) -> None:
         speaker = event.speaker or "-"
-        payload = json.dumps(event.data, ensure_ascii=False, default=str)
+        # Les terminaux peuvent être redirigés vers un fichier. Garder la preuve
+        # d'activité, sans persister des conversations ni des codes de SMS.
+        if event.type is EventType.TRANSCRIPT:
+            data = {"is_final": event.data.get("is_final", True)}
+        else:
+            allowed = ("risk", "score", "level", "action", "ok", "windows_analyzed")
+            data = {key: event.data[key] for key in allowed if key in event.data}
+        payload = json.dumps(data, ensure_ascii=False, default=str)
         print(f"[{event.t:6.2f}s] {event.type.value:<10} {speaker:<7} {payload}")
 
 

@@ -247,7 +247,7 @@ class TestAnnonceAlAppelant:
         """Le texte lui-même porte le montage juridique : il doit nommer
         l'analyse, sinon l'annonce n'informe de rien."""
         texte = Settings(_env_file=None).caller_notice_text
-        assert "analys" in texte.casefold()
+        assert "analyzed" in texte.casefold()
         assert texte.endswith(".")
 
 

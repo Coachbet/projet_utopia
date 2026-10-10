@@ -235,7 +235,7 @@ def test_un_inconnu_est_informe_avant_tout_flux_audio(monter_app):
 
     say = racine.find("Say")
     assert say is not None
-    assert say.get("language") == "fr-FR"
+    assert say.get("language") == "en-US"
     assert say.text == app.state.settings.caller_notice_text
 
     stream = racine.find("Start/Stream")
@@ -561,16 +561,14 @@ def test_la_jambe_victime_nomme_meme_un_contact_analyse(monter_app):
     assert say.text == "Appel de Banque Crédit Mutuel."
 
 
-def test_aucune_annonce_quand_la_session_est_introuvable(monter_app):
-    """Pas d'annonce plutôt qu'une annonce fausse : dire « numéro inconnu » quand
-    on ne sait pas vaudrait le contraire de sa valeur sur un appel de confiance
-    mal retrouvé. La conférence, elle, se monte quand même."""
+def test_pas_de_conference_orpheline_quand_la_session_est_introuvable(monter_app):
     client, _, _ = monter_app()
 
     racine = _joindre(client, "CA_jamais_vu")
 
-    assert racine.find("Say") is None
-    assert racine.find("Dial/Conference") is not None
+    assert racine.find("Say").text == "The person is not available."
+    assert racine.find("Hangup") is not None
+    assert racine.find("Dial/Conference") is None
 
 
 # --- Le garde-fou d'entrée --------------------------------------------------

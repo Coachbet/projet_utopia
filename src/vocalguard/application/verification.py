@@ -49,8 +49,9 @@ nom qui tranche.
 
 Le reste du fichier applique la règle maison : préférer ne rien faire à agir sur
 une information douteuse (cf. `_reply_is_denial` dans `interface/http/webhooks.py`).
-Un code entendu faux fait répéter, il n'accuse pas ; une fin de fenêtre sur un
-appel qu'on n'écoute pas ne conclut rien.
+Un premier code faux fait répéter ; un deuxième essai échoué verrouille la
+vérification pour cet appel et applique le même effet qu'un démenti du proche.
+Une fin de fenêtre sur un appel qu'on n'écoute pas ne conclut rien.
 """
 
 from __future__ import annotations
@@ -136,14 +137,6 @@ pas, et chacun a sa fonction dédiée."""
 
 _CENT = ("cent", "cents")
 _VINGT = ("vingt", "vingts")
-
-_PAD_MIN = 100
-"""Un groupe n'est complété à 4 chiffres que s'il vaut au moins 100.
-
-« quatre cent quatre-vingt-un » doit pouvoir valider le code 0481 : lu comme un
-nombre, il vaut 481, et seul le zéro-complètement le rend comparable. Mais
-compléter les petites valeurs transformerait le « un » de « j'ai un problème » en
-candidat « 0001 » — un mot de liaison deviendrait une tentative de code."""
 
 
 def _petit(mots: list[str], i: int) -> tuple[int, int] | None:
@@ -287,12 +280,10 @@ def _cardinal(mots: list[str], i: int) -> tuple[int, int] | None:
 def codes_entendus(texte: str) -> tuple[str, ...]:
     """Toutes les suites de chiffres qu'on peut raisonnablement lire dans `texte`.
 
-    Deux formes de candidats, parce que le proche dicte de deux façons :
-
-      - la CONCATÉNATION des groupes numériques consécutifs — « quarante-huit
-        vingt et un » donne « 4821 », comme « 48 21 » et « quatre huit deux un » ;
-      - le groupe seul complété à quatre chiffres quand il vaut au moins 100 —
-        « quatre cent quatre-vingt-un » donne « 0481 ».
+    Les groupes numériques consécutifs sont concaténés : « quarante-huit
+    vingt et un » donne « 4821 », comme « 48 21 » et « quatre huit deux un ».
+    Aucun zéro n'est inventé et aucun sous-groupe n'est proposé : une longue
+    suite de chiffres ne doit jamais contenir un code valable par accident.
 
     Les mots non numériques coupent la concatenation : « le code est 4821 »
     n'emprunte rien à « code ».
@@ -317,30 +308,24 @@ def codes_entendus(texte: str) -> tuple[str, ...]:
             continue
         valeur, i = lecture
         groupe.append(str(valeur))
-        if valeur >= _PAD_MIN:
-            candidats.append(f"{valeur:04d}")
 
     if groupe:
         candidats.append("".join(groupe))
 
-    # `dict.fromkeys` : dédoublonne en gardant l'ordre de lecture, utile quand on
-    # inspecte la liste en débogage d'un appel réel.
-    return tuple(c for c in dict.fromkeys(candidats) if c)
+    # Conserver aussi les doublons : réciter deux codes identiques est encore
+    # une liste de candidats, qui ne peut pas valider une identité.
+    return tuple(c for c in candidats if c)
 
 
 def code_reconnu(texte: str, code: str) -> bool:
     """Le code à 4 chiffres a-t-il été lu dans `texte` ?
 
-    Inclusion et non égalité : le proche dit « alors, c'est le 4821 d'accord ? »,
-    jamais « 4821 » tout court. Le prix est connu et assumé — un interlocuteur
-    qui récite une longue suite de chiffres contenant par hasard le code serait
-    cru. Sur une fenêtre de deux minutes ouverte par une demande explicite, c'est
-    quelques chances sur dix mille, contre des échecs quotidiens si l'on exigeait
-    l'égalité stricte.
+    Une seule suite numérique de quatre chiffres exactement est autorisée.
+    Les mots autour sont permis ; listes de codes et sous-chaînes sont refusées.
     """
-    if not code:
+    if re.fullmatch(r"[0-9]{4}", code or "") is None:
         return False
-    return any(code in candidat for candidat in codes_entendus(texte))
+    return codes_entendus(texte) == (code,)
 
 
 # --- Déclencheur « la personne protégée demande une vérification » ----------
@@ -404,6 +389,8 @@ REASON_NO_CONTACT = "contact_inconnu"
 REASON_CALLER_IS_TARGET = "destinataire_est_l_appelant"
 REASON_SMS_REFUSED = "sms_refuse"
 REASON_ALREADY_ACTIVE = "deja_actif"
+REASON_ATTEMPTS_EXHAUSTED = "essais_epuises"
+REASON_ALREADY_FINISHED = "verification_terminee"
 """Codes machine renvoyés par la route HTTP. Liste fermée : l'app de la personne
 protégée affiche un texte par valeur, en ajouter une sans le dire laisserait un
 écran muet."""
@@ -441,6 +428,7 @@ class _Verification:
     fenêtre ne peut rien conclure (appel de confiance sans `<Stream>`, ou
     transcription tombée)."""
     wrong_heard: bool = False
+    attempts: int = 0
 
 
 class IdentityVerifier:
@@ -477,6 +465,7 @@ class IdentityVerifier:
         fermeture. On veut fermer la fenêtre à l'instant choisi."""
 
         self._pending: dict[str, _Verification] = {}
+        self._finished: dict[str, str] = {}
         # Un minuteur par appel, groupé comme dans `ScoringPipeline._tasks` :
         # oublier un appel ne doit pas toucher à la fenêtre d'un autre, et deux
         # appels simultanés arrivent vraiment. La référence est tenue ici parce
@@ -505,6 +494,14 @@ class IdentityVerifier:
             # raccrochage.
             logger.warning("vérification demandée pour un appel inconnu : %s", call_id)
             return VerificationOutcome(ok=False, reason=REASON_UNKNOWN_CALL)
+
+        if call_id in self._finished:
+            reason = (
+                REASON_ATTEMPTS_EXHAUSTED
+                if self._finished[call_id] == "failed"
+                else REASON_ALREADY_FINISHED
+            )
+            return VerificationOutcome(ok=False, reason=reason)
 
         active = self._pending.get(call_id)
         if active is not None:
@@ -646,18 +643,30 @@ class IdentityVerifier:
         # preuve d'écoute qui autorisera la fin de la fenêtre à conclure.
         pending.heard_caller = True
 
+        # Le minuteur peut attendre son tour dans la boucle : un code reçu
+        # après la date limite ne doit pas profiter de cette latence.
+        if self._clock() >= pending.expires_at:
+            await self._finish_expiry(call_id, pending)
+            return
+
+        candidates = codes_entendus(texte)
+        explicit_code = " code " in _mots_bordes(texte)
+        if not any(len(candidate) >= 4 for candidate in candidates) and not (
+            explicit_code and candidates
+        ):
+            return
+
+        # Réserver l'essai avant tout await pour les segments concurrents.
+        pending.attempts += 1
+
         if code_reconnu(texte, pending.code):
             await self._conclure_correct(call_id, pending)
             return
 
-        if not any(len(candidat) >= 4 for candidat in codes_entendus(texte)):
-            # Aucune tentative de code : il parle, c'est tout.
-            return
-        if pending.wrong_heard:
-            # Déjà dit une fois. Le répéter à chaque phrase chiffrée occuperait
-            # la ligne au moment où elle a besoin d'écouter.
-            return
         pending.wrong_heard = True
+        if pending.attempts >= 2:
+            await self._conclure_echec(call_id, pending)
+            return
         logger.info("appel %s : un code faux a été lu par l'appelant", call_id)
         await self._announce(call_id, ANNOUNCE_VERIFY_WRONG)
 
@@ -672,7 +681,10 @@ class IdentityVerifier:
         await self.request(call_id, source="phrase")
 
     async def _conclure_correct(self, call_id: str, pending: _Verification) -> None:
+        if self._pending.get(call_id) is not pending:
+            return
         self._pending.pop(call_id, None)
+        self._finished[call_id] = "verified"
         self._cancel_tasks(call_id)
         session = self._registry.get(call_id)
         logger.info(
@@ -698,6 +710,29 @@ class IdentityVerifier:
         # rien ne le dise.
         await self._disculper(call_id)
 
+    async def _conclure_echec(self, call_id: str, pending: _Verification) -> None:
+        if self._pending.get(call_id) is not pending:
+            return
+        self._pending.pop(call_id, None)
+        self._finished[call_id] = "failed"
+        self._cancel_tasks(call_id)
+        logger.info("appel %s : vérification refusée après deux essais", call_id)
+        await self._announce(call_id, ANNOUNCE_VERIFY_EXPIRED)
+        session = self._registry.get(call_id)
+        if session is None:
+            return
+        await session.emit(
+            EventType.ACTION,
+            {
+                "action": ReportedAction.IDENTITY_VERIFIED.value,
+                "target": "caller",
+                "contact": pending.contact_name,
+                "ok": False,
+                "reasons": ["deux essais de vérification échoués"],
+            },
+        )
+        await self._escalader(call_id)
+
     def _arm_expiry(self, call_id: str, pending: _Verification) -> None:
         task = asyncio.create_task(self._expire(call_id, pending))
         self._tasks.setdefault(call_id, set()).add(task)
@@ -706,6 +741,10 @@ class IdentityVerifier:
     async def _expire(self, call_id: str, pending: _Verification) -> None:
         """Fin de la fenêtre : ce qu'on n'a pas entendu doit être dit honnêtement."""
         await self._sleep(self._ttl)
+
+        await self._finish_expiry(call_id, pending)
+
+    async def _finish_expiry(self, call_id: str, pending: _Verification) -> None:
 
         # Gardes après l'`await`, motif de `ScoringPipeline._run_llm` : la
         # vérification a pu être conclue, remplacée, ou l'appel raccroché
@@ -718,6 +757,7 @@ class IdentityVerifier:
             self._pending.pop(call_id, None)
             return
         self._pending.pop(call_id, None)
+        self._finished[call_id] = "failed" if pending.wrong_heard else "expired"
 
         if not pending.heard_caller:
             # Aucun segment de la piste appelant : soit l'appel est un appel de
@@ -780,6 +820,7 @@ class IdentityVerifier:
         charge, ce qui laisse `aclose()` les drainer.
         """
         self._pending.pop(call_id, None)
+        self._finished.pop(call_id, None)
         self._cancel_tasks(call_id)
 
     async def aclose(self) -> None:
@@ -862,7 +903,7 @@ class IdentityVerifier:
         try:
             return bool(await self._controller.send_sms(numero, message))
         except Exception:
-            logger.exception("SMS de vérification impossible")
+            logger.warning("SMS de vérification impossible")
             return False
 
     async def _announce(self, call_id: str, message: str) -> bool:
@@ -874,7 +915,7 @@ class IdentityVerifier:
         try:
             return bool(await self._controller.announce_to_victim(call_id, message))
         except Exception:
-            logger.exception("annonce de vérification impossible sur %s", call_id)
+            logger.warning("annonce de vérification impossible sur %s", call_id)
             return False
 
     async def _escalader(self, call_id: str) -> None:

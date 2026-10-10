@@ -1,0 +1,28 @@
+{
+  "title": "Fausse police et rançon en anglais",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_SCAM_POLICE_ENGLISH",
+  "caller_number": "+14155559005",
+  "evaluation": {
+    "label": "scam",
+    "language": "en",
+    "expected_decision": "alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "This is the police. Your son has been arrested and you must act immediately."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Transfer the bail money right now using gift cards. Read me every card code."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Do not call your family or the police station. This investigation is secret."
+    }
+  ]
+}

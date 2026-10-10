@@ -29,6 +29,11 @@ check-aws: ## H0 — vérifie Bedrock et Transcribe avec les creds courants
 replay: ## Rejoue un scénario dans le pipeline, sans téléphone (SCENARIO=...)
 	uv run python scripts/replay_scenario.py $(SCENARIO)
 
+EVAL_MODE ?= offline
+EVAL_OUTPUT ?= artifacts/evaluation/$(EVAL_MODE)
+evaluate: ## Évalue les scénarios (EVAL_MODE=offline|keywords|bedrock)
+	uv run python scripts/evaluate_scenarios.py --mode $(EVAL_MODE) --output-dir $(EVAL_OUTPUT)
+
 test: ## Tests unitaires
 	uv run pytest -q
 
@@ -36,8 +41,12 @@ lint: ## Lint + format
 	uv run ruff check --fix src tests scripts
 	uv run ruff format src tests scripts
 
+test-ui: ## QA mobile et captures (Playwright installé, voir docs/RECETTE_MVP.md)
+	node scripts/check_mobile_ui.cjs
+	node scripts/check_mobile_races.cjs
+
 clean: ## Supprime les caches
 	find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
 	rm -rf .pytest_cache .ruff_cache
 
-.PHONY: help install install-voice run tunnel check-aws replay test lint clean
+.PHONY: help install install-voice run tunnel check-aws replay evaluate test lint test-ui clean

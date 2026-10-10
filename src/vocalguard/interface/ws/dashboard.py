@@ -19,9 +19,10 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
+from vocalguard.interface.auth import require_pin
 from vocalguard.interface.event_hub import EventHub
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,11 @@ def create_dashboard_router(hub: EventHub) -> APIRouter:
 
     @router.websocket("/ws/dashboard")
     async def feed(websocket: WebSocket) -> None:
+        try:
+            require_pin(websocket.app.state, websocket.query_params.get("pin", ""))
+        except HTTPException:
+            await websocket.close(code=1008)
+            return
         await websocket.accept()
 
         async def send(payload: dict) -> None:

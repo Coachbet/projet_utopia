@@ -1,0 +1,28 @@
+{
+  "title": "Cabinet médical : rendez-vous urgent",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_LEGIT_CLINIC_URGENT",
+  "caller_number": "+33700009103",
+  "evaluation": {
+    "label": "legitimate",
+    "language": "fr",
+    "expected_decision": "below_alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Bonjour, le cabinet médical vous appelle car un rendez-vous vient de se libérer aux urgences."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Le médecin peut vous recevoir dans une heure. Si vous voulez vérifier, rappelez le numéro habituel du cabinet."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Il ne faut rien payer au téléphone. Apportez votre carte Vitale et vos résultats au rendez-vous."
+    }
+  ]
+}

@@ -132,6 +132,14 @@ async def test_risk_is_clamped(raw, expected):
     assert signal.risk == pytest.approx(expected)
 
 
+@pytest.mark.parametrize("raw", [float("nan"), float("inf"), float("-inf")])
+async def test_nonfinite_model_risk_is_rejected(raw: float) -> None:
+    # json.loads tolère les extensions NaN/Infinity du JSON. Elles ne sont pas
+    # des probabilités et ne doivent pas devenir un score de danger maximal.
+    subject, _ = analyzer(json.dumps({"risk": raw}))
+    assert await subject.analyze(turns("texte")) is None
+
+
 async def test_missing_fields_fall_back_to_defaults():
     subject, _ = analyzer(json.dumps({"risk": 0.3}))
     signal = await subject.analyze(turns("texte"))
@@ -175,6 +183,27 @@ async def test_malformed_body_returns_none():
 async def test_client_exception_returns_none():
     subject, _ = analyzer(raises=RuntimeError("ThrottlingException"))
     assert await subject.analyze(turns("texte")) is None
+
+
+async def test_invalid_model_output_never_leaks_conversation_in_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    marker = "TRANSCRIPT_CONFIDENTIEL_CODE_4821"
+    subject, _ = analyzer(f"Je cite l'appelant : {marker}")
+    assert await subject.analyze(turns(marker)) is None
+    assert "Réponse Claude non exploitable" in caplog.text
+    assert marker not in caplog.text
+    assert "4821" not in caplog.text
+
+
+async def test_provider_exception_never_leaks_request_body_in_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    marker = "TRANSCRIPT_CONFIDENTIEL_CODE_4821"
+    subject, _ = analyzer(raises=RuntimeError(f"Rejected request body: {marker}"))
+    assert await subject.analyze(turns(marker)) is None
+    assert "RuntimeError" in caplog.text
+    assert marker not in caplog.text
 
 
 async def test_failure_still_consumes_the_interval():

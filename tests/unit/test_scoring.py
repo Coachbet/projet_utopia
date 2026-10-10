@@ -1023,7 +1023,7 @@ async def test_un_code_correct_desarme_le_coupe_circuit_paiement_identite():
     harness, registry = build(
         analyzer=ScriptedAnalyzer(
             ContentSignal(
-                risk=0.5,
+                risk=0.95,
                 tactics=("urgence", "paiement inhabituel"),
                 claimed_identity="Lucas",
             )

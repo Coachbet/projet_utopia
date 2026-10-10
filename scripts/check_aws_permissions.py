@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,6 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from vocalguard.config import Settings, get_settings
+from vocalguard.infrastructure.aws.credentials import AWSCredentialsError, aws_session
 
 # Marqueurs cherchés dans le type et le message de l'exception. Le nom de classe
 # seul ne suffit pas : boto3 et le SDK Transcribe n'emballent pas les mêmes erreurs
@@ -72,11 +74,14 @@ NETWORK_MARKERS = (
 
 REFRESH_CREDS = (
     "Identifiants refusés ou expirés : ceux du workshop expirent vite.",
-    "→ les rafraîchir dans ~/.aws/credentials (ou .env), puis relancer `make check-aws`.",
+    "→ les renouveler dans .env, les exporter dans le terminal de `make run`, "
+    "ou dans ~/.aws/credentials, "
+    "puis relancer `make check-aws`.",
 )
 HOTSPOT = ("→ le réseau du lieu bloque peut-être AWS : basculer sur le hotspot téléphone dédié.",)
 WHISPER_FALLBACK = (
-    "→ repli : TRANSCRIBE_BACKEND=whisper_local dans .env (transcription locale par morceaux).",
+    "→ whisper_local n'est pas encore implémenté ; "
+    "le mode fake sert seulement aux tests hors ligne.",
 )
 
 
@@ -107,6 +112,16 @@ def _classify(exc: BaseException) -> str:
     if any(m in haystack for m in AUTH_MARKERS):
         return "auth"
     return "other"
+
+
+def _error_detail(exc: BaseException) -> str:
+    """Le fournisseur peut recopier un token dans son message : jamais l'afficher."""
+    if isinstance(exc, AWSCredentialsError):
+        return str(exc)
+    response = getattr(exc, "response", None)
+    code = response.get("Error", {}).get("Code", "") if isinstance(response, dict) else ""
+    code = code if isinstance(code, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9]{0,63}", code) else ""
+    return f"{type(exc).__name__}{f' [{code}]' if code else ''}"
 
 
 def _plan_b_for(kind: str, *, whisper: bool = False) -> tuple[str, ...]:
@@ -140,13 +155,12 @@ def check_identity(settings: Settings) -> tuple[Result, object | None]:
     """Résout les identifiants une seule fois, pour que les trois tests parlent des mêmes."""
     # Étape 1 : a-t-on seulement des identifiants ? Sans eux, rien n'est testable.
     try:
-        import boto3
         from botocore.config import Config
 
-        session = boto3.Session(region_name=settings.aws_region)
+        session = aws_session(settings, allow_metadata=False)
         credentials = session.get_credentials()
     except Exception as exc:
-        detail = f"{type(exc).__name__}: {exc}"[:200]
+        detail = _error_detail(exc)
         return Result("Identité AWS", False, detail, REFRESH_CREDS), None
 
     if credentials is None:
@@ -154,7 +168,7 @@ def check_identity(settings: Settings) -> tuple[Result, object | None]:
             Result(
                 "Identité AWS",
                 False,
-                "aucun identifiant trouvé (env, ~/.aws/credentials, rôle)",
+                "aucun identifiant trouvé (.env, exports ou ~/.aws/credentials)",
                 REFRESH_CREDS,
             ),
             None,
@@ -174,7 +188,7 @@ def check_identity(settings: Settings) -> tuple[Result, object | None]:
         # tests en échec ici serait un faux négatif qui enverrait l'équipe sur le
         # mauvais plan B. `session` ne vaut None que si on n'a aucun identifiant.
         return (
-            Result("Identité AWS", False, f"{type(exc).__name__}: {exc}"[:200], _plan_b_for(kind)),
+            Result("Identité AWS", False, _error_detail(exc), _plan_b_for(kind)),
             session,
         )
 
@@ -204,7 +218,7 @@ def check_bedrock(settings: Settings, session: object) -> Result:
         )
     except Exception as exc:
         kind = _classify(exc)
-        return Result(name, False, f"{type(exc).__name__}: {exc}"[:240], _plan_b_for(kind))
+        return Result(name, False, _error_detail(exc), _plan_b_for(kind))
 
     stop = response.get("stopReason", "?")
     model = settings.bedrock_model_id.split(".")[-1][:40]
@@ -244,15 +258,14 @@ async def _probe_transcribe(settings: Settings, credentials: object) -> None:
 
 def check_transcribe(settings: Settings, session: object) -> Result:
     name = f"Transcribe {settings.transcribe_region} ({settings.transcribe_language_code})"
-    credentials = session.get_credentials()  # type: ignore[attr-defined]
     try:
+        credentials = session.get_credentials()  # type: ignore[attr-defined]
         asyncio.run(asyncio.wait_for(_probe_transcribe(settings, credentials), timeout=25))
     except TimeoutError:
         return Result(name, False, "aucune réponse en 25 s", HOTSPOT + WHISPER_FALLBACK)
     except Exception as exc:
         kind = _classify(exc)
-        code = getattr(exc, "error_code", "") or getattr(exc, "status_code", "")
-        detail = f"{type(exc).__name__}{f' [{code}]' if code else ''}: {exc}"[:240]
+        detail = _error_detail(exc)
         return Result(name, False, detail, _plan_b_for(kind, whisper=True))
 
     return Result(name, True, "StartStreamTranscription autorisé, stream ouvert et refermé")

@@ -34,6 +34,7 @@ from typing import Any, get_args
 
 import pytest
 
+from vocalguard.application.history import HistoryRecorder
 from vocalguard.application.intervention import InterventionRunner
 from vocalguard.application.scoring import ScoringPipeline
 from vocalguard.application.sessions import SessionRegistry
@@ -59,8 +60,11 @@ from vocalguard.infrastructure.fakes.transcriber import (
     FakeTranscriber,
     FakeTranscriptionStream,
 )
+from vocalguard.infrastructure.history.sqlite import SQLiteCallHistory
+from vocalguard.infrastructure.history.voicemail import SQLiteVoicemailStore
 from vocalguard.infrastructure.keywords.detector import KeywordDetector
 from vocalguard.infrastructure.telephony.client import TwilioCallController
+from vocalguard.infrastructure.telephony.recordings import TwilioRecordings
 from vocalguard.infrastructure.telephony.reputation import TwilioReputationChecker
 from vocalguard.infrastructure.voice.synthetic_detector import Wav2VecVoiceDetector
 from vocalguard.interface.event_hub import EventHub
@@ -124,6 +128,18 @@ def _implementations() -> list[tuple[str, type, Any]]:
         ("InMemoryEventSink", ports.EventSink, sink),
         ("ConsoleEventSink", ports.EventSink, ConsoleEventSink()),
         ("FanOutSink", ports.EventSink, FanOutSink()),
+        ("SQLiteCallHistory", ports.CallHistory, SQLiteCallHistory("unused.sqlite", enabled=False)),
+        ("SQLiteVoicemailStore", ports.VoicemailStore, SQLiteVoicemailStore("unused-voice.sqlite")),
+        ("TwilioRecordings", ports.RecordingFiles, TwilioRecordings(settings)),
+        (
+            "HistoryRecorder",
+            ports.EventSink,
+            HistoryRecorder(
+                store=SQLiteCallHistory("unused.sqlite", enabled=False),
+                registry=registry,
+                contacts=contacts,
+            ),
+        ),
         ("ScoringPipeline", ports.EventSink, _pipeline(settings, registry)),
         # L'InterventionRunner a gagné un alias `emit` pour s'abonner au bus.
         (
@@ -205,7 +221,9 @@ def _protocol_methods(port: type) -> frozenset[str]:
     """Les membres du protocole, sans les coder en dur."""
     attrs = getattr(port, "__protocol_attrs__", None)
     assert attrs, f"{port.__name__} n'expose pas __protocol_attrs__"
-    return frozenset(attrs)
+    # Les attributs de données (CallHistory.enabled) sont contrôlés par le
+    # runtime-check ; seules les méthodes possèdent une signature à comparer.
+    return frozenset(name for name in attrs if callable(getattr(port, name, None)))
 
 
 def _comparable(signature: inspect.Signature, *, drop_self: bool) -> list[tuple[Any, ...]]:

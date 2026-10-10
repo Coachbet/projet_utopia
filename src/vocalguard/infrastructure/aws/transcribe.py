@@ -20,10 +20,12 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from amazon_transcribe.auth import StaticCredentialResolver
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
 
 from vocalguard.domain.models import TranscriptSegment
+from vocalguard.infrastructure.aws.credentials import AWSCredentialsError, aws_session
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -145,11 +147,13 @@ class AwsTranscriptionStream:
             return
         try:
             await self._stream.input_stream.send_audio_event(audio_chunk=pcm16)
-        except Exception:
+        except Exception as exc:
             # Une coupure côté AWS en pleine démo ne doit pas remonter jusqu'au
             # WebSocket Twilio : on abandonne la transcription, pas l'appel.
-            logger.exception(
-                "Transcribe (%s) : envoi audio impossible, flux abandonné", self.speaker
+            logger.error(
+                "Transcribe (%s) : envoi audio impossible, flux abandonné (%s)",
+                self.speaker,
+                type(exc).__name__,
             )
             self._stream = None
 
@@ -187,7 +191,16 @@ class AwsTranscriber:
 
     def _ensure_client(self) -> Any:
         if self._client is None:
-            self._client = TranscribeStreamingClient(region=self._settings.transcribe_region)
+            credentials = aws_session(self._settings).get_credentials()
+            if credentials is None:
+                raise AWSCredentialsError("Aucun identifiant AWS configuré (.env, exports ou profil).")
+            frozen = credentials.get_frozen_credentials()
+            self._client = TranscribeStreamingClient(
+                region=self._settings.transcribe_region,
+                credential_resolver=StaticCredentialResolver(
+                    frozen.access_key, frozen.secret_key, frozen.token
+                ),
+            )
         return self._client
 
     async def open(
@@ -203,13 +216,12 @@ class AwsTranscriber:
             )
         except Exception as exc:
             logger.error(
-                "Transcribe indisponible pour la piste %s (%s : %s). "
+                "Transcribe indisponible pour la piste %s (%s). "
                 "Vérifier que le rôle AWS autorise %s dans la région %s, "
                 "ou basculer TRANSCRIBE_BACKEND. L'appel continue sans transcription "
                 "de cette piste.",
                 speaker,
                 type(exc).__name__,
-                exc,
                 REQUIRED_IAM_ACTION,
                 settings.transcribe_region,
             )
@@ -236,5 +248,7 @@ class AwsTranscriber:
             await handler.handle_events()
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("Transcribe (%s) : flux de résultats interrompu", speaker)
+        except Exception as exc:
+            logger.error(
+                "Transcribe (%s) : flux de résultats interrompu (%s)", speaker, type(exc).__name__
+            )

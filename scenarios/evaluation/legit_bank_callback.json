@@ -1,0 +1,28 @@
+{
+  "title": "Vraie banque et rappel par un canal vérifié",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_LEGIT_BANK_CALLBACK",
+  "caller_number": "+33700009102",
+  "evaluation": {
+    "label": "legitimate",
+    "language": "fr",
+    "expected_decision": "below_alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Bonjour, votre conseiller bancaire. Nous avons bloqué un paiement suspect sur votre carte."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Ne me donnez aucun code de sécurité ni mot de passe. Vous pouvez raccrocher et rappeler le numéro au dos de votre carte."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Aucun virement ne vous est demandé et rien ne doit être fait dans l’urgence."
+    }
+  ]
+}

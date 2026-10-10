@@ -1,0 +1,28 @@
+{
+  "title": "Faux colis et code bancaire",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_SCAM_DELIVERY_OTP",
+  "caller_number": "+33700009002",
+  "evaluation": {
+    "label": "scam",
+    "language": "fr",
+    "expected_decision": "alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Votre colis est retenu au dépôt. Il faut payer deux euros maintenant pour éviter son renvoi."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Donnez-moi votre carte bancaire et le code reçu par SMS pour valider le paiement."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Ne raccrochez surtout pas et ne contactez pas votre banque, je finalise le dossier."
+    }
+  ]
+}

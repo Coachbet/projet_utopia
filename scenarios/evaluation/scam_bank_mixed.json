@@ -1,0 +1,28 @@
+{
+  "title": "Faux banquier avec alternance FR/EN",
+  "notes": "Conversation synthétique de test, jamais un appel réel.",
+  "call_id": "CA_EVAL_SCAM_BANK_MIXED",
+  "caller_number": "+33700009007",
+  "evaluation": {
+    "label": "scam",
+    "language": "fr-en",
+    "expected_decision": "alert"
+  },
+  "turns": [
+    {
+      "t": 1.0,
+      "speaker": "caller",
+      "text": "Bonjour, service sécurité de votre banque. We detected suspicious activity on your account."
+    },
+    {
+      "t": 9.0,
+      "speaker": "caller",
+      "text": "Il faut transférer vos économies sur notre compte sécurisé tout de suite. Give me the code you received by text."
+    },
+    {
+      "t": 17.0,
+      "speaker": "caller",
+      "text": "Ne parlez de cet appel à personne et ne rappelez pas votre agence : this operation is confidential."
+    }
+  ]
+}

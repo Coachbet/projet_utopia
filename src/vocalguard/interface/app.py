@@ -11,25 +11,35 @@ détection de voix synthétique sur l'audio décodé.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
+from vocalguard.application.history import HistoryRecorder
 from vocalguard.application.intervention import InterventionRunner
+from vocalguard.application.outgoing import OutgoingAuthorizations
 from vocalguard.application.scoring import ScoringPipeline, build_pipeline
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.application.verification import IdentityVerifier
+from vocalguard.application.voicemail import VoicemailService
 from vocalguard.config import Settings, get_settings
 from vocalguard.domain.ports import AudioConsumer, EventSink, Transcriber
 from vocalguard.infrastructure.contacts.book import JsonContactBook
 from vocalguard.infrastructure.fakes.call_controller import LoggingCallController
 from vocalguard.infrastructure.fakes.event_sink import ConsoleEventSink, FanOutSink
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
+from vocalguard.infrastructure.history.sqlite import SQLiteCallHistory
+from vocalguard.infrastructure.history.voicemail import SQLiteVoicemailStore
 from vocalguard.infrastructure.telephony.announcements import AnnouncementStore
 from vocalguard.infrastructure.telephony.client import TwilioCallController
-from vocalguard.interface.http import control, phone_app, webhooks
+from vocalguard.infrastructure.telephony.recordings import TwilioRecordings
+from vocalguard.interface.auth import PinGuard, protect_access_logs
+from vocalguard.interface.event_hub import EventHub
+from vocalguard.interface.http import control, phone_app, voicemail, webhooks
+from vocalguard.interface.lifecycle import release_call
 from vocalguard.interface.ws import media
 
 log = logging.getLogger(__name__)
@@ -74,12 +84,14 @@ def create_app(
 ) -> FastAPI:
     settings = settings or get_settings()
     logging.basicConfig(level=settings.log_level.upper())
+    protect_access_logs()
 
     # Le câblage est circulaire : la session émet dans le sink, et le pipeline de
     # score a besoin de la session pour retrouver l'appel. On ouvre donc le
     # fanout d'abord et on y abonne les deux consommateurs ensuite.
     fanout = FanOutSink(sink) if sink is not None else FanOutSink(ConsoleEventSink())
-    _subscribe_dashboard(fanout)
+    hub = EventHub()
+    fanout.add(hub)
 
     # La file d'annonces vit hors du contrôleur : le webhook `announce_url` doit
     # pouvoir y lire même quand les actions ne sont que tracées (démo sans Twilio).
@@ -101,12 +113,33 @@ def create_app(
     # dans le chemin de réponse d'un webhook Twilio.
     contacts = JsonContactBook.from_path(settings.contacts_path)
 
+    mailbox = VoicemailService(
+        store=SQLiteVoicemailStore(
+            settings.voicemail_path, retention_days=settings.voicemail_retention_days
+        ),
+        recordings=TwilioRecordings(settings),
+        contacts=contacts,
+        enabled=settings.voicemail_enabled and settings.twilio_configured,
+    )
+    configure_voicemail = getattr(controller, "configure_voicemail", None)
+    if configure_voicemail is not None:
+        configure_voicemail(mailbox)
+
     registry = SessionRegistry(
         transcriber_factory=transcriber_factory or _transcriber_factory(settings),
         sink=fanout,
         settings=settings,
         audio_tap_factory=_audio_tap,
     )
+    history = SQLiteCallHistory(
+        settings.history_path,
+        enabled=settings.history_enabled,
+        retention_days=settings.history_retention_days,
+    )
+    history_recorder = HistoryRecorder(
+        store=history, registry=registry, contacts=contacts, thresholds=settings.thresholds()
+    )
+    fanout.add(history_recorder)
     intervention = InterventionRunner(
         controller=controller,
         sink=fanout,
@@ -141,22 +174,53 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        try:
+            await history.initialize()
+        except Exception:
+            log.exception("Historique indisponible au démarrage ; les appels restent opérationnels")
+        try:
+            await mailbox.initialize()
+        except Exception:
+            mailbox.enabled = False
+            log.warning("Messagerie indisponible au démarrage ; dépôt désactivé")
+        maintenance = asyncio.create_task(mailbox.maintain()) if mailbox.enabled else None
         if not settings.public_hostname:
             log.warning(
                 "PUBLIC_HOSTNAME est vide : Twilio ne pourra joindre ni le "
                 "<Stream> ni les webhooks. Lancer `make tunnel` puis renseigner .env."
             )
         yield
+        if maintenance is not None:
+            maintenance.cancel()
+            with suppress(asyncio.CancelledError):
+                await maintenance
         for session in registry.active():
-            await registry.close(session.call_id)
+            await release_call(app.state, session.call_id)
+        await pipeline.aclose()
+        await verifier.aclose()
 
     app = FastAPI(title="VocalGuard", version="0.1.0", lifespan=lifespan)
 
+    @app.middleware("http")
+    async def private_responses(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        if request.url.path.startswith(("/app", "/control")):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     app.state.settings = settings
+    app.state.pin_guard = PinGuard()
     app.state.sink = sink
     app.state.registry = registry
+    app.state.history = history
+    app.state.history_recorder = history_recorder
+    app.state.dashboard_hub = hub
     app.state.controller = controller
     app.state.contacts = contacts
+    app.state.voicemail = mailbox
+    app.state.outgoing = OutgoingAuthorizations()
     app.state.intervention = intervention
     app.state.pipeline = pipeline
     # Lu par `POST /control/calls/{id}/verify` et purgé par `lifecycle.release_call`.
@@ -172,7 +236,10 @@ def create_app(
     app.include_router(control.router)
     # L'app sur le téléphone de la personne protégée (page + jeton Voice).
     app.include_router(phone_app.router)
-    _mount_dashboard(app)
+    app.include_router(voicemail.router)
+    from vocalguard.interface.ws.dashboard import create_dashboard_router
+
+    app.include_router(create_dashboard_router(hub))
 
     @app.get("/healthz")
     async def healthz() -> dict[str, object]:
