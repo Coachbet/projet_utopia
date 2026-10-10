@@ -13,6 +13,7 @@ Les actions (attente, annonce, SMS) ne sont plus ici : elles appartiennent à
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 from collections.abc import Sequence
@@ -107,6 +108,48 @@ class ExplodingAnalyzer:
     async def analyze(self, window: Sequence[TranscriptSegment]) -> ContentSignal | None:
         self.calls += 1
         raise RuntimeError("bedrock injoignable")
+
+
+RISKY = ContentSignal(risk=0.9, tactics=("urgence",), explanation="virement réclamé")
+
+
+class GatedAnalyzer:
+    """Ne répond que lorsque le test l'y autorise.
+
+    Permet de placer un `forget` pendant l'aller-retour Bedrock sans dormir.
+    """
+
+    def __init__(self, signal: ContentSignal = RISKY) -> None:
+        self.signal = signal
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.calls = 0
+        self.completed = 0
+
+    async def analyze(self, window: Sequence[TranscriptSegment]) -> ContentSignal | None:
+        self.calls += 1
+        self.started.set()
+        await self.release.wait()
+        self.completed += 1
+        return self.signal
+
+
+class ForgettingAnalyzer:
+    """Oublie l'appel juste avant de répondre, sans jamais rendre la main.
+
+    C'est le cas que l'annulation ne peut pas couvrir : la tâche est déjà passée
+    son `await`, donc seule la garde de vivacité peut l'empêcher d'émettre.
+    """
+
+    def __init__(self, call_id: str, signal: ContentSignal = RISKY) -> None:
+        self.call_id = call_id
+        self.signal = signal
+        self.pipeline: ScoringPipeline | None = None
+
+    async def analyze(self, window: Sequence[TranscriptSegment]) -> ContentSignal | None:
+        assert self.pipeline is not None
+        self.pipeline.forget(self.call_id)
+        return self.signal
 
 
 class CountingReputation(FakeReputationChecker):
@@ -520,6 +563,101 @@ async def test_forget_clears_the_per_call_state():
 
     # L'appel est reparti de zéro : la réputation est réinterrogée.
     assert reputation.identities == [None, None]
+
+
+async def test_forget_on_an_unknown_call_is_a_no_op():
+    harness, _ = build(analyzer=ScriptedAnalyzer(RISKY))
+    harness.pipeline.forget("CA_JAMAIS_VUE")
+    assert harness.recorder.events == []
+
+
+async def test_an_analysis_cancelled_by_forget_emits_nothing():
+    """Réponse Bedrock lente + raccrochage : aucun score pour un appel mort.
+
+    Sinon la frise du dashboard affiche un score après la fin de l'appel, et
+    `InterventionRunner` loggue un appel introuvable qu'on a créé nous-mêmes.
+    """
+    analyzer = GatedAnalyzer()
+    harness, registry = build(analyzer=analyzer)
+    session = await registry.open("CA1")
+
+    await session.on_segment(seg("mamie c'est Lucas, il faut un virement"))
+    await analyzer.started.wait()
+    scores_before = len(harness.of_type("score"))
+
+    harness.pipeline.forget("CA1")
+    analyzer.release.set()
+    await harness.pipeline.aclose()
+
+    assert harness.of_type("llm") == []
+    assert len(harness.of_type("score")) == scores_before
+    # La tâche a été annulée avant de répondre.
+    assert analyzer.completed == 0
+
+
+async def test_an_analysis_that_outruns_the_cancellation_still_emits_nothing():
+    """La garde de vivacité, et non l'annulation, est ce qui attrape ce cas."""
+    analyzer = ForgettingAnalyzer("CA1")
+    harness, registry = build(analyzer=analyzer)
+    analyzer.pipeline = harness.pipeline
+    session = await registry.open("CA1")
+
+    await session.on_segment(seg("mamie c'est Lucas, il faut un virement"))
+    scores_before = len(harness.of_type("score"))
+    await harness.pipeline.aclose()
+
+    assert harness.of_type("llm") == []
+    assert len(harness.of_type("score")) == scores_before
+    # Et l'état de l'appel oublié n'a pas été ressuscité.
+    assert session.signals.content is None
+
+
+async def test_forgetting_one_call_leaves_another_running():
+    """Deux appels simultanés arrivent vraiment (cf. `SessionRegistry.by_stream`)."""
+    analyzer = GatedAnalyzer()
+    harness, registry = build(analyzer=analyzer)
+    kept = await registry.open("CA_GARDE")
+    dropped = await registry.open("CA_OUBLIEE")
+
+    await kept.on_segment(seg("premier appel"))
+    await dropped.on_segment(seg("second appel"))
+    await analyzer.started.wait()
+
+    harness.pipeline.forget("CA_OUBLIEE")
+    analyzer.release.set()
+    await harness.pipeline.aclose()
+
+    assert {e.call_id for e in harness.of_type("llm")} == {"CA_GARDE"}
+
+
+async def test_aclose_does_not_raise_when_a_task_was_cancelled():
+    """`CancelledError` est une `BaseException` : `gather` doit quand même la
+    renvoyer dans ses résultats plutôt que la lever.
+
+    Le `wait_for` est délibéré : ce test ne débloque jamais la porte, donc c'est
+    l'annulation qui doit libérer la tâche. Sans elle, `aclose()` attendrait pour
+    toujours — et un test qui pend est bien pire qu'un test qui échoue.
+    """
+    analyzer = GatedAnalyzer()
+    harness, registry = build(analyzer=analyzer)
+    session = await registry.open("CA1")
+
+    await session.on_segment(seg("mamie"))
+    await analyzer.started.wait()
+    harness.pipeline.forget("CA1")
+
+    await asyncio.wait_for(harness.pipeline.aclose(), timeout=2.0)
+
+
+async def test_task_bookkeeping_does_not_leak_between_calls():
+    analyzer = ScriptedAnalyzer(RISKY)
+    harness, registry = build(analyzer=analyzer)
+    for call_id in ("CA1", "CA2", "CA3"):
+        session = await registry.open(call_id)
+        await session.on_segment(seg("mamie", t=1.0))
+    await harness.pipeline.aclose()
+
+    assert harness.pipeline._tasks == {}
 
 
 # --- La doublure de Claude -------------------------------------------------

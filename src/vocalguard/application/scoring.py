@@ -100,7 +100,15 @@ class ScoringPipeline:
         self._llm_in_flight: set[str] = set()
         self._claimed_identity: dict[str, str | None] = {}
         self._reputation_done: set[str] = set()
-        self._tasks: set[asyncio.Task[None]] = set()
+
+        # Les tâches sont groupées par appel : oublier un appel ne doit pas
+        # toucher aux analyses d'un autre, et deux appels simultanés arrivent
+        # vraiment (cf. `SessionRegistry.by_stream`).
+        self._tasks: dict[str, set[asyncio.Task[None]]] = {}
+
+        # Appels encore scorés. Sert de garde après un `await` : une réponse
+        # Bedrock tardive ne doit pas émettre sur un appel déjà raccroché.
+        self._live: set[str] = set()
 
     # --- Branchements ------------------------------------------------------
 
@@ -137,19 +145,45 @@ class ScoringPipeline:
             logger.exception("analyse en échec sur %s", event.call_id)
 
     def forget(self, call_id: str) -> None:
+        """Oublie un appel terminé, et annule l'analyse encore en vol.
+
+        Sans l'annulation, une réponse Bedrock lente arrive après le raccrochage
+        et émet un `score` pour un appel mort : la frise du dashboard affiche un
+        score après la fin de l'appel, et `InterventionRunner` loggue un
+        avertissement sur un appel introuvable — un symptôme qu'on aurait créé
+        nous-mêmes.
+
+        Les tâches ne sont pas retirées de `_tasks` ici : leurs rappels de fin
+        s'en chargent, ce qui laisse `aclose()` les drainer.
+        """
+        self._live.discard(call_id)
         self._llm_in_flight.discard(call_id)
         self._reputation_done.discard(call_id)
         self._claimed_identity.pop(call_id, None)
+        for task in tuple(self._tasks.get(call_id, ())):
+            task.cancel()
 
     async def aclose(self) -> None:
-        """Attend les analyses en vol. À appeler en fin de scénario ou d'appel."""
-        pending = list(self._tasks)
+        """Attend les analyses en vol, tous appels confondus.
+
+        `scripts/replay_scenario.py` et les tests d'intégration s'en servent pour
+        que l'appel à Claude se pose avant qu'ils ne lisent le score.
+
+        `return_exceptions=True` renvoie bien les `CancelledError` dans les
+        résultats au lieu de les lever, malgré leur statut de `BaseException`
+        depuis Python 3.8 — vérifié sur 3.12.
+        """
+        pending = [task for tasks in self._tasks.values() for task in tasks]
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
     # --- Enchaînement ------------------------------------------------------
 
     async def _on_final_segment(self, session: CallSession) -> None:
+        # Un transcript qui arrive après un `forget` veut dire que l'appel est
+        # bien vivant : on le réinscrit plutôt que de l'ignorer.
+        self._live.add(session.call_id)
+
         if session.call_id not in self._reputation_done:
             self._reputation_done.add(session.call_id)
             await self._check_reputation(session)
@@ -171,10 +205,20 @@ class ScoringPipeline:
         """
         if self._content is None or session.call_id in self._llm_in_flight:
             return
-        self._llm_in_flight.add(session.call_id)
+        call_id = session.call_id
+        self._llm_in_flight.add(call_id)
         task = asyncio.create_task(self._run_llm(session))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._tasks.setdefault(call_id, set()).add(task)
+        task.add_done_callback(lambda done, cid=call_id: self._discard_task(cid, done))
+
+    def _discard_task(self, call_id: str, task: asyncio.Task[None]) -> None:
+        """Retire une tâche terminée sans ressusciter l'entrée d'un appel oublié."""
+        tasks = self._tasks.get(call_id)
+        if tasks is None:
+            return
+        tasks.discard(task)
+        if not tasks:
+            self._tasks.pop(call_id, None)
 
     async def _run_llm(self, session: CallSession) -> None:
         assert self._content is not None
@@ -187,6 +231,14 @@ class ScoringPipeline:
             return
         finally:
             self._llm_in_flight.discard(session.call_id)
+
+        # L'appel a pu se terminer pendant l'aller-retour Bedrock. L'annulation
+        # de `forget` ne suffit pas : la tâche peut déjà être passée l'`await`.
+        # La garde vient avant toute écriture d'état, sinon la ligne
+        # `_claimed_identity[...]` plus bas ressusciterait l'appel oublié.
+        if session.call_id not in self._live:
+            logger.debug("analyse ignorée, appel %s déjà terminé", session.call_id)
+            return
 
         if signal is None:
             return

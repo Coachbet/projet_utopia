@@ -129,6 +129,38 @@ button.ghost[aria-pressed="true"] { color: var(--text-primary); border-color: va
 .action-banner .ico { color: var(--status-critical); flex: none; }
 .action-banner .who { font-size: 21px; font-weight: 650; }
 .action-banner .what { font-size: 16px; color: var(--text-secondary); margin-top: 3px; }
+
+/* Contrôle « reprendre l'appel » : affordance d'action, pas une marque de
+   donnée. Ni la palette catégorielle (identité des quatre signaux) ni la
+   palette de statut (les quatre bandes de score) ne servent ici — l'attente
+   n'est pas une cinquième bande. Traitement neutre, volontairement. */
+.hold-ctl {
+  display: none;
+  align-items: center; gap: 16px;
+  padding: 14px 20px; margin-bottom: 18px;
+  border-radius: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--baseline);
+}
+.hold-ctl[data-held="1"] { display: flex; }
+.hold-ctl .ico { color: var(--text-secondary); flex: none; }
+.hold-ctl .txt { flex: 1 1 auto; min-width: 0; }
+.hold-ctl .who { font-size: 18px; font-weight: 650; }
+.hold-ctl .note { font-size: 14.5px; color: var(--text-secondary); margin-top: 3px; }
+.hold-ctl .err { font-size: 14.5px; color: var(--status-critical); font-weight: 620; margin-top: 5px; }
+.hold-ctl .err:empty { display: none; }
+button.primary {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 9px;
+  min-height: 44px; padding: 11px 19px;
+  font: inherit; font-size: 16px; font-weight: 650;
+  color: var(--surface-1); background: var(--text-primary);
+  border: 1px solid var(--text-primary); border-radius: 9px;
+  cursor: pointer;
+}
+button.primary:hover:not(:disabled) { background: var(--text-secondary); border-color: var(--text-secondary); }
+button.primary:disabled { opacity: 0.55; cursor: progress; }
+button.primary:focus-visible { outline: 3px solid var(--series-1); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) {
   .action-banner[data-pulse="1"] { animation: pulse 1.1s ease-out 2; }
   @keyframes pulse {
@@ -407,6 +439,21 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
   </div>
 </div>
 
+<!-- Région distincte de la bannière : un bouton ne doit pas vivre dans une
+     zone aria-live assertive, qui le réannoncerait à chaque action. -->
+<div class="hold-ctl" id="holdctl" data-held="0" role="region" aria-label="Contrôle de l'appel">
+  <svg class="ico" width="26" height="26" aria-hidden="true"><use href="#i-pause"/></svg>
+  <div class="txt">
+    <div class="who">L'appelant est en attente</div>
+    <div class="note">La surveillance reste active : si le risque remonte, il sera remis en attente.</div>
+    <div class="err" id="holderr" role="status" aria-live="polite"></div>
+  </div>
+  <button class="primary" id="resumebtn" type="button">
+    <svg width="19" height="19" aria-hidden="true"><use href="#i-play"/></svg>
+    <span id="resumelbl">Reprendre l'appel maintenant</span>
+  </button>
+</div>
+
 <main class="grid">
 
   <section class="card c-score" aria-labelledby="h-score">
@@ -540,10 +587,18 @@ const ACTIONS = {
   notify_dashboard: { label: "Dashboard notifié",        icon: "#i-watch" },
 };
 
+/* Décidé une fois, au chargement : le chemin démonstration et le chemin live
+   ne doivent jamais se mélanger à l'exécution. */
+const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
+
+const RESUME_LABEL = "Reprendre l'appel maintenant";
+
 const state = {
   callId: null,
   score: 0,
   level: "none",
+  held: false,
+  lastT: 0,
   risks: { llm: null, keyword: null, voice: null, reputation: null },
   claimed: null,
   lineType: null,
@@ -845,10 +900,86 @@ function showBanner(ev) {
   b.dataset.pulse = "1";
 }
 
+/* --- contrôle « reprendre l'appel » ------------------------------------
+   Le contrat d'événement ne porte aucun état d'appel : l'état « en attente »
+   se déduit donc du flux d'actions réussies (hold_caller -> en attente,
+   resume_caller -> libéré), et par défaut on suppose libéré.
+
+   Le serveur ne remet pas `acted_level` à zéro sur une reprise : la décision
+   humaine ne doit pas être défaite par le score suivant. Conséquence que
+   l'opérateur doit comprendre, d'où la mention explicite dans le panneau :
+   reprendre ne désactive pas la protection, l'appelant peut être remis en
+   attente si le risque remonte.
+   ----------------------------------------------------------------------- */
+function setHeld(held) {
+  state.held = Boolean(held);
+  $("holdctl").dataset.held = state.held ? "1" : "0";
+  if (!state.held) {
+    $("holderr").textContent = "";
+    setResumeBusy(false);
+  }
+}
+
+function setResumeBusy(busy) {
+  $("resumebtn").disabled = Boolean(busy);
+  $("resumelbl").textContent = busy ? "Reprise en cours…" : RESUME_LABEL;
+}
+
+async function resumeCall() {
+  if (!state.callId) return;
+  $("holderr").textContent = "";
+
+  /* Chemin DÉMONSTRATION : aucun backend. On fabrique localement l'événement
+     que le serveur aurait émis. Séparé du chemin live ci-dessous pour qu'une
+     panne du vrai flux ne puisse pas être masquée par la démo. */
+  if (DEMO_MODE) {
+    applyEvent({
+      call_id: state.callId, t: state.lastT, type: "action",
+      data: { action: "resume_caller", target: "caller", ok: true },
+    });
+    return;
+  }
+
+  setResumeBusy(true);
+  let res;
+  try {
+    res = await fetch(`/control/calls/${encodeURIComponent(state.callId)}/resume`,
+                      { method: "POST" });
+  } catch (err) {
+    /* Serveur injoignable : à ne pas confondre avec un refus de Twilio. Dans
+       les deux cas l'appelant est toujours en attente, et croire l'avoir
+       libéré est la pire issue possible pour l'opérateur. */
+    setResumeBusy(false);
+    $("holderr").textContent = "Serveur injoignable. L'appelant est toujours en attente.";
+    return;
+  }
+  setResumeBusy(false);
+
+  /* 404 = appel inconnu du serveur : le dashboard est en retard, on retire le
+     contrôle plutôt que d'afficher une erreur sur un appel déjà terminé. */
+  if (res.status === 404) {
+    setHeld(false);
+    return;
+  }
+
+  let body = null;
+  try { body = await res.json(); } catch (err) { /* corps illisible */ }
+
+  if (body && body.ok === true) {
+    /* L'événement action/resume_caller arrive aussi par le bus et fera le
+       rendu ; on se fie à `caller_held` pour ne pas dépendre de son délai. */
+    if (body.caller_held === false) setHeld(false);
+    return;
+  }
+  /* Jamais de 5xx côté serveur : ok:false veut dire que Twilio a refusé. */
+  $("holderr").textContent = "Twilio a refusé la reprise. L'appelant est toujours en attente.";
+}
+
 /* --- le réducteur ------------------------------------------------------ */
 function applyEvent(ev) {
   if (!ev || typeof ev !== "object" || !ev.type) return;
   const d = ev.data || {};
+  if (typeof ev.t === "number" && isFinite(ev.t)) state.lastT = ev.t;
 
   if (ev.call_id && ev.call_id !== state.callId) {
     if (state.callId !== null) resetForNewCall();
@@ -928,7 +1059,13 @@ function applyEvent(ev) {
         sub: d.ok === false ? "Échec de l'appel API Twilio." : undefined,
         quote: d.message ? String(d.message).trim() : undefined,
       });
-      if (d.ok !== false) showBanner(ev);
+      if (d.ok !== false) {
+        showBanner(ev);
+        /* Seule source d'état d'attente : une action refusée par Twilio ne
+           change rien, donc on ne la prend pas en compte. */
+        if (d.action === "hold_caller") setHeld(true);
+        else if (d.action === "resume_caller") setHeld(false);
+      }
       return;
     }
   }
@@ -944,6 +1081,7 @@ function resetForNewCall() {
   $("feed").textContent = "";
   $("feed").appendChild(el("p", "empty", "Rien à signaler."));
   $("banner").dataset.shown = "0";
+  setHeld(false);
   renderScore(); renderSignals(); renderIdentity();
 }
 
@@ -1092,11 +1230,12 @@ function initTableToggle() {
 buildSignals();
 initTheme();
 initTableToggle();
+$("resumebtn").addEventListener("click", resumeCall);
 renderScore();
 renderSignals();
 renderIdentity();
 
-if (new URLSearchParams(location.search).get("demo") === "1") {
+if (DEMO_MODE) {
   startDemo();
 } else {
   connectLive();
