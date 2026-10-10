@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VocalGuard — où nous en sommes</title>
+<style>
+/* ------------------------------------------------------------------ *
+ * Palette : instance de référence validée (validate_palette.js).
+ *   catégoriel slots 1-2  : blue, orange  — identité Dev 1 / Dev 2
+ *   séquentiel            : blue 100→700  — la jauge de score
+ *   statut                : good / warning / serious / critical
+ * Les valeurs sombres sont choisies pour le fond sombre, pas inversées.
+ * ------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+  --surface-1:      #fcfcfb;
+  --plane:          #f9f9f7;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --grid:           #e1e0d9;
+  --axis:           #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+
+  --series-1:       #2a78d6;
+  --series-2:       #eb6834;
+
+  --seq-150:        #b7d3f6;
+  --seq-250:        #86b6ef;
+  --seq-450:        #2a78d6;
+  --seq-600:        #184f95;
+
+  --good:           #0ca30c;
+  --warning:        #fab219;
+  --serious:        #ec835a;
+  --critical:       #d03b3b;
+  --success-text:   #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --plane:          #0d0d0d;
+    --text-primary:   #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-2:       #d95926;
+    --seq-150:        #184f95;
+    --seq-250:        #1c5cab;
+    --seq-450:        #3987e5;
+    --seq-600:        #86b6ef;
+    --success-text:   #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1:      #1a1a19;
+  --plane:          #0d0d0d;
+  --text-primary:   #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted:     #898781;
+  --grid:           #2c2c2a;
+  --axis:           #383835;
+  --border:         rgba(255,255,255,0.10);
+  --series-1:       #3987e5;
+  --series-2:       #d95926;
+  --seq-150:        #184f95;
+  --seq-250:        #1c5cab;
+  --seq-450:        #3987e5;
+  --seq-600:        #86b6ef;
+  --success-text:   #0ca30c;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--text-primary);
+  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 96px; }
+
+/* --- en-tête ----------------------------------------------------- */
+header.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--plane) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.top-in {
+  max-width: 980px; margin: 0 auto; padding: 12px 24px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.brand { font-weight: 600; letter-spacing: -0.01em; }
+.brand span { color: var(--text-muted); font-weight: 400; }
+nav.toc { display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; font-size: 13.5px; }
+nav.toc a { color: var(--text-secondary); text-decoration: none; }
+nav.toc a:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+button.theme {
+  font: inherit; font-size: 13px; cursor: pointer;
+  background: var(--surface-1); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
+}
+button.theme:hover { color: var(--text-primary); }
+
+h1 { font-size: clamp(28px, 4.4vw, 40px); line-height: 1.15; letter-spacing: -0.02em; margin: 56px 0 8px; }
+h2 {
+  font-size: 22px; letter-spacing: -0.01em; margin: 64px 0 4px;
+  padding-top: 24px; border-top: 1px solid var(--border);
+}
+h3 { font-size: 16.5px; margin: 32px 0 6px; }
+h2 + .sub, h1 + .sub { color: var(--text-secondary); margin: 0 0 24px; max-width: 72ch; }
+p { max-width: 74ch; }
+p, li { color: var(--text-secondary); }
+li { margin: 5px 0; }
+strong { color: var(--text-primary); font-weight: 600; }
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.875em;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px; color: var(--text-primary);
+}
+pre {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-primary);
+}
+pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+
+/* --- figure / carte ---------------------------------------------- */
+figure.card {
+  margin: 24px 0; padding: 20px 22px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+}
+figure.card figcaption { font-weight: 600; font-size: 15px; color: var(--text-primary); }
+figure.card .note { font-size: 13.5px; color: var(--text-secondary); margin: 2px 0 16px; max-width: 70ch; }
+figure.card svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+/* --- hero -------------------------------------------------------- */
+.hero {
+  display: flex; gap: 28px; align-items: center; flex-wrap: wrap;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-left: 3px solid var(--critical);
+  border-radius: 12px; padding: 22px 24px; margin: 28px 0 8px;
+}
+.hero-fig { font-size: 64px; font-weight: 600; line-height: 1; letter-spacing: -0.03em; }
+.hero-txt { flex: 1 1 320px; }
+.hero-txt b { display: block; font-size: 16px; color: var(--text-primary); }
+.hero-txt span { font-size: 14px; color: var(--text-secondary); }
+
+/* --- tuiles de statut -------------------------------------------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(188px, 1fr)); gap: 12px; margin: 20px 0 8px; }
+.tile {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px;
+}
+.tile .lbl { font-size: 12.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.tile .val { font-size: 27px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
+.tile .sub2 { font-size: 12px; color: var(--text-muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.ic { font-size: 12px; font-weight: 700; flex: none; width: 13px; text-align: center; }
+
+/* --- légende ------------------------------------------------------ */
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); margin: 14px 0 0; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+/* --- tableaux ----------------------------------------------------- */
+details.tbl { margin: 14px 0 0; }
+details.tbl summary {
+  cursor: pointer; font-size: 13px; color: var(--text-secondary);
+  padding: 4px 0; width: fit-content;
+}
+details.tbl summary:hover { color: var(--text-primary); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 12px 0; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--text-primary); font-weight: 600; font-size: 13px; }
+td { color: var(--text-secondary); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: 0; }
+
+/* --- frise -------------------------------------------------------- */
+ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 20px 0; }
+ol.steps > li {
+  counter-increment: s; position: relative; padding: 0 0 20px 44px; margin: 0;
+  border-left: 1px solid var(--grid); margin-left: 13px;
+}
+ol.steps > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+ol.steps > li::before {
+  content: counter(s);
+  position: absolute; left: -13px; top: 0;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--surface-1); border: 1px solid var(--axis);
+  color: var(--text-secondary); font-size: 12.5px; font-weight: 600;
+  display: grid; place-items: center; font-variant-numeric: tabular-nums;
+}
+ol.steps > li b { display: block; color: var(--text-primary); font-size: 15px; }
+ol.steps > li .crit {
+  display: block; font-size: 13px; color: var(--text-secondary); margin-top: 2px;
+  padding-left: 11px; border-left: 2px solid var(--seq-250);
+}
+
+/* --- encarts ------------------------------------------------------ */
+.box {
+  border: 1px solid var(--border); border-left: 3px solid var(--axis);
+  background: var(--surface-1); border-radius: 10px;
+  padding: 14px 18px; margin: 20px 0; font-size: 14.5px;
+}
+.box.risk  { border-left-color: var(--critical); }
+.box.warn  { border-left-color: var(--warning); }
+.box.ok    { border-left-color: var(--good); }
+.box p:first-child { margin-top: 0; }
+.box p:last-child { margin-bottom: 0; }
+.box .hd { font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 4px; }
+
+/* --- tooltip ------------------------------------------------------ */
+#tip {
+  position: fixed; z-index: 50; pointer-events: none; opacity: 0;
+  transition: opacity .1s; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.14);
+  padding: 8px 11px; font-size: 13px; color: var(--text-primary);
+  max-width: 260px; line-height: 1.45;
+}
+#tip .t-k { color: var(--text-secondary); }
+.hit { cursor: default; }
+.hit:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+
+svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.ax { font-size: 11.5px; fill: var(--text-muted); font-variant-numeric: tabular-nums; }
+.lb { font-size: 12.5px; fill: var(--text-secondary); }
+.lb-p { font-size: 13px; fill: var(--text-primary); font-weight: 600; }
+.vl { font-size: 12.5px; fill: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.vl-in { font-size: 12.5px; fill: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+footer { color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--border); margin-top: 72px; padding-top: 20px; }
+@media (max-width: 620px) { nav.toc { display: none; } .hero-fig { font-size: 48px; } }
+</style>
+</head>
+<body data-palette="#2a78d6,#eb6834">
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">VocalGuard <span>· état du projet</span></div>
+    <nav class="toc">
+      <a href="#quoi">Le système</a>
+      <a href="#flux">Le flux</a>
+      <a href="#score">Le score</a>
+      <a href="#fait">Fait</a>
+      <a href="#reste">À faire</a>
+      <a href="#dettes">Dettes</a>
+    </nav>
+    <button class="theme" id="theme" type="button">Thème sombre</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<h1>Où nous en sommes, et ce qu'il reste à faire</h1>
+<p class="sub">
+  Dernier point : branche <code>main</code> à <code>875d028</code>. Les deux moitiés du
+  projet sont intégrées et la chaîne complète fonctionne — sur des doublures.
+  Cette page dit précisément ce qui est prouvé, ce qui ne l'est pas, et dans quel ordre
+  avancer.
+</p>
+
+<div class="hero">
+  <div class="hero-fig" style="color:var(--critical)">0</div>
+  <div class="hero-txt">
+    <b>appel téléphonique réel passé</b>
+    <span>
+      Toute la chaîne téléphonique n'est exercée que par des doublures. Pas de
+      <code>.env</code>, ngrok non installé, aucune variable Twilio renseignée.
+      C'est le seul risque du projet sans repli — et aucune ligne de code ne le réduira.
+    </span>
+  </div>
+</div>
+
+<div class="tiles">
+  <div class="tile">
+    <div class="lbl"><span class="ic" style="color:var(--good)">✓</span> Tests automatisés</div>
+    <div class="val">493</div>
+    <div class="sub2">passés · 1 ignoré · 0 xfail</div>
+  </div>
+  <div class="tile">
+    <div class="lbl"><span class="ic" style="color:var(--good)">✓</span> AWS</div>
+    <div class="val">2 / 2</div>
+    <div class="sub2">Bedrock + Transcribe fr-FR autorisés</div>
+  </div>
+  <div class="tile">
+    <div class="lbl"><span class="ic" style="color:var(--warning)">▲</span> Scénarios de calibrage</div>
+    <div class="val">3 / 5</div>
+    <div class="sub2">1 seul légitime sur 3 attendus</div>
+  </div>
+  <div class="tile">
+    <div class="lbl"><span class="ic" style="color:var(--critical)">✕</span> Téléphonie réelle</div>
+    <div class="val">0 %</div>
+    <div class="sub2">jamais exercée hors doublures</div>
+  </div>
+</div>
+<p style="font-size:13px;color:var(--text-muted);margin-top:10px">
+  Chaque état porte une icône et un libellé : la couleur ne porte jamais seule l'information.
+</p>
+
+<!-- ============================================================ -->
+<h2 id="quoi">1 · Ce que fait le système</h2>
+<p class="sub">En une phrase, pour pouvoir juger tout le reste.</p>
+
+<p>
+  Une personne âgée reçoit un appel. L'appel passe par un numéro Twilio qui place
+  l'appelant et la victime dans une <strong>conférence</strong>, ce qui permet d'agir sur
+  chaque participant <em>séparément</em>. En parallèle, l'audio des deux pistes est
+  transcrit en temps réel, analysé, et converti en un <strong>score de risque de 0 à 100</strong>.
+  Au-delà de certains seuils, le système agit <em>pendant</em> l'appel : il parle à la victime
+  dans son oreille sans que l'appelant l'entende, met l'appelant en attente avec de la
+  musique, et envoie un SMS au vrai proche pour lui demander si c'est bien lui qui appelle.
+</p>
+
+<div class="box ok">
+  <span class="hd">Le parti pris central : jamais de raccrochage automatique</span>
+  <p>
+    Un faux positif sur un véritable appel d'urgence serait grave. La mise en attente
+    protège autant et laisse la décision à l'humain. C'est aussi pourquoi un opérateur
+    peut reprendre la main à tout moment depuis le dashboard.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="flux">2 · Le flux d'un appel</h2>
+<p class="sub">
+  Qui appelle qui, dans quel ordre. Les deux couleurs séparent les deux moitiés du
+  travail : chacune n'échange avec l'autre que par un contrat d'événement figé.
+</p>
+
+<figure class="card">
+  <figcaption>De la sonnerie à l'action, en une seule boucle</figcaption>
+  <p class="note">
+    Tout ce qui est en aval du <code>transcript</code> dépend de lui : c'est la
+    dépendance la plus structurante du système, et le point de défaillance unique
+    signalé plus bas.
+  </p>
+  <svg viewBox="0 0 900 460" role="img" aria-label="Schéma du flux d'un appel, de Twilio jusqu'aux actions sur l'appel">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--axis)"/>
+      </marker>
+      <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--series-1)"/>
+      </marker>
+      <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--series-2)"/>
+      </marker>
+    </defs>
+
+    <!-- bandes -->
+    <rect x="0" y="34" width="900" height="168" rx="10" fill="var(--series-1)" opacity="0.07"/>
+    <rect x="0" y="216" width="900" height="124" rx="10" fill="var(--series-2)" opacity="0.07"/>
+    <text class="lb" x="8" y="26">Dev 1 — téléphonie &amp; temps réel</text>
+    <text class="lb" x="8" y="358">Dev 1 — actions sur l'appel</text>
+    <text class="lb" x="8" y="210">Dev 2 — intelligence &amp; score</text>
+
+    <!-- ligne 1 : telephonie -->
+    <g class="hit" tabindex="0" data-tip="Le scammeur appelle le numéro Twilio. Twilio vient chercher du TwiML sur /twilio/voice/inbound.">
+      <rect x="14" y="52" width="150" height="54" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="89" y="74" text-anchor="middle">Appel entrant</text>
+      <text class="lb" x="89" y="92" text-anchor="middle">numéro Twilio</text>
+    </g>
+    <line x1="170" y1="79" x2="204" y2="79" stroke="var(--series-1)" stroke-width="2" marker-end="url(#ar1)"/>
+    <g class="hit" tabindex="0" data-tip="TwiML : <Start><Stream> branche l'écoute AVANT d'entrer en conférence, pour ne pas perdre les premières secondes — celles où l'appelant annonce son identité.">
+      <rect x="210" y="52" width="160" height="54" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="290" y="74" text-anchor="middle">Conférence</text>
+      <text class="lb" x="290" y="92" text-anchor="middle">+ écoute des 2 pistes</text>
+    </g>
+    <line x1="376" y1="79" x2="410" y2="79" stroke="var(--series-1)" stroke-width="2" marker-end="url(#ar1)"/>
+    <g class="hit" tabindex="0" data-tip="La victime est appelée en tâche de fond : un aller-retour réseau ici coûterait une seconde d'attente au scammeur, assez pour qu'il raccroche.">
+      <rect x="416" y="52" width="150" height="54" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="491" y="74" text-anchor="middle">Jambe victime</text>
+      <text class="lb" x="491" y="92" text-anchor="middle">appelée en fond</text>
+    </g>
+
+    <!-- audio -->
+    <path d="M290 112 L290 140" stroke="var(--series-1)" stroke-width="2" marker-end="url(#ar1)"/>
+    <g class="hit" tabindex="0" data-tip="~50 trames de 20 ms par seconde et par piste, en μ-law 8 kHz. Les pistes inbound/outbound séparées sont ce qui nous dit QUI parle.">
+      <rect x="150" y="146" width="280" height="46" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="290" y="166" text-anchor="middle">WebSocket audio · /ws/media</text>
+      <text class="lb" x="290" y="183" text-anchor="middle">μ-law 8 kHz, 50 trames/s, 2 pistes</text>
+    </g>
+    <line x1="436" y1="169" x2="470" y2="169" stroke="var(--series-1)" stroke-width="2" marker-end="url(#ar1)"/>
+    <g class="hit" tabindex="0" data-tip="Un flux Transcribe par locuteur. Autorisé et vérifié en fr-FR à 8 kHz. Si Transcribe tombe, TOUT ce qui suit s'arrête.">
+      <rect x="476" y="146" width="200" height="46" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="576" y="166" text-anchor="middle">AWS Transcribe</text>
+      <text class="lb" x="576" y="183" text-anchor="middle">1 flux par locuteur</text>
+    </g>
+    <line x1="682" y1="169" x2="716" y2="169" stroke="var(--series-1)" stroke-width="2" marker-end="url(#ar1)"/>
+    <g class="hit" tabindex="0" data-tip="L'événement `transcript` est le seul contrat entre les deux moitiés. Contrat figé : type, call_id, t, speaker, data.">
+      <rect x="722" y="140" width="164" height="58" rx="8" fill="var(--surface-1)" stroke="var(--axis)" stroke-width="1.5" stroke-dasharray="0"/>
+      <text class="lb-p" x="804" y="164" text-anchor="middle">événement</text>
+      <text class="lb-p" x="804" y="182" text-anchor="middle">transcript</text>
+    </g>
+
+    <!-- ligne 2 : intelligence -->
+    <path d="M804 204 L804 226 L690 226" stroke="var(--series-2)" stroke-width="2" fill="none" marker-end="url(#ar2)"/>
+    <g class="hit" tabindex="0" data-tip="Claude (Bedrock) sur une fenêtre glissante de 12 tours, en tâche de fond. 45 points — le signal le plus lourd. Renvoyer None veut dire « garde le signal précédent ».">
+      <rect x="530" y="240" width="152" height="46" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
+      <text class="lb-p" x="606" y="260" text-anchor="middle">Claude · contenu</text>
+      <text class="lb" x="606" y="277" text-anchor="middle">45 pts</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="Regex pondérées FR + EN, synchrones. C'est le filet anti-latence : si Claude est lent ou en panne, les mots-clés portent seuls la vigilance.">
+      <rect x="364" y="240" width="152" height="46" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
+      <text class="lb-p" x="440" y="260" text-anchor="middle">Mots-clés</text>
+      <text class="lb" x="440" y="277" text-anchor="middle">20 pts</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="wav2vec2 sur l'audio de l'appelant. Désactivé par défaut : torch n'est pas installé par `make install`, et le modèle généralise mal sur du 8 kHz téléphonique.">
+      <rect x="198" y="240" width="152" height="46" rx="8" fill="var(--surface-1)" stroke="var(--axis)" stroke-width="1.5"/>
+      <text class="lb-p" x="274" y="260" text-anchor="middle">Voix synthétique</text>
+      <text class="lb" x="274" y="277" text-anchor="middle">20 pts · inactif</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="Carnet d'adresses + Twilio Lookup. Porte le signal décisif identity_mismatch : l'appelant se dit Lucas, mais Lucas a un autre numéro.">
+      <rect x="32" y="240" width="152" height="46" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
+      <text class="lb-p" x="108" y="260" text-anchor="middle">Réputation</text>
+      <text class="lb" x="108" y="277" text-anchor="middle">15 pts</text>
+    </g>
+
+    <path d="M108 292 L108 306 L440 306" stroke="var(--series-2)" stroke-width="2" fill="none"/>
+    <path d="M274 292 L274 306" stroke="var(--axis)" stroke-width="2" fill="none"/>
+    <path d="M606 292 L606 306 L440 306" stroke="var(--series-2)" stroke-width="2" fill="none"/>
+    <path d="M440 292 L440 306" stroke="var(--series-2)" stroke-width="2" fill="none"/>
+    <path d="M440 306 L440 322" stroke="var(--series-2)" stroke-width="2" marker-end="url(#ar2)"/>
+
+    <g class="hit" tabindex="0" data-tip="Somme pondérée, puis coupe-circuits : planchers d'abord, plafonds ensuite. Émet un événement `score` avec le niveau et les coupe-circuits déclenchés.">
+      <rect x="330" y="328" width="220" height="48" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
+      <text class="lb-p" x="440" y="349" text-anchor="middle">Score + coupe-circuits</text>
+      <text class="lb" x="440" y="366" text-anchor="middle">événement score · 0 à 100</text>
+    </g>
+
+    <!-- ligne 3 : actions -->
+    <path d="M440 382 L440 398" stroke="var(--series-1)" stroke-width="2" marker-end="url(#ar1)"/>
+    <g class="hit" tabindex="0" data-tip="L'appelant entend une musique d'attente hébergée par Twilio — elle survit même si notre tunnel tombe. Il n'entend plus la victime.">
+      <rect x="92" y="404" width="156" height="42" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="170" y="430" text-anchor="middle">Mise en attente</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="announce_url joue le TwiML sur UN seul participant : la victime entend l'alerte, le scammeur n'entend rien. C'est la promesse centrale du pitch.">
+      <rect x="262" y="404" width="190" height="42" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="357" y="430" text-anchor="middle">Annonce à la victime</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="« Est-ce toi qui appelles en ce moment ? » au vrai proche. Sa réponse revient sur /twilio/sms/inbound et peut à elle seule forcer l'intervention.">
+      <rect x="466" y="404" width="170" height="42" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="551" y="430" text-anchor="middle">SMS au vrai proche</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="Deux boutons : « reprendre l'appel » et « mettre en attente ». Surcharges humaines — elles agissent sur l'appel sans altérer la machine à états du score.">
+      <rect x="650" y="404" width="180" height="42" rx="8" fill="var(--surface-1)" stroke="var(--series-1)" stroke-width="1.5"/>
+      <text class="lb-p" x="740" y="430" text-anchor="middle">Dashboard · opérateur</text>
+    </g>
+    <path d="M170 404 L170 392 L740 392 L740 404" stroke="var(--axis)" stroke-width="1" fill="none"/>
+  </svg>
+  <div class="legend">
+    <span><i style="background:var(--series-1)"></i>Dev 1 — téléphonie, audio temps réel, actions</span>
+    <span><i style="background:var(--series-2)"></i>Dev 2 — signaux, score, dashboard</span>
+    <span><i style="background:var(--axis)"></i>Inactif ou contrat partagé</span>
+  </div>
+  <p class="note" style="margin-top:14px;margin-bottom:0">Survolez un bloc pour le détail.</p>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="score">3 · Le moteur de score</h2>
+<p class="sub">
+  C'est ici que se joue la démo, et c'est la partie la plus contre-intuitive du projet.
+</p>
+
+<figure class="card">
+  <figcaption>Poids des quatre signaux</figcaption>
+  <p class="note">
+    Quatre signaux indépendants, chacun normalisé entre 0 et 1, puis pondéré. La somme
+    des poids fait exactement 100.
+  </p>
+  <svg viewBox="0 0 760 212" role="img" aria-label="Poids des quatre signaux : contenu 45, mots-clés 20, voix synthétique 20, réputation 15">
+    <!-- grille -->
+    <g>
+      <line x1="196" y1="18" x2="196" y2="176" stroke="var(--axis)" stroke-width="1"/>
+      <line x1="308" y1="18" x2="308" y2="176" stroke="var(--grid)" stroke-width="1"/>
+      <line x1="420" y1="18" x2="420" y2="176" stroke="var(--grid)" stroke-width="1"/>
+      <line x1="532" y1="18" x2="532" y2="176" stroke="var(--grid)" stroke-width="1"/>
+      <line x1="644" y1="18" x2="644" y2="176" stroke="var(--grid)" stroke-width="1"/>
+      <text class="ax" x="196" y="194" text-anchor="middle">0</text>
+      <text class="ax" x="308" y="194" text-anchor="middle">10</text>
+      <text class="ax" x="420" y="194" text-anchor="middle">20</text>
+      <text class="ax" x="532" y="194" text-anchor="middle">30</text>
+      <text class="ax" x="644" y="194" text-anchor="middle">40</text>
+      <text class="ax" x="700" y="194" text-anchor="middle">45</text>
+    </g>
+    <!-- barres : une seule serie -> une seule couleur, valeur a la pointe -->
+    <g class="hit" tabindex="0" data-tip="Claude sur Bedrock, fenêtre glissante de 12 tours. Le signal le plus lourd, et le plus lent : il tourne en tâche de fond pour ne pas bloquer l'arrivée des segments.">
+      <text class="lb" x="188" y="36" text-anchor="end">Contenu · Claude</text>
+      <path d="M196 22 H696 a4 4 0 0 1 4 4 v12 a4 4 0 0 1 -4 4 H196 Z" fill="var(--series-1)"/>
+      <text class="vl" x="710" y="37">45</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="Regex pondérées FR + EN, synchrones. Plafonnées à 20 points, donc elles n'atteindraient jamais un seuil seules — d'où le coupe-circuit keywords_alone_watch.">
+      <text class="lb" x="188" y="76" text-anchor="end">Mots-clés</text>
+      <path d="M196 62 H416 a4 4 0 0 1 4 4 v12 a4 4 0 0 1 -4 4 H196 Z" fill="var(--series-1)"/>
+      <text class="vl" x="430" y="77">20</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="wav2vec2. Vaut 0 aujourd'hui : désactivé par défaut et torch n'est pas installé par `make install`. C'est la cause directe du plafond à 80 ci-dessous.">
+      <text class="lb" x="188" y="116" text-anchor="end">Voix synthétique</text>
+      <path d="M196 102 H416 a4 4 0 0 1 4 4 v12 a4 4 0 0 1 -4 4 H196 Z" fill="var(--series-1)" opacity="0.28"/>
+      <text class="vl" x="430" y="117">20</text>
+      <text class="lb" x="462" y="117">inactif</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="Carnet d'adresses hors ligne + Twilio Lookup. Petit poids, mais il porte identity_mismatch, qui arme le coupe-circuit le plus fort.">
+      <text class="lb" x="188" y="156" text-anchor="end">Réputation</text>
+      <path d="M196 142 H360 a4 4 0 0 1 4 4 v12 a4 4 0 0 1 -4 4 H196 Z" fill="var(--series-1)"/>
+      <text class="vl" x="378" y="157">15</text>
+    </g>
+  </svg>
+  <details class="tbl">
+    <summary>Vue tableau</summary>
+    <table>
+      <thead><tr><th>Signal</th><th class="num">Poids</th><th>État</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Contenu</td><td class="num">45</td><td>actif</td><td>Claude Sonnet 4.5 sur Bedrock</td></tr>
+        <tr><td>Mots-clés</td><td class="num">20</td><td>actif</td><td>regex pondérées FR + EN</td></tr>
+        <tr><td>Voix synthétique</td><td class="num">20</td><td><strong>inactif</strong></td><td>wav2vec2 — torch non installé</td></tr>
+        <tr><td>Réputation</td><td class="num">15</td><td>actif</td><td>carnet d'adresses + Twilio Lookup</td></tr>
+      </tbody>
+    </table>
+  </details>
+</figure>
+
+<h3>Le point que personne n'avait vu : 85 était inatteignable</h3>
+<p>
+  Les seuils sont à <strong>40</strong> (vigilance), <strong>65</strong> (alerte) et
+  <strong>85</strong> (intervention). Or le signal voix vaut 0 en pratique. Le maximum
+  pondéré réellement atteignable est donc <strong>45 + 20 + 15 = 80</strong> : la mise en
+  attente du scammeur, qui est le point culminant de la démo, ne pouvait
+  <em>mathématiquement</em> pas se déclencher par la somme des signaux.
+</p>
+
+<figure class="card">
+  <figcaption>Score atteignable par la seule somme pondérée</figcaption>
+  <p class="note">
+    La jauge montre les 80 points atteignables sur un budget de 100. Les trois repères
+    sont les seuils de décision. Le seuil d'intervention est hors d'atteinte.
+  </p>
+  <svg viewBox="0 0 760 132" role="img" aria-label="Jauge : 80 points atteignables sur 100 ; seuils à 40, 65 et 85 ; le seuil d'intervention à 85 n'est pas atteint">
+    <!-- piste = pas plus clair que le step 250 sur fond clair -->
+    <rect x="20" y="40" width="700" height="26" rx="6" fill="var(--seq-150)"/>
+    <!-- remplissage -->
+    <g class="hit" tabindex="0" data-tip="45 (contenu) + 20 (mots-clés) + 15 (réputation) = 80. Le signal voix, 20 points, vaut 0 aujourd'hui.">
+      <path d="M20 40 H574 a6 6 0 0 1 6 6 v14 a6 6 0 0 1 -6 6 H20 Z" fill="var(--seq-450)"/>
+    </g>
+    <text class="vl-in" x="34" y="58">80 / 100 atteignables</text>
+
+    <!-- seuils : hairlines solides, etiquetes -->
+    <g>
+      <line x1="300" y1="30" x2="300" y2="76" stroke="var(--text-muted)" stroke-width="1"/>
+      <text class="ax" x="300" y="24" text-anchor="middle">40</text>
+      <text class="lb" x="300" y="92" text-anchor="middle">vigilance</text>
+
+      <line x1="475" y1="30" x2="475" y2="76" stroke="var(--text-muted)" stroke-width="1"/>
+      <text class="ax" x="475" y="24" text-anchor="middle">65</text>
+      <text class="lb" x="475" y="92" text-anchor="middle">alerte</text>
+
+      <line x1="615" y1="24" x2="615" y2="82" stroke="var(--critical)" stroke-width="2"/>
+      <text class="ax" x="615" y="18" text-anchor="middle" style="fill:var(--text-primary);font-weight:600">85</text>
+      <text class="lb" x="615" y="92" text-anchor="middle" style="fill:var(--text-primary);font-weight:600">intervention</text>
+      <text class="lb" x="615" y="110" text-anchor="middle" style="fill:var(--critical)">✕ hors d'atteinte</text>
+    </g>
+  </svg>
+  <details class="tbl">
+    <summary>Vue tableau</summary>
+    <table>
+      <thead><tr><th>Grandeur</th><th class="num">Valeur</th><th>Conséquence</th></tr></thead>
+      <tbody>
+        <tr><td>Budget de poids total</td><td class="num">100</td><td>—</td></tr>
+        <tr><td>Atteignable (voix à 0)</td><td class="num">80</td><td>plafonne au niveau « alerte »</td></tr>
+        <tr><td>Seuil vigilance</td><td class="num">40</td><td>atteignable</td></tr>
+        <tr><td>Seuil alerte</td><td class="num">65</td><td>atteignable</td></tr>
+        <tr><td>Seuil intervention</td><td class="num">85</td><td><strong>inatteignable sans coupe-circuit</strong></td></tr>
+      </tbody>
+    </table>
+  </details>
+</figure>
+
+<h3>Les coupe-circuits, et pourquoi ils sont la vraie démo</h3>
+<p>
+  Un coupe-circuit applique un <strong>plancher</strong> ou un <strong>plafond</strong> au
+  score pondéré. Ils existent pour qu'un signal très fort ne soit pas dilué par la
+  moyenne — et c'est par eux, et seulement par eux, que l'intervention se déclenche.
+</p>
+
+<table>
+  <thead><tr><th>Coupe-circuit</th><th class="num">Effet</th><th>Condition</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>payment_request_with_identity_mismatch</code></td>
+      <td class="num">plancher 85</td>
+      <td>demande de paiement <em>et</em> identité revendiquée qui ne colle pas au numéro</td>
+    </tr>
+    <tr>
+      <td><code>trusted_contact_denied</code></td>
+      <td class="num">plancher 85</td>
+      <td>le vrai proche répond « non, ce n'est pas moi » au SMS</td>
+    </tr>
+    <tr>
+      <td><code>llm_high_confidence</code></td>
+      <td class="num">plancher 65</td>
+      <td>Claude renvoie un risque ≥ 0,9</td>
+    </tr>
+    <tr>
+      <td><code>keywords_alone_watch</code></td>
+      <td class="num">plancher 40</td>
+      <td>Claude n'a pas encore répondu, mais les mots-clés sont déjà à ≥ 0,6</td>
+    </tr>
+    <tr>
+      <td><code>voice_alone_capped</code></td>
+      <td class="num">plafond 64</td>
+      <td>la voix synthétique ne déclenche jamais une intervention à elle seule</td>
+    </tr>
+  </tbody>
+</table>
+
+<figure class="card">
+  <figcaption>Un seul chemin vers l'intervention, puis deux</figcaption>
+  <p class="note">
+    Avant aujourd'hui, toute la mise en attente reposait sur un unique rapprochement
+    d'identité — fragile dès que la reconnaissance vocale entend « Luca » au lieu de
+    « Lucas ». Il existe maintenant deux chemins indépendants.
+  </p>
+  <svg viewBox="0 0 760 232" role="img" aria-label="Avant : un seul chemin vers le seuil 85. Après : deux chemins indépendants.">
+    <!-- AVANT -->
+    <text class="lb-p" x="16" y="22">Avant</text>
+    <g class="hit" tabindex="0" data-tip="Il fallait la conjonction de deux faits : Claude détecte une demande de paiement, ET le carnet d'adresses contredit l'identité revendiquée.">
+      <rect x="16" y="34" width="250" height="46" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
+      <text class="lb" x="141" y="54" text-anchor="middle">paiement + identité qui ne colle pas</text>
+      <text class="lb" x="141" y="71" text-anchor="middle">(conjonction de deux faits)</text>
+    </g>
+    <line x1="272" y1="57" x2="396" y2="57" stroke="var(--axis)" stroke-width="2" marker-end="url(#ar)"/>
+    <rect x="402" y="34" width="150" height="46" rx="8" fill="var(--critical)" opacity="0.1"/>
+    <rect x="402" y="34" width="150" height="46" rx="8" fill="none" stroke="var(--critical)" stroke-width="1.5"/>
+    <text class="lb-p" x="477" y="54" text-anchor="middle">score 85</text>
+    <text class="lb" x="477" y="71" text-anchor="middle">intervention</text>
+    <text class="lb" x="568" y="61" style="fill:var(--critical)">✕ un seul point de rupture</text>
+
+    <line x1="16" y1="104" x2="744" y2="104" stroke="var(--grid)" stroke-width="1"/>
+
+    <!-- APRES -->
+    <text class="lb-p" x="16" y="128">Aujourd'hui</text>
+    <g class="hit" tabindex="0" data-tip="Chemin 1, inchangé : la conjonction paiement + identité contredite. Robustifié par des alias tolérants à la reconnaissance vocale (Luca, Loukas, Lukas, Louka).">
+      <rect x="16" y="140" width="250" height="40" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
+      <text class="lb" x="141" y="164" text-anchor="middle">paiement + identité qui ne colle pas</text>
+    </g>
+    <g class="hit" tabindex="0" data-tip="Chemin 2, nouveau : le vrai proche répond « non » au SMS de vérification. C'est aussi la chose la plus convaincante à montrer à un jury — une preuve humaine, pas une heuristique.">
+      <rect x="16" y="188" width="250" height="40" rx="8" fill="var(--surface-1)" stroke="var(--series-2)" stroke-width="1.5"/>
+      <text class="lb" x="141" y="212" text-anchor="middle">le vrai proche répond « non »</text>
+    </g>
+    <path d="M272 160 L336 160 L336 184 L396 184" stroke="var(--axis)" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+    <path d="M272 208 L336 208 L336 184" stroke="var(--axis)" stroke-width="2" fill="none"/>
+    <rect x="402" y="161" width="150" height="46" rx="8" fill="var(--good)" opacity="0.1"/>
+    <rect x="402" y="161" width="150" height="46" rx="8" fill="none" stroke="var(--good)" stroke-width="1.5"/>
+    <text class="lb-p" x="477" y="181" text-anchor="middle">score 85</text>
+    <text class="lb" x="477" y="198" text-anchor="middle">intervention</text>
+    <text class="lb" x="568" y="188" style="fill:var(--success-text)">✓ deux chemins indépendants</text>
+  </svg>
+</figure>
+
+<div class="box ok">
+  <span class="hd">✓ Vérifié de bout en bout sur l'application réelle</span>
+  <pre><code>appel anodin                              -> score 16 / none
+le proche répond « non ce n'est pas moi »  -> score 85 / intervene
+                     coupe-circuit : trusted_contact_denied
+                     actions : hold_caller=True, announce_victim=True, sms_contact=True</code></pre>
+  <p>
+    Le SMS venait de <code>+33 (0)6 12 34 56 78</code> — le format qui était cassé jusqu'à
+    aujourd'hui. Ce seul test exerce donc la correction de la normalisation des numéros,
+    la route SMS, le coupe-circuit et l'exécution des actions.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="fait">4 · Ce qui est fait</h2>
+<p class="sub">
+  Les deux moitiés sont intégrées sur <code>main</code>. Huit défauts réels ont été
+  corrigés, chacun verrouillé par un test qui échoue si on annule la correction.
+</p>
+
+<table>
+  <thead><tr><th>Défaut</th><th>Ce qui se serait passé en démo</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>L'état par appel n'était jamais libéré</strong><br><span style="font-size:13px">
+        <code>forget()</code> n'était appelé nulle part dans l'application</span></td>
+      <td>Au deuxième appel, la vérification de réputation ne se refaisait pas — donc pas d'<code>identity_mismatch</code>, donc pas d'intervention.</td>
+    </tr>
+    <tr>
+      <td><strong>Un message rassurant lu comme un démenti</strong><br><span style="font-size:13px">
+        « Oui c'est moi, je n'ai jamais eu de souci » → <code>denied=True</code></span></td>
+      <td>Mise en attente d'un vrai petit-fils. Le faux positif exact que le projet existe pour éviter.</td>
+    </tr>
+    <tr>
+      <td><strong>Une action ratée n'était jamais retentée</strong></td>
+      <td>Si le score atteint 85 avant que la victime décroche, l'annonce échoue et ne repart plus jamais : appelant en attente, victime muette pour tout le reste de l'appel.</td>
+    </tr>
+    <tr>
+      <td><strong>Le numéro appelant n'atteignait jamais <code>/ws/media</code></strong></td>
+      <td>Sur ce chemin, le coupe-circuit qui force 85 ne pouvait structurellement pas s'armer.</td>
+    </tr>
+    <tr>
+      <td><strong><code>normalize_number</code> cassait sur <code>+33 (0)6 …</code></strong></td>
+      <td>Un contact saisi sous cette forme très courante faisait prendre le vrai proche pour un inconnu.</td>
+    </tr>
+    <tr>
+      <td><strong>Latence du TwiML entrant : 3,0 s</strong><br><span style="font-size:13px">
+        deux ouvertures Transcribe en série</span></td>
+      <td>Au-delà de 15 s, Twilio coupe le webhook et l'appelant entend « an application error has occurred ». Ramené à 1,5 s.</td>
+    </tr>
+    <tr>
+      <td><strong>Le SMS de vérification partait deux fois</strong></td>
+      <td>Le proche reçoit deux messages identiques sur le trajet 65 → 85 de la démo.</td>
+    </tr>
+    <tr>
+      <td><strong>L'annulation d'une annonce ratée emportait la précédente</strong></td>
+      <td>La victime pouvait entendre « nous avons mis l'appel en pause » pour une alerte où rien n'était en pause.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Ce qui a été ajouté</h3>
+<ul>
+  <li><strong>La frise du dashboard ne mente plus en rejeu.</strong> Seuls les <code>transcript</code> étaient datés ; tous les événements dérivés s'empilaient à <code>t≈0</code>. <code>make replay</code> ne répétait donc pas la démo.</li>
+  <li><strong>Les deux boutons de l'opérateur</strong> — <code>POST /control/calls/{id}/resume</code> et <code>/hold</code>. Sans le second, un opérateur qui reprenait l'appel par erreur n'avait plus aucun moyen de protéger la victime, <code>INTERVENE</code> étant le niveau maximum.</li>
+  <li><strong>La réponse du proche est enfin lue</strong> — <code>POST /twilio/sms/inbound</code>, avec vérification de l'expéditeur : notre numéro Twilio est public, donc n'importe qui pourrait sinon injecter « le proche a dit non ».</li>
+  <li><strong>Deux tests de contrat entre les deux moitiés</strong> : les signatures des ports, et leur sémantique (qu'un <code>None</code> veut dire « garde le signal précédent » et non « risque zéro »).</li>
+  <li><strong>Validation de la signature Twilio</strong>, livrée <em>éteinte</em> — voir les dettes.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="reste">5 · Ce qu'il reste à faire</h2>
+<p class="sub">
+  Une seule chose compte avant toutes les autres, et ce n'est pas du code.
+</p>
+
+<div class="box risk">
+  <span class="hd">✕ Priorité absolue : passer un appel réel</span>
+  <p>
+    Tout le reste est secondaire. Un système qui marche sur des doublures et n'a jamais vu
+    un téléphone n'est pas un système qui marche — c'est une hypothèse. Les quatre
+    prérequis ci-dessous sont des achats et des installations, pas du développement.
+  </p>
+</div>
+
+<h3>Les quatre prérequis</h3>
+<ol class="steps">
+  <li>
+    <b>Réserver un domaine ngrok statique</b>
+    <span class="crit">Gratuit, un par compte. Supprime la panne n°1 au lieu de la gérer : sinon <code>PUBLIC_HOSTNAME</code> périme à chaque redémarrage de ngrok, et le symptôme est que la victime décroche et entend « an application error has occurred ».</span>
+  </li>
+  <li>
+    <b>Compte Twilio crédité, numéros vérifiés, URLs collées dans la console</b>
+    <span class="crit">Dont <code>/twilio/sms/inbound</code> dans le champ « A MESSAGE COMES IN » du numéro — sans quoi la réponse du proche n'arrive jamais.</span>
+  </li>
+  <li>
+    <b>Identifiants AWS dans le shell, pas dans <code>.env</code></b>
+    <span class="crit">C'est le piège le plus coûteux : le <code>.env</code> est bien lu pour tout le reste, et les clés AWS y sont <em>ignorées en silence</em>. Contrôle depuis le shell qui lancera <code>make run</code> :<br><code>uv run python -c "import boto3;print(boto3.Session().get_credentials().method)"</code></span>
+  </li>
+  <li>
+    <b>Cohérence des numéros</b>
+    <span class="crit"><code>TRUSTED_CONTACT_PHONE_NUMBER</code> doit être le numéro de Lucas Martin dans <code>data/contacts.json</code>, en E.164. Et <strong>aucun</strong> des téléphones de la démo ne doit figurer au carnet côté scammeur, sinon le score plafonne.</span>
+  </li>
+</ol>
+
+<h3>Puis la vérification, dans cet ordre</h3>
+<p>Chaque étape a un critère observable. Ne pas passer à la suivante sans lui.</p>
+<ol class="steps">
+  <li>
+    <b><code>curl localhost:8000/healthz</code></b>
+    <span class="crit"><code>twilio_configured: true</code>, <code>public_hostname</code> identique à l'URL ngrok affichée, <code>active_calls: []</code>. Si <code>twilio_configured</code> est faux, <em>toutes</em> les actions renverront « vert » sans qu'aucun téléphone ne bouge.</span>
+  </li>
+  <li>
+    <b>Appel entrant seul</b>
+    <span class="crit">L'appelant n'entend pas d'erreur. Dans les logs : Transcribe ouvert pour <code>caller</code> puis <code>victim</code>, en moins de 2 s.</span>
+  </li>
+  <li>
+    <b>La victime décroche</b>
+    <span class="crit">Elle entend la conférence, pas un message d'erreur. C'est <em>le</em> test de <code>PUBLIC_HOSTNAME</code> — le plus discriminant de toute la séquence.</span>
+  </li>
+  <li>
+    <b>Parler des deux côtés, 10 s chacun</b>
+    <span class="crit">Un <code>transcript</code> apparaît pour <code>caller</code> <strong>et</strong> pour <code>victim</code>. La piste victime est la fragile : si elle manque alors que l'autre fonctionne, c'est le délai d'inactivité de Transcribe, pas un problème de volume.</span>
+  </li>
+  <li>
+    <b>Dire « c'est Lucas, <em>ton petit-fils</em> »</b>
+    <span class="crit"><code>identity_mismatch: true</code> dans l'événement <code>reputation</code>. Le mot « petit-fils » est à la fois nom de relation et alias : il sauve le rapprochement même si le prénom est mal entendu.</span>
+  </li>
+  <li>
+    <b>Attendre que les deux jambes soient en conférence avant de faire monter à 85</b>
+    <span class="crit"><code>hold_caller ok:true</code> <em>puis</em> <code>announce_victim ok:true</code>. L'annonce est maintenant retentée si elle échoue, mais autant ne pas en avoir besoin.</span>
+  </li>
+  <li>
+    <b>L'oreille de la victime</b>
+    <span class="crit">Elle entend l'annonce et <strong>le scammeur n'entend rien</strong>. C'est la promesse centrale du pitch, et la seule case que seul un appel réel peut cocher.</span>
+  </li>
+  <li>
+    <b>Le téléphone du proche</b>
+    <span class="crit">Un seul SMS (le doublon est corrigé). Répondre « non » doit faire monter le score à 85 et déclencher l'intervention.</span>
+  </li>
+</ol>
+
+<div class="box warn">
+  <span class="hd">▲ Redémarrer <code>make run</code> entre chaque répétition</span>
+  <p>
+    L'état est en mémoire seulement. Un appel fantôme laissé par un essai raté suffit à
+    rendre la branche SMS inutilisable : la route refuse d'agir dès qu'il y a plus d'un
+    appel actif, parce qu'accuser le mauvais appel est pire que de rater le signal.
+  </p>
+</div>
+
+<h3>À réclamer hors développement</h3>
+<ul>
+  <li>
+    <strong>Biz 1 — il manque 2 scénarios légitimes sur 5.</strong> Il n'y en a qu'un.
+    Ce sont précisément les tests de faux positifs : sans eux le calibrage ne veut rien
+    dire, et c'est la première question d'un jury sérieux. Du texte brut suffit.
+  </li>
+  <li>
+    <strong>Biz 2 — vérifier la promesse du pitch.</strong> Le README ne mentionne plus
+    « la victime décide » ni le DTMF. À confirmer explicitement : aujourd'hui, la décision
+    revient au proche de confiance (par SMS) et à l'opérateur (par le dashboard), pas à la
+    victime. À ne pas découvrir devant le jury.
+  </li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="dettes">6 · Dettes connues, assumées</h2>
+<p class="sub">Aucune n'est un oubli. Chacune est un arbitrage, et il faut le connaître.</p>
+
+<table>
+  <thead><tr><th>Dette</th><th>Pourquoi on la garde</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Transcribe est le point de défaillance unique de toute l'intelligence</strong></td>
+      <td>Tout est en aval de l'événement <code>transcript</code>. Le repli <code>whisper_local</code> n'est pas implémenté : il loggue un avertissement et retombe sur un transcripteur factice. S'il tombe, le dashboard est plat et le seul repli est <code>make replay</code> ou une vidéo.</td>
+    </tr>
+    <tr>
+      <td><strong><code>/ws/media</code> n'est pas authentifié</strong></td>
+      <td>Twilio ne signe pas les WebSocket. Quiconque connaît l'URL ngrok peut ouvrir un faux flux et injecter du transcript. Il faudrait un secret dans l'URL du <code>&lt;Stream&gt;</code>. Risque réel sur une démo de 20 minutes : faible.</td>
+    </tr>
+    <tr>
+      <td><strong><code>TWILIO_VALIDATE_SIGNATURE=false</code></strong></td>
+      <td>Livré éteint volontairement. Derrière ngrok, l'URL signée diffère de l'URL reçue : l'activer sans l'avoir éprouvée transforme chaque webhook en 403. Le remède serait plus dangereux que le mal une heure avant un jury. À activer après un appel réel réussi.</td>
+    </tr>
+    <tr>
+      <td><strong>Le gel de l'analyse pendant la mise en attente</strong></td>
+      <td>Non codé, et c'est la bonne décision : geler à l'aveugle étoufferait la vraie victime qui parle. À trancher sur preuve, pendant l'appel réel.</td>
+    </tr>
+    <tr>
+      <td><strong>La victime n'a aucune interface</strong></td>
+      <td>Le dashboard est celui de l'opérateur. Du DTMF serait la vraie réponse, en bonus si le temps le permet.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="reperes">7 · Repères</h2>
+
+<h3>Routes exposées</h3>
+<table>
+  <thead><tr><th>Méthode</th><th>Route</th><th>Rôle</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST</code></td><td><code>/twilio/voice/inbound</code></td><td>entrée de l'appel : branche l'écoute, puis la conférence</td></tr>
+    <tr><td><code>GET POST</code></td><td><code>/twilio/voice/join/{id}</code></td><td>la victime rejoint la conférence</td></tr>
+    <tr><td><code>GET POST</code></td><td><code>/twilio/voice/announce/{id}</code></td><td>le texte dit à la victime seule</td></tr>
+    <tr><td><code>GET POST</code></td><td><code>/twilio/voice/hold-music</code></td><td>ce qu'entend l'appelant en attente</td></tr>
+    <tr><td><code>POST</code></td><td><code>/twilio/voice/status</code></td><td>fin d'appel : libère la session</td></tr>
+    <tr><td><code>POST</code></td><td><code>/twilio/conference/status</code></td><td>qui a rejoint quand</td></tr>
+    <tr><td><code>POST</code></td><td><code>/twilio/sms/inbound</code></td><td>la réponse du vrai proche</td></tr>
+    <tr><td><code>POST</code></td><td><code>/control/calls/{id}/hold</code></td><td>bouton opérateur — mettre en attente</td></tr>
+    <tr><td><code>POST</code></td><td><code>/control/calls/{id}/resume</code></td><td>bouton opérateur — reprendre l'appel</td></tr>
+    <tr><td><code>GET</code></td><td><code>/healthz</code></td><td>diagnostic — à regarder avant chaque démo</td></tr>
+    <tr><td><code>WS</code></td><td><code>/ws/media</code></td><td>audio Twilio entrant</td></tr>
+    <tr><td><code>WS</code></td><td><code>/ws/dashboard</code></td><td>flux d'événements vers le dashboard</td></tr>
+  </tbody>
+</table>
+
+<h3>Commandes</h3>
+<pre><code>make install        # venv + dépendances (sans torch)
+make run            # lance l'API sur :8000
+make tunnel         # expose le port via ngrok (autre terminal)
+make check-aws      # vérifie Bedrock et Transcribe avec les creds courants
+make replay SCENARIO=scenarios/scam_01_petit_fils.json
+make test           # 493 tests
+make lint           # ruff check + format</code></pre>
+
+<h3>Chiffres</h3>
+<table>
+  <thead><tr><th>Mesure</th><th class="num">Valeur</th></tr></thead>
+  <tbody>
+    <tr><td>Tests passés</td><td class="num">493</td></tr>
+    <tr><td>Tests ignorés</td><td class="num">1</td></tr>
+    <tr><td>Fichiers Python</td><td class="num">74</td></tr>
+    <tr><td>Lignes de Python</td><td class="num">12 437</td></tr>
+    <tr><td>Scénarios de rejeu</td><td class="num">3</td></tr>
+    <tr><td>Appels réels passés</td><td class="num">0</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  VocalGuard · <code>main</code> à <code>875d028</code> · page générée à la main, sans
+  dépendance réseau. Palette validée par <code>validate_palette.js</code> en mode clair
+  et sombre.
+</footer>
+
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* --- thème : le choix du lecteur gagne sur l'OS, dans les deux sens --- */
+  var root = document.documentElement;
+  var btn = document.getElementById("theme");
+  var stored = null;
+  try { stored = localStorage.getItem("vg-theme"); } catch (e) {}
+  var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  setTheme(stored || (prefersDark ? "dark" : "light"));
+
+  function setTheme(t) {
+    root.setAttribute("data-theme", t);
+    btn.textContent = t === "dark" ? "Thème clair" : "Thème sombre";
+    btn.setAttribute("aria-pressed", String(t === "dark"));
+    try { localStorage.setItem("vg-theme", t); } catch (e) {}
+  }
+  btn.addEventListener("click", function () {
+    setTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+
+  /* --- infobulle : le survol enrichit, il ne conditionne jamais une valeur.
+         Toute valeur chiffrée est aussi dans une vue tableau.             --- */
+  var tip = document.getElementById("tip");
+  var current = null;
+
+  function show(el, x, y) {
+    var txt = el.getAttribute("data-tip");
+    if (!txt) return;
+    tip.textContent = txt;
+    tip.style.opacity = "1";
+    place(x, y);
+    current = el;
+  }
+  function place(x, y) {
+    var r = tip.getBoundingClientRect();
+    var left = Math.min(Math.max(10, x + 14), window.innerWidth - r.width - 10);
+    var top = y - r.height - 14;
+    if (top < 10) top = y + 18;
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  }
+  function hide() { tip.style.opacity = "0"; current = null; }
+
+  document.querySelectorAll(".hit").forEach(function (el) {
+    el.addEventListener("pointerenter", function (ev) { show(el, ev.clientX, ev.clientY); });
+    el.addEventListener("pointermove", function (ev) { if (current === el) place(ev.clientX, ev.clientY); });
+    el.addEventListener("pointerleave", hide);
+    /* le clavier montre la même chose que le survol */
+    el.addEventListener("focus", function () {
+      var r = el.getBoundingClientRect();
+      show(el, r.left + r.width / 2, r.top + r.height);
+    });
+    el.addEventListener("blur", hide);
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hide(); });
+})();
+</script>
+</body>
+</html>
