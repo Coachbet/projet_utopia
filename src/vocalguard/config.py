@@ -45,6 +45,21 @@ class Settings(BaseSettings):
     twilio_conference_name: str = "utopia-guard"
     twilio_agent_conference_enabled: bool = False
 
+    twilio_validate_signature: bool = False
+    """Vérifie `X-Twilio-Signature` sur les routes `/twilio/**`. FAUX par défaut,
+    et c'est une décision, pas un oubli.
+
+    Allumée, elle fait répondre 403 à TOUS les webhooks dès que l'URL signée par
+    Twilio ne correspond pas exactement à celle qu'on reconstruit. C'est le cas
+    normal derrière un tunnel ngrok : l'hôte est réécrit, le schéma n'arrive que
+    dans `X-Forwarded-Proto`, et le serveur ne voit plus qu'un
+    `http://localhost:8000/...`. À une heure du jury, le remède serait plus
+    dangereux que le mal — on livre le code prêt, éteint.
+
+    À allumer quand `PUBLIC_HOSTNAME` et l'URL collée dans la console Twilio sont
+    identiques au caractère près, et que `TWILIO_AUTH_TOKEN` est renseigné (sans
+    lui, la garde refuse tout plutôt que de laisser passer en silence)."""
+
     twilio_lookup_enabled: bool = False
     """Faux par défaut : Lookup v2 est facturé à la requête. C'est `.env` qui
     l'active pour la démo, pour qu'un test ou un rejeu ne puisse pas facturer."""

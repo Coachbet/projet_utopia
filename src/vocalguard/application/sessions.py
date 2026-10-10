@@ -13,13 +13,14 @@ loguées et avalées, jamais remontées dans la boucle média.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from vocalguard.config import Settings
-from vocalguard.domain.alerts import AlertLevel
+from vocalguard.domain.alerts import ActionKind, AlertLevel
 from vocalguard.domain.events import Event, EventType, Speaker
 from vocalguard.domain.models import SignalSet, TranscriptSegment
 from vocalguard.infrastructure.telephony.media_stream import (
@@ -68,8 +69,32 @@ class CallSession:
         self.history: list[TranscriptSegment] = []
         self.signals = SignalSet()
         self.acted_level = AlertLevel.NONE
-        """Niveau d'alerte déjà traité : porte l'idempotence des actions."""
+        """Niveau d'alerte **entièrement** abouti : toutes ses actions ont réussi.
+
+        Un palier dont une action a échoué laisse `acted_level` en arrière,
+        exprès : c'est ce qui autorise un score suivant à repasser pour rejouer
+        ce qui manque. Le détail de « ce qui manque » vit dans `actions_done`."""
+        self.actions_done: dict[AlertLevel, set[ActionKind]] = {}
+        """Actions déjà abouties, par palier : la mémoire fine de l'idempotence.
+
+        Un booléen par palier ne suffirait pas. Il faut à la fois ne jamais
+        rejouer une action réussie (sinon un score oscillant 66 → 70 → 67
+        répéterait l'annonce dans l'oreille de la victime) et pouvoir rejouer
+        celle qui a échoué (la victime décroche après l'appelant : la première
+        annonce échoue parce qu'elle n'est pas encore dans la conférence).
+
+        `InterventionRunner` y inscrit l'action **avant** de l'exécuter, et la
+        retire si elle échoue : la réservation rend l'exécution unique même si
+        deux événements `score` sont traités en parallèle, sans pour autant
+        graver un échec dans le marbre."""
         self.caller_held = False
+        self.contact_texted = False
+        """Le SMS de vérification au vrai proche a abouti.
+
+        Porté par l'appel et pas par le palier : `SMS_CONTACT` figure dans le
+        plan d'`alert` **et** dans celui d'`intervene`, et le proche ne doit
+        recevoir « Est-ce toi qui appelles ? » qu'une seule fois (cf.
+        `plan_actions(contact_already_texted=...)`)."""
         self.audio_tap = audio_tap
         """Point de branchement de la détection de voix synthétique (Dev 2).
         Publique et modifiable après coup : le détecteur a parfois besoin de la
@@ -89,16 +114,47 @@ class CallSession:
 
     async def start(self) -> None:
         """Ouvre une transcription par locuteur — les deux pistes Twilio sont
-        séparées, c'est ce qui nous dit qui parle."""
-        for speaker in _SPEAKERS:
+        séparées, c'est ce qui nous dit qui parle.
+
+        **En parallèle**, et c'est un point de latence et pas une élégance :
+        `start()` est appelé depuis `SessionRegistry.open()`, dans le chemin de
+        réponse du webhook `/twilio/voice/inbound`. En série, le TwiML attendait
+        la somme des deux ouvertures (mesuré : 3,01 s à 1,5 s l'ouverture) ; avec
+        des identifiants expirés ou un réseau qui filtre AWS, les retries de
+        Transcribe approchent le timeout webhook de Twilio (15 s) et l'appelant
+        entend « an application error has occurred » avant que la conférence
+        existe. En parallèle on attend la plus lente, pas les deux.
+
+        Le `try/except` reste **dans** la coroutine par locuteur plutôt que de
+        passer par `return_exceptions=True` : la panne se traite là où on sait
+        de quel locuteur il s'agit, et `self._streams` ne reçoit que les pistes
+        réellement ouvertes — un `gather` qui renverrait des exceptions mêlées à
+        des streams obligerait à re-corréler les positions avec `_SPEAKERS`."""
+        await asyncio.gather(*(self._open_stream(speaker) for speaker in _SPEAKERS))
+
+    async def _open_stream(self, speaker: Speaker) -> None:
+        """Une piste, une panne isolée : une transcription refusée ne doit jamais
+        tuer l'appel ni empêcher l'autre piste de s'ouvrir."""
+        try:
+            stream = await self._transcriber.open(speaker=speaker, on_segment=self.on_segment)
+        except Exception:
+            # Transcribe peut être refusé par le rôle workshop : l'appel doit
+            # quand même aboutir, les mots-clés et le reste prendront le relais.
+            logger.exception("transcription indisponible pour %s", speaker)
+            return
+        if self._closed:
+            # L'appel s'est terminé pendant l'ouverture (`StreamStop` très tôt,
+            # ou un `open` lent) : `aclose()` a déjà vidé `_streams`, y déposer
+            # ce stream laisserait une connexion Transcribe ouverte à vie et un
+            # dictionnaire incohérent avec `_closed`.
             try:
-                self._streams[speaker] = await self._transcriber.open(
-                    speaker=speaker, on_segment=self.on_segment
-                )
+                await stream.close()
             except Exception:
-                # Transcribe peut être refusé par le rôle workshop : l'appel doit
-                # quand même aboutir, les mots-clés et le reste prendront le relais.
-                logger.exception("transcription indisponible pour %s", speaker)
+                logger.warning("fermeture de la transcription %s en échec", speaker, exc_info=True)
+            return
+        # Écriture après l'`await` et depuis une seule coroutine par clé : le
+        # dictionnaire reste cohérent sans verrou.
+        self._streams[speaker] = stream
 
     async def on_frame(self, frame: Frame) -> None:
         match frame:
@@ -206,6 +262,15 @@ class SessionRegistry:
 
     Mémoire seulement : une démo de hackathon n'a pas besoin de survivre à un
     redémarrage, et ça évite une dépendance de plus à la base.
+
+    `clock` est un point d'extension et pas un détail de test : le rejeu de
+    scénario (`make replay`) doit pouvoir imposer le temps du scénario, parce que
+    seul l'événement `transcript` porte un `t` explicite — tous les événements
+    dérivés (`keyword`, `llm`, `reputation`, `score`, `action`) prennent celui de
+    `CallSession.t()`. Avec l'horloge murale et `--no-wait`, ils s'empilent donc
+    tous à ~0 s alors que les transcripts s'étalent sur la durée de l'appel : la
+    frise du dashboard devient illisible et `make replay` ne répète plus la démo,
+    il la ment.
     """
 
     def __init__(
@@ -215,16 +280,29 @@ class SessionRegistry:
         sink: EventSink,
         settings: Settings,
         audio_tap_factory: Callable[[CallSession], AudioConsumer | None] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._transcriber_factory = transcriber_factory
         self._sink = sink
         self._settings = settings
         self._audio_tap_factory = audio_tap_factory
+        self._clock = clock
         self._sessions: dict[str, CallSession] = {}
 
     async def open(
-        self, call_id: str, *, caller_number: str = "", victim_number: str = ""
+        self,
+        call_id: str,
+        *,
+        caller_number: str = "",
+        victim_number: str = "",
+        clock: Callable[[], float] | None = None,
     ) -> CallSession:
+        """Ouvre (ou retrouve) la session de `call_id`.
+
+        `clock=None` signifie « celle du registre » : un appelant qui n'a rien à
+        dire sur le temps n'a rien à passer, et le rejeu peut quand même imposer
+        son horloge appel par appel.
+        """
         existing = self._sessions.get(call_id)
         if existing is not None:
             # Twilio rejoue un webhook en cas de timeout : ouvrir deux fois la
@@ -239,11 +317,19 @@ class SessionRegistry:
             settings=self._settings,
             caller_number=caller_number,
             victim_number=victim_number,
+            clock=self._clock if clock is None else clock,
         )
         if self._audio_tap_factory is not None:
             session.audio_tap = self._audio_tap_factory(session)
-        await session.start()
+        # Enregistrée AVANT `start()`, qui suspend désormais (les deux
+        # transcriptions s'ouvrent en parallèle) : sans ça, deux webhooks Twilio
+        # rejoués en concurrence passeraient tous les deux le test d'existence
+        # ci-dessus et ouvriraient deux sessions pour le même appel. Le prix est
+        # qu'une session peut être visible avant que ses pistes soient ouvertes —
+        # l'audio reçu dans cette fenêtre de quelques millisecondes est ignoré,
+        # ce qui vaut mieux que de perdre l'appel (ou de le dédoubler).
         self._sessions[call_id] = session
+        await session.start()
         return session
 
     def get(self, call_id: str) -> CallSession | None:

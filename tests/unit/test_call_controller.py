@@ -166,6 +166,28 @@ class TestAnnounce:
         assert controller.announcements.pop(CALLER_SID) == "intervention"
         assert controller.announcements.pop(CALLER_SID) is None
 
+    async def test_une_annonce_ratee_n_emporte_pas_la_precedente(
+        self, controller: TwilioCallController, client: MagicMock
+    ) -> None:
+        """L'annulation doit viser SA phrase, pas la plus ancienne.
+
+        Scénario réel : l'alerte est en file, pas encore réclamée par Twilio ; le
+        score passe à 85 ; l'annonce d'intervention échoue parce que la victime
+        n'a pas encore rejoint la conférence. Avec un `pop()` (FIFO), c'est
+        l'alerte qui disparaissait et le texte d'intervention qui restait — la
+        victime s'entendait dire « nous avons mis l'appel en pause » pour une
+        alerte où rien n'avait été mis en pause.
+        """
+        await controller.announce_to_victim(CALLER_SID, "alerte")
+        assert controller.announcements.pending(CALLER_SID) == ("alerte",)
+
+        client.conferences.return_value.participants.return_value.update.side_effect = (
+            TwilioRestException(400, "uri", "boom", code=20001)
+        )
+        assert await controller.announce_to_victim(CALLER_SID, "intervention") is False
+
+        assert controller.announcements.pending(CALLER_SID) == ("alerte",)
+
 
 class TestDialVictim:
     async def test_creates_leg_towards_join_webhook(

@@ -37,6 +37,7 @@ def inbound_call_twiml(
     stream_url: str,
     conference_name: str,
     conference_status_callback: str | None = None,
+    caller_number: str = "",
 ) -> str:
     """Réponse au webhook de l'appel entrant (la jambe du scammeur).
 
@@ -47,7 +48,16 @@ def inbound_call_twiml(
 
     # Pas de `<Parameter name="call_id">` : le message `start` du WebSocket porte
     # déjà le `callSid`, un paramètre de plus serait une seconde source de vérité.
-    response.start().stream(url=stream_url, track="both_tracks")
+    stream = response.start().stream(url=stream_url, track="both_tracks")
+
+    # `caller_number`, en revanche, n'a pas d'autre source : Twilio ne met pas le
+    # `From` dans la trame `start`. Sans ce paramètre, une session ouverte depuis
+    # `/ws/media` (webhook entrant pas encore passé) n'a aucun numéro appelant,
+    # donc le signal de réputation reste inerte et le coupe-circuit
+    # « paiement + identité revendiquée » ne peut jamais s'armer — le score
+    # plafonnerait à l'alerte sans que rien ne le dise.
+    if caller_number:
+        stream.parameter(name="caller_number", value=caller_number)
 
     conference_kwargs = dict(_CONFERENCE_COMMON)
     # Chaîne vide et non `None` : `waitUrl=""` coupe la musique d'attente Twilio.

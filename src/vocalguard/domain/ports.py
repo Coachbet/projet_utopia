@@ -41,11 +41,19 @@ class EventSink(Protocol):
 
 
 class SegmentCallback(Protocol):
-    """Appelée par un `TranscriptionStream` dès qu'un segment sort."""
+    """Appelée par un `TranscriptionStream` dès qu'un segment sort.
+
+    Seul port volontairement non `runtime_checkable` : c'est un protocole
+    d'appelable, et `isinstance` contre `__call__` est trompeur — toute fonction,
+    toute méthode liée, tout objet appelable le satisfait, y compris une fonction
+    synchrone qui bloquerait la boucle média. Le contrôle utile est celui de
+    `test_port_conformance.py`, qui compare les signatures.
+    """
 
     async def __call__(self, segment: TranscriptSegment) -> None: ...
 
 
+@runtime_checkable
 class TranscriptionStream(Protocol):
     """Une session de transcription, ouverte pour une piste audio (un locuteur)."""
 
@@ -56,6 +64,7 @@ class TranscriptionStream(Protocol):
     async def close(self) -> None: ...
 
 
+@runtime_checkable
 class Transcriber(Protocol):
     """Dev 1 — Amazon Transcribe streaming, ou une doublure."""
 

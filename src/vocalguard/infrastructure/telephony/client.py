@@ -254,7 +254,10 @@ class TwilioCallController:
         if not ok:
             # Ne pas laisser une annonce orpheline : elle serait jouée au prochain
             # `announce_url` réussi, avec un décalage incompréhensible.
-            self._announcements.pop(call_id)
+            # `discard_latest` et non `pop` : `pop` dépile la plus ancienne, donc
+            # annuler celle-ci supprimerait une annonce précédente encore en
+            # attente de réclamation par Twilio.
+            self._announcements.discard_latest(call_id, message)
         return ok
 
     async def send_sms(self, to_number: str, message: str) -> bool:
