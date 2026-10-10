@@ -1008,12 +1008,12 @@ const DEMO_EVENTS = [
 
   { t: 4.0, type: "transcript", speaker: "victim", data: { text: "Lucas ? Mais ta voix est bizarre mon chéri", is_final: true } },
   { t: 5.2, type: "voice", data: { risk: 0.68, windows_analyzed: 2 } },
-  { t: 5.4, type: "score", data: { score: 38, level: "none", reasons: ["identité revendiquée", "numéro inconnu", "voix possiblement synthétique"], breakers_fired: [] } },
+  { t: 5.4, type: "score", data: { score: 39, level: "none", reasons: ["identité revendiquée", "numéro inconnu", "voix possiblement synthétique"], breakers_fired: [] } },
 
   { t: 7.0, type: "transcript", speaker: "caller", data: { text: "Oui c'est le téléphone, j'ai cassé le mien. Écoute, j'ai eu un accident avec la voiture.", is_final: true } },
   { t: 7.6, type: "keyword", data: { risk: 0.33, terms: ["j'ai eu un accident", "mamie"] } },
   { t: 8.2, type: "llm", data: { risk: 0.44, tactics: ["identité revendiquée", "pression émotionnelle"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant invoque un accident pour créer un sentiment d'urgence." } },
-  { t: 8.5, type: "score", data: { score: 48, level: "watch", reasons: ["identité revendiquée", "pression émotionnelle", "numéro inconnu"], breakers_fired: [] } },
+  { t: 8.5, type: "score", data: { score: 54, level: "watch", reasons: ["identité revendiquée", "pression émotionnelle", "numéro inconnu"], breakers_fired: [] } },
 
   { t: 12.0, type: "transcript", speaker: "victim", data: { text: "Mon Dieu, tu n'as rien ?", is_final: true } },
 
@@ -1032,7 +1032,7 @@ const DEMO_EVENTS = [
   { t: 27.0, type: "transcript", speaker: "caller", data: { text: "Et surtout ne dis rien à maman, elle va s'inquiéter pour rien.", is_final: true } },
   { t: 27.6, type: "keyword", data: { risk: 0.96, terms: ["ne dis rien à", "carte bancaire", "virement"] } },
   { t: 28.2, type: "llm", data: { risk: 0.95, tactics: ["urgence", "secret", "paiement inhabituel", "identité revendiquée"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant demande le secret et les coordonnées bancaires de la victime." } },
-  { t: 28.6, type: "score", data: { score: 92, level: "intervene", reasons: ["urgence", "secret", "paiement inhabituel", "numéro inconnu"], breakers_fired: ["payment_request_with_identity_mismatch", "llm_high_confidence"] } },
+  { t: 28.6, type: "score", data: { score: 90, level: "intervene", reasons: ["urgence", "secret", "paiement inhabituel", "numéro inconnu"], breakers_fired: ["payment_request_with_identity_mismatch", "llm_high_confidence"] } },
 ];
 
 const DEMO_SPEED = 2.6;
