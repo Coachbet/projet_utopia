@@ -27,12 +27,15 @@ from vocalguard.application.scoring import (
 )
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.config import Settings
+from vocalguard.domain.alerts import AlertLevel
 from vocalguard.domain.events import Event, EventType
 from vocalguard.domain.models import (
     ContentSignal,
     KeywordHit,
     KeywordSignal,
     LineType,
+    ReputationSignal,
+    SignalSet,
     TranscriptSegment,
     VoiceSignal,
 )
@@ -45,6 +48,7 @@ from vocalguard.domain.ports import (
     ReputationChecker,
     VoiceDetector,
 )
+from vocalguard.domain.scoring.engine import assess
 from vocalguard.infrastructure.fakes.doubles import (
     FakeContentAnalyzer,
     FakeReputationChecker,
@@ -980,3 +984,69 @@ async def test_denial_beats_the_voice_alone_cap():
         "le plafond voix a écrasé le démenti du proche : le score retombe sous 85"
     )
     assert harness.last_score >= 85
+
+
+# --- Coupe-circuit « fausse autorité + paiement » --------------------------
+# Archétype gendarmerie / impôts. La règle 1 lui est structurellement
+# inatteignable : une institution usurpée n'est pas dans le carnet d'adresses,
+# donc `identity_mismatch` ne peut pas s'armer. Mesuré avec le vrai Claude sur
+# `scam_03_fausse_autorite.json` : risque 0,97 et score plafonné à 66.
+
+
+def _authority_signals(risk: float, tactics: tuple[str, ...]) -> SignalSet:
+    return SignalSet(
+        content=ContentSignal(
+            risk=risk,
+            tactics=tactics,
+            claimed_identity="Brigadier Mercier, gendarmerie nationale",
+            explanation="Se fait passer pour un gendarme et réclame un virement.",
+        ),
+        reputation=ReputationSignal(
+            risk=0.35, line_type=LineType.UNKNOWN, reasons=("numéro inconnu",)
+        ),
+    )
+
+
+def test_false_authority_with_payment_forces_intervention():
+    assessment = assess(
+        _authority_signals(0.97, ("fausse autorité", "paiement inhabituel", "urgence"))
+    )
+    assert "false_authority_with_payment" in assessment.breakers_fired
+    assert assessment.score >= 85
+    assert assessment.level is AlertLevel.INTERVENE
+
+
+def test_false_authority_needs_a_payment_demand():
+    """Une autorité revendiquée sans demande d'argent n'est pas une arnaque."""
+    assessment = assess(_authority_signals(0.97, ("fausse autorité", "urgence")))
+    assert "false_authority_with_payment" not in assessment.breakers_fired
+
+
+def test_payment_alone_does_not_fire_the_authority_breaker():
+    assessment = assess(_authority_signals(0.97, ("paiement inhabituel", "urgence")))
+    assert "false_authority_with_payment" not in assessment.breakers_fired
+
+
+def test_false_authority_requires_claude_to_be_confident():
+    """Le garde-fou qui empêche une hypothèse tiède de mettre quelqu'un en attente."""
+    assessment = assess(_authority_signals(0.70, ("fausse autorité", "paiement inhabituel")))
+    assert "false_authority_with_payment" not in assessment.breakers_fired
+    assert assessment.level < AlertLevel.INTERVENE
+
+
+def test_legitimate_bank_call_is_not_caught_by_the_authority_breaker():
+    """Un vrai conseiller qui parle d'un virement n'est pas une « fausse autorité » :
+    c'est Claude qui pose ce libellé, et il ne le pose pas ici."""
+    assessment = assess(
+        SignalSet(
+            content=ContentSignal(
+                risk=0.2,
+                tactics=("paiement inhabituel",),
+                claimed_identity="conseiller bancaire",
+                explanation="Appel bancaire ordinaire.",
+            ),
+            reputation=ReputationSignal(risk=0.05, in_contacts=True),
+        )
+    )
+    assert assessment.breakers_fired == ()
+    assert assessment.level is AlertLevel.NONE

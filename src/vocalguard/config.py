@@ -77,7 +77,12 @@ class Settings(BaseSettings):
     bedrock_region: str = "us-west-2"
     bedrock_model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     bedrock_max_tokens: int = 512
-    llm_min_interval_seconds: float = 4.0
+    llm_min_interval_seconds: float = 2.5
+    """Mesuré, pas supposé : Bedrock répond en 2,85 s (p50) et 3,59 s (p95) sur
+    le vrai prompt. Un seul appel est en vol à la fois, donc la cadence réelle
+    vaut `max(intervalle, latence)` : en dessous de ~2,8 s c'est la latence qui
+    commande, et toute valeur plus basse ne change rien d'autre que le coût.
+    L'ancien 4.0 ajoutait donc 1,2 s de retard pur sur le score."""
     llm_transcript_window_turns: int = 12
 
     # --- Voix synthétique (Dev 2) ------------------------------------------
