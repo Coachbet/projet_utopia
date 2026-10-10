@@ -14,20 +14,27 @@ Ces trois briques n'ont l'air de rien et portent chacune une décision qu'un
   confiance n'importe quel inconnu.
 - une session peut exister sans transcription. La session est nécessaire
   (vérification d'identité, mise en attente, dashboard) ; l'écoute, non.
+- le schéma d'événement et le code nomment les MÊMES actions. Le contrat est
+  figé à H0 et `data.action` est sa seule extension possible : deux listes qui
+  divergent rendraient le schéma faux sans qu'aucun test ne le dise.
 """
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 from vocalguard.application.sessions import SessionRegistry
 from vocalguard.config import Settings
+from vocalguard.domain.alerts import ActionKind, ReportedAction
 from vocalguard.domain.models import Contact
 from vocalguard.infrastructure.contacts.book import JsonContactBook
 from vocalguard.infrastructure.fakes.event_sink import InMemoryEventSink
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
+
+RACINE = Path(__file__).resolve().parents[2]
 
 
 def _ecrire_carnet(tmp_path, entries, *, owner: str | None = "Jeanne Moreau"):
@@ -286,3 +293,42 @@ class TestSessionSansEcoute:
 
         assert registre.get("CA_confiance") is not None
         assert [s.call_id for s in registre.active()] == ["CA_confiance"]
+
+
+# --- Le contrat d'événement et le code disent la même chose -----------------
+
+
+class TestContratDesActions:
+    """`contracts/event.schema.json` est la référence que lisent les autres
+    briques, et personne ne l'exécute. Sans ce test, ajouter un fait de routage
+    dans le code laisserait le schéma affirmer qu'il est invalide — et c'est
+    justement le fichier qu'on brandit pour dire « le contrat est figé »."""
+
+    def _enum_du_schema(self) -> set[str]:
+        schema = json.loads(
+            (RACINE / "contracts" / "event.schema.json").read_text(encoding="utf-8")
+        )
+        return set(schema["properties"]["data"]["properties"]["action"]["enum"])
+
+    def test_le_schema_declare_exactement_les_actions_du_code(self) -> None:
+        attendu = {kind.value for kind in ActionKind} | {fait.value for fait in ReportedAction}
+        assert self._enum_du_schema() == attendu
+
+    def test_les_deux_familles_ne_se_chevauchent_pas(self) -> None:
+        """`InMemoryEventSink.actions()` écarte les `ReportedAction` pour isoler
+        ce que la politique d'alerte a déclenché. Une valeur présente dans les
+        deux familles rendrait ce filtre aveugle à une vraie action."""
+        effets = {kind.value for kind in ActionKind}
+        faits = {fait.value for fait in ReportedAction}
+        assert effets.isdisjoint(faits)
+
+    def test_aucun_type_d_evenement_n_a_ete_ajoute(self) -> None:
+        """La règle non négociable du contrat figé à H0 : les nouveautés passent
+        par `data.action`, jamais par un nouveau `type`."""
+        from vocalguard.domain.events import EventType
+
+        schema = json.loads(
+            (RACINE / "contracts" / "event.schema.json").read_text(encoding="utf-8")
+        )
+        assert set(schema["properties"]["type"]["enum"]) == {t.value for t in EventType}
+        assert len(EventType) == 7
