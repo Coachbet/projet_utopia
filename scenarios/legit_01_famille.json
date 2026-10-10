@@ -1,0 +1,19 @@
+{
+  "title": "Vrai appel de famille (test de faux positif)",
+  "notes": "Le vrai Lucas, depuis le numéro que le carnet d'adresses lui connaît (+33612345678). Mentionne de l'argent et un imprévu : doit rester sous 40. C'est le scénario qui protège la démo d'un faux positif devant le jury.",
+  "call_id": "CA_DEMO_LEGIT_01",
+  "caller_number": "+33612345678",
+  "expect": {
+    "max_score": 39,
+    "level": "none"
+  },
+  "turns": [
+    { "t": 1.0, "speaker": "caller", "text": "Salut mamie, c'est Lucas, je ne te réveille pas ?" },
+    { "t": 5.0, "speaker": "victim", "text": "Non non mon grand, ça me fait plaisir" },
+    { "t": 8.0, "speaker": "caller", "text": "Je passe dimanche avec Camille, on apporte le gâteau." },
+    { "t": 14.0, "speaker": "victim", "text": "C'est gentil ça. Vers quelle heure ?" },
+    { "t": 18.0, "speaker": "caller", "text": "Midi je pense. Au fait papa m'a remboursé pour les courses, je te rends les vingt euros dimanche." },
+    { "t": 26.0, "speaker": "victim", "text": "Garde-les, ça me fait plaisir" },
+    { "t": 30.0, "speaker": "caller", "text": "On en reparle. Bisous mamie, à dimanche." }
+  ]
+}

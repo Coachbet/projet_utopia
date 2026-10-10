@@ -1,0 +1,21 @@
+{
+  "title": "Faux petit-fils en urgence",
+  "notes": "Scénario de référence de la démo. L'appelant se présente comme Lucas, le petit-fils, depuis un numéro VoIP inconnu. Lucas existe dans le carnet d'adresses avec un autre numéro : c'est ce qui arme le coupe-circuit paiement + identité.",
+  "call_id": "CA_DEMO_SCAM_01",
+  "caller_number": "+33755012345",
+  "expect": {
+    "min_score": 85,
+    "level": "intervene"
+  },
+  "turns": [
+    { "t": 1.0, "speaker": "caller", "text": "Mamie ? Mamie c'est Lucas, tu m'entends ?" },
+    { "t": 4.0, "speaker": "victim", "text": "Lucas ? Mais ta voix est bizarre mon chéri" },
+    { "t": 7.0, "speaker": "caller", "text": "Oui c'est le téléphone, j'ai cassé le mien. Écoute, j'ai eu un accident avec la voiture." },
+    { "t": 12.0, "speaker": "victim", "text": "Mon Dieu, tu n'as rien ?" },
+    { "t": 15.0, "speaker": "caller", "text": "Non ça va mais il faut payer le garage tout de suite sinon ils gardent la voiture." },
+    { "t": 21.0, "speaker": "caller", "text": "Il faut faire un virement de deux mille euros maintenant, c'est urgent." },
+    { "t": 27.0, "speaker": "victim", "text": "Deux mille euros ? Mais je ne sais pas faire ça moi" },
+    { "t": 31.0, "speaker": "caller", "text": "Je t'explique, tu me donnes le code de ta carte bancaire et je m'occupe de tout." },
+    { "t": 38.0, "speaker": "caller", "text": "Et surtout ne dis rien à maman, elle va s'inquiéter pour rien. Reste bien au téléphone avec moi." }
+  ]
+}

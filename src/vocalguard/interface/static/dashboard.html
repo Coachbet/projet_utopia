@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VocalGuard — surveillance d'appel en direct</title>
+<style>
+/* ------------------------------------------------------------------------
+   Palette : instance de référence du système dataviz.
+   Catégorielle slots 1-4 (identité des quatre signaux) et palette de statut
+   (état du score). Les deux modes sont choisis, pas inversés.
+   Validé : node scripts/validate_palette.js
+     light "#2a78d6,#eb6834,#1baf7a,#eda100" --mode light  -> tout PASS
+     dark  "#3987e5,#d95926,#199e70,#c98500" --mode dark    -> tout PASS
+   WARN contraste en clair sur aqua (2.74) et jaune (2.11) : relief obligatoire,
+   assuré par les étiquettes directes au bout des barres + la vue tableau.
+   ------------------------------------------------------------------------ */
+.viz-root {
+  color-scheme: light;
+  --surface-1:      #fcfcfb;
+  --plane:          #f9f9f7;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --gridline:       #e1e0d9;
+  --baseline:       #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+
+  --series-1: #2a78d6;  /* contenu / Claude */
+  --series-2: #eb6834;  /* mots-clés */
+  --series-3: #1baf7a;  /* voix synthétique */
+  --series-4: #eda100;  /* réputation */
+
+  /* Statut : réservé, jamais thémé. */
+  --status-good:     #0ca30c;
+  --status-warning:  #fab219;
+  --status-serious:  #ec835a;
+  --status-critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --plane:          #0d0d0d;
+    --text-primary:   #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --surface-1:      #1a1a19;
+  --plane:          #0d0d0d;
+  --text-primary:   #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted:     #898781;
+  --gridline:       #2c2c2a;
+  --baseline:       #383835;
+  --border:         rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--plane, #f9f9f7);
+}
+.viz-root {
+  background: var(--plane);
+  color: var(--text-primary);
+  min-height: 100vh;
+  padding: 22px 28px 32px;
+}
+
+/* --- en-tête ----------------------------------------------------------- */
+.head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; margin-bottom: 18px; }
+.brand { font-size: 23px; font-weight: 650; letter-spacing: -0.01em; }
+.brand .mark { color: var(--text-secondary); font-weight: 500; }
+.callid {
+  font-size: 14px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.head-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 14px; font-weight: 550;
+  padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-secondary);
+}
+.chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.chip[data-conn="up"]   .dot { background: var(--status-good); }
+.chip[data-conn="wait"] .dot { background: var(--status-warning); }
+.chip[data-conn="down"] .dot { background: var(--status-critical); }
+.chip.demo { border-color: var(--series-1); color: var(--series-1); font-weight: 650; }
+
+button.ghost {
+  font: inherit; font-size: 14px; font-weight: 550;
+  padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-secondary);
+}
+button.ghost:hover { color: var(--text-primary); border-color: var(--baseline); }
+button.ghost[aria-pressed="true"] { color: var(--text-primary); border-color: var(--baseline); }
+
+/* --- bandeau d'action : le dénouement de la démo ----------------------- */
+.action-banner {
+  display: none;
+  align-items: center; gap: 16px;
+  padding: 16px 20px; margin-bottom: 18px;
+  border-radius: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--status-critical);
+}
+.action-banner[data-shown="1"] { display: flex; }
+.action-banner .ico { color: var(--status-critical); flex: none; }
+.action-banner .who { font-size: 21px; font-weight: 650; }
+.action-banner .what { font-size: 16px; color: var(--text-secondary); margin-top: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .action-banner[data-pulse="1"] { animation: pulse 1.1s ease-out 2; }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(208,59,59,0); }
+    35%     { box-shadow: 0 0 0 7px rgba(208,59,59,0.18); }
+  }
+}
+
+/* --- grille ------------------------------------------------------------ */
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px; }
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px 20px;
+  min-width: 0;
+}
+.card > h2 {
+  margin: 0 0 14px;
+  font-size: 13px; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--text-muted);
+  display: flex; align-items: center; gap: 10px;
+}
+.card > h2 .right { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.c-score     { grid-column: span 5; }
+.c-signals   { grid-column: span 4; }
+.c-identity  { grid-column: span 3; }
+.c-transcript{ grid-column: span 6; }
+.c-feed      { grid-column: span 6; }
+@media (max-width: 1280px) {
+  .c-score, .c-signals { grid-column: span 6; }
+  .c-identity { grid-column: span 12; }
+  .c-transcript, .c-feed { grid-column: span 12; }
+}
+
+/* --- figure héroïque : le score --------------------------------------- */
+.hero-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.hero-num {
+  font-size: clamp(68px, 7vw, 112px);
+  font-weight: 680; line-height: 0.92; letter-spacing: -0.035em;
+  /* chiffres proportionnels : tabular-nums fait respirer faux à cette taille */
+}
+.hero-unit { font-size: 0.3em; font-weight: 550; color: var(--text-muted); }
+.state {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 9px 15px; border-radius: 10px;
+  font-size: 19px; font-weight: 650;
+  border: 1px solid var(--border);
+}
+/* icône + libellé : la couleur de statut ne porte jamais seule le sens
+   (en clair, warning 1.79:1 et serious 2.57:1 passent sous 3:1). */
+.state[data-level="none"]      { color: var(--status-good);     border-color: var(--status-good); }
+.state[data-level="watch"]     { color: var(--status-warning);  border-color: var(--status-warning); }
+.state[data-level="alert"]     { color: var(--status-serious);  border-color: var(--status-serious); }
+.state[data-level="intervene"] { color: var(--status-critical); border-color: var(--status-critical); }
+.state .lbl { color: var(--text-primary); }
+
+/* Jauge : la structure des bandes rend lisible la distance au seuil. */
+.meter { margin-top: 24px; }
+.meter-track {
+  position: relative; height: 16px; border-radius: 8px;
+  background: var(--gridline); overflow: hidden;
+}
+/* Les seuils sont des écarts de 2px dans la couleur du fond — le mécanisme
+   « surface gap » : lisibles aussi bien sur le remplissage que sur la piste
+   vide, alors qu'un trait coloré disparaîtrait sur l'un des deux. */
+.meter-tick { z-index: 2; width: 2px; background: var(--surface-1); top: 0; bottom: 0; }
+.meter-band { position: absolute; top: 0; bottom: 0; }
+.meter-band[data-b="none"]      { background: var(--status-good);     opacity: 0.13; }
+.meter-band[data-b="watch"]     { background: var(--status-warning);  opacity: 0.16; }
+.meter-band[data-b="alert"]     { background: var(--status-serious);  opacity: 0.16; }
+.meter-band[data-b="intervene"] { background: var(--status-critical); opacity: 0.16; }
+.meter-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  border-radius: 2px 4px 4px 2px;  /* bout de donnée arrondi, base carrée */
+  background: var(--text-muted);
+  transition: width .45s ease, background-color .45s ease;
+}
+@media (prefers-reduced-motion: reduce) { .meter-fill { transition: none; } }
+.meter-fill[data-level="none"]      { background: var(--status-good); }
+.meter-fill[data-level="watch"]     { background: var(--status-warning); }
+.meter-fill[data-level="alert"]     { background: var(--status-serious); }
+.meter-fill[data-level="intervene"] { background: var(--status-critical); }
+.meter-tick { position: absolute; top: -5px; bottom: -5px; width: 1px; background: var(--baseline); }
+.meter-fill { z-index: 1; }
+.meter-scale {
+  position: relative; height: 20px; margin-top: 7px;
+  font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.meter-scale span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.meter-legend {
+  display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px;
+  font-size: 13px; color: var(--text-secondary);
+}
+.meter-legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; margin-right: 6px; }
+.to-next { margin-top: 14px; font-size: 15px; color: var(--text-secondary); }
+.to-next b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.why { margin-top: 18px; }
+.why h3 {
+  margin: 0 0 9px; font-size: 12.5px; font-weight: 650;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
+}
+.why .quote { font-size: 16.5px; line-height: 1.42; margin-bottom: 11px; }
+
+/* --- barres de signaux ------------------------------------------------- */
+/* Le libellé de valeur vit dans une colonne alignée, pas au bout de la barre :
+   à 0,95 de risque la barre occupe 95 % de la piste et une étiquette au bout
+   déborderait de la carte. En colonne, `tabular-nums` s'applique à bon droit. */
+.axis-wrap { display: flex; gap: 12px; margin-bottom: 4px; }
+.axis {
+  position: relative; height: 15px; flex: 1 1 auto; min-width: 0;
+  font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.axis span { position: absolute; transform: translateX(-50%); }
+.axis-pad, .sig-num { flex: 0 0 106px; }
+.sig { padding: 9px 0 10px; border-top: 1px solid var(--gridline); }
+.sig:first-of-type { border-top: 0; }
+.sig-head { display: flex; align-items: baseline; gap: 9px; font-size: 16px; }
+.sig-head .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.sig-head .nm { font-weight: 570; }
+.sig-head .wt { margin-left: auto; font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+.sig-body { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.sig-plot { position: relative; height: 18px; flex: 1 1 auto; min-width: 0; }
+.sig-grid { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--gridline); }
+.sig-track {
+  position: absolute; left: 0; top: 0; height: 18px;
+  border-radius: 3px; background: var(--gridline);
+}
+.sig-fill {
+  position: absolute; left: 0; top: 0; height: 18px;
+  border-radius: 2px 4px 4px 2px;
+  transition: width .4s ease;
+}
+@media (prefers-reduced-motion: reduce) { .sig-fill { transition: none; } }
+.sig-num {
+  text-align: right; white-space: nowrap;
+  font-size: 13.5px; font-weight: 600; color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.sig-num .pts { color: var(--text-muted); font-weight: 500; }
+.sig[data-silent="1"] .sig-track { opacity: .55; }
+.sig[data-silent="1"] .sig-num {
+  color: var(--text-muted); font-weight: 500; font-style: italic;
+  font-size: 12.5px; font-variant-numeric: normal;
+}
+.sig[data-silent="1"] .sig-head .nm, .sig[data-silent="1"] .sig-head .sw { opacity: .5; }
+.sig-hit { position: absolute; left: 0; right: 0; top: -9px; height: 36px; cursor: default; }
+
+table.tv { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+table.tv caption { text-align: left; color: var(--text-muted); font-size: 13px; padding-bottom: 8px; }
+table.tv th, table.tv td { text-align: right; padding: 7px 6px; border-bottom: 1px solid var(--gridline); }
+table.tv th:first-child, table.tv td:first-child { text-align: left; }
+table.tv th { color: var(--text-muted); font-weight: 600; font-size: 12.5px; }
+table.tv td { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+table.tv td.k { color: var(--text-primary); font-variant-numeric: normal; }
+table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 7px; }
+.hidden { display: none !important; }
+
+/* --- identité ---------------------------------------------------------- */
+.kv { margin: 0; }
+.kv dt { font-size: 12.5px; color: var(--text-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.kv dd { margin: 4px 0 16px; font-size: 19px; font-weight: 600; }
+.kv dd.quiet { font-size: 16px; font-weight: 500; color: var(--text-muted); font-style: italic; }
+.flagline {
+  display: none; align-items: center; gap: 9px;
+  margin-top: 2px; padding: 11px 13px; border-radius: 9px;
+  border: 1px solid var(--status-critical); color: var(--status-critical);
+  font-size: 15px; font-weight: 620;
+}
+.flagline[data-shown="1"] { display: flex; }
+.flagline .txt { color: var(--text-primary); }
+
+/* --- transcription ----------------------------------------------------- */
+.scroll { max-height: 340px; overflow-y: auto; }
+.turn { padding: 9px 0 9px 13px; border-left: 3px solid var(--baseline); margin-bottom: 9px; }
+.turn .who {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); display: flex; gap: 9px; align-items: baseline;
+}
+.turn .who .at { font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.turn .txt { font-size: 18.5px; line-height: 1.42; margin-top: 3px; }
+/* locuteur = position + libellé + épaisseur du trait ; jamais la palette de
+   statut, qui ne veut dire que « état du score ». */
+.turn[data-who="caller"] { border-left-color: var(--text-primary); }
+.turn[data-who="caller"] .txt { color: var(--text-primary); }
+.turn[data-who="victim"] {
+  margin-left: 11%; border-left-color: var(--gridline); background: transparent;
+}
+.turn[data-who="victim"] .txt { color: var(--text-secondary); }
+.empty { color: var(--text-muted); font-size: 15px; font-style: italic; }
+
+/* --- journal ----------------------------------------------------------- */
+.ev { display: flex; gap: 11px; padding: 11px 0; border-top: 1px solid var(--gridline); }
+.ev:first-child { border-top: 0; }
+.ev .at { font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; width: 46px; padding-top: 2px; }
+.ev .body { min-width: 0; flex: 1; }
+.ev .hl { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.ev .sub { font-size: 14.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
+.ev .quote { font-size: 15.5px; color: var(--text-primary); margin-top: 5px; line-height: 1.4; }
+.ev[data-kind="action"] { border-left: 4px solid var(--status-critical); padding-left: 11px; margin-left: -15px; }
+.ev[data-kind="action"] .hl { color: var(--status-critical); font-size: 17px; font-weight: 680; }
+.ev[data-kind="action"] .hl .lbl { color: var(--text-primary); }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+.tag {
+  font-size: 12.5px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-secondary); background: var(--plane);
+}
+.tag.brk { border-color: var(--status-serious); color: var(--text-primary); font-weight: 600; }
+
+/* --- infobulle --------------------------------------------------------- */
+.tip {
+  position: fixed; z-index: 50; pointer-events: none; opacity: 0;
+  transform: translate(-50%, -100%);
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--baseline); border-radius: 9px;
+  padding: 9px 12px; font-size: 14px; min-width: 150px;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.13);
+}
+.tip[data-on="1"] { opacity: 1; }
+.tip .v { font-size: 19px; font-weight: 680; font-variant-numeric: tabular-nums; }
+.tip .n { color: var(--text-secondary); font-size: 13.5px; margin-top: 2px; display: flex; align-items: center; gap: 7px; }
+.tip .n i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; flex: none; }
+.tip .x { color: var(--text-muted); font-size: 12.5px; margin-top: 5px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+
+<body data-palette="#2a78d6,#eb6834,#1baf7a,#eda100" data-mode="light">
+<div class="viz-root">
+
+<svg class="vh" aria-hidden="true">
+  <symbol id="i-good" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><path d="M8.2 12.4l2.6 2.6 5-5.4"/>
+  </symbol>
+  <symbol id="i-watch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3.6L21 19.2H3z"/><path d="M12 9.6v4.2"/><circle cx="12" cy="16.6" r="0.1"/>
+  </symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8.1 3h7.8L21 8.1v7.8L15.9 21H8.1L3 15.9V8.1z"/><path d="M12 8v4.6"/><circle cx="12" cy="16.2" r="0.1"/>
+  </symbol>
+  <symbol id="i-intervene" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2.8l7.5 2.7v6c0 4.5-3.1 8.3-7.5 9.7-4.4-1.4-7.5-5.2-7.5-9.7v-6z"/><path d="M12 8.4v4"/><circle cx="12" cy="15.6" r="0.1"/>
+  </symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>
+  </symbol>
+  <symbol id="i-speak" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 5L6.5 8.6H3.4v6.8h3.1L11 19z"/><path d="M15.4 9.1a4 4 0 010 5.8"/><path d="M18.1 6.4a7.6 7.6 0 010 11.2"/>
+  </symbol>
+  <symbol id="i-sms" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20.5 11.6a7.6 7.6 0 01-8.5 7.5l-5.1 1.9 1.3-4.1a7.6 7.6 0 1112.3-5.3z"/>
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 4.8l12 7.2-12 7.2z"/>
+  </symbol>
+</svg>
+
+<header class="head">
+  <div>
+    <div class="brand">VocalGuard <span class="mark">· surveillance d'appel en direct</span></div>
+    <div class="callid" id="callid">en attente d'appel</div>
+  </div>
+  <div class="head-right">
+    <span class="chip demo hidden" id="demobadge">mode démonstration</span>
+    <button class="ghost hidden" id="replay" type="button">Rejouer</button>
+    <span class="chip" id="conn" data-conn="wait"><span class="dot"></span><span id="conntext">connexion…</span></span>
+    <button class="ghost" id="theme" type="button">Thème sombre</button>
+  </div>
+</header>
+
+<div class="action-banner" id="banner" role="status" aria-live="assertive">
+  <svg class="ico" width="34" height="34" aria-hidden="true"><use href="#i-intervene"/></svg>
+  <div>
+    <div class="who" id="bannerwho"></div>
+    <div class="what" id="bannerwhat"></div>
+  </div>
+</div>
+
+<main class="grid">
+
+  <section class="card c-score" aria-labelledby="h-score">
+    <h2 id="h-score">Score de risque</h2>
+    <div class="hero-row">
+      <div class="hero-num" id="score" aria-live="polite">0<span class="hero-unit"> / 100</span></div>
+      <div class="state" id="state" data-level="none">
+        <svg width="25" height="25" aria-hidden="true"><use id="stateicon" href="#i-good"/></svg>
+        <span class="lbl" id="statelabel">Aucun signe</span>
+      </div>
+    </div>
+
+    <div class="meter" role="img" id="meter" aria-label="Score 0 sur 100, aucun signe">
+      <div class="meter-track">
+        <div class="meter-band" data-b="none"      style="left:0;width:40%"></div>
+        <div class="meter-band" data-b="watch"     style="left:40%;width:25%"></div>
+        <div class="meter-band" data-b="alert"     style="left:65%;width:20%"></div>
+        <div class="meter-band" data-b="intervene" style="left:85%;width:15%"></div>
+        <div class="meter-tick" style="left:40%"></div>
+        <div class="meter-tick" style="left:65%"></div>
+        <div class="meter-tick" style="left:85%"></div>
+        <div class="meter-fill" id="fill" data-level="none" style="width:0%"></div>
+      </div>
+      <div class="meter-scale">
+        <span style="left:0%">0</span><span style="left:40%">40</span>
+        <span style="left:65%">65</span><span style="left:85%">85</span>
+        <span style="left:100%">100</span>
+      </div>
+    </div>
+
+    <div class="meter-legend">
+      <span><i style="background:var(--status-good)"></i>&lt;&nbsp;40 aucun signe</span>
+      <span><i style="background:var(--status-warning)"></i>40–64 vigilance</span>
+      <span><i style="background:var(--status-serious)"></i>65–84 alerte</span>
+      <span><i style="background:var(--status-critical)"></i>≥&nbsp;85 intervention</span>
+    </div>
+    <div class="to-next" id="tonext">En attente des premiers signaux.</div>
+    <div class="why" id="why"></div>
+  </section>
+
+  <section class="card c-signals" aria-labelledby="h-sig">
+    <h2 id="h-sig">Les quatre signaux
+      <button class="ghost right" id="tvtoggle" type="button" aria-pressed="false">Tableau</button>
+    </h2>
+
+    <div id="sigchart">
+      <div class="axis-wrap" aria-hidden="true">
+        <div class="axis" id="sigaxis"></div>
+        <div class="axis-pad"></div>
+      </div>
+      <div id="sigrows"></div>
+      <p style="font-size:13px;color:var(--text-muted);margin:14px 0 0;line-height:1.45">
+        La longueur de chaque piste est le maximum que le signal peut peser ;
+        le remplissage est ce qu'il pèse réellement. Un signal ne vaut pas l'autre.
+      </p>
+    </div>
+
+    <div id="sigtable" class="hidden"></div>
+  </section>
+
+  <section class="card c-identity" aria-labelledby="h-id">
+    <h2 id="h-id">Qui appelle&nbsp;?</h2>
+    <dl class="kv">
+      <dt>Identité revendiquée</dt>
+      <dd class="quiet" id="claimed">non déclarée</dd>
+      <dt>Type de ligne</dt>
+      <dd class="quiet" id="linetype">inconnu</dd>
+    </dl>
+    <div class="flagline" id="mismatch">
+      <svg width="21" height="21" aria-hidden="true"><use href="#i-alert"/></svg>
+      <span class="txt">Numéro incohérent avec l'identité annoncée</span>
+    </div>
+  </section>
+
+  <section class="card c-transcript" aria-labelledby="h-tr">
+    <h2 id="h-tr">Transcription en direct</h2>
+    <div class="scroll" id="turns" aria-live="polite"><p class="empty">Aucune parole transcrite pour l'instant.</p></div>
+  </section>
+
+  <section class="card c-feed" aria-labelledby="h-fd">
+    <h2 id="h-fd">Journal des décisions</h2>
+    <div class="scroll" id="feed"><p class="empty">Rien à signaler.</p></div>
+  </section>
+
+</main>
+
+<div class="tip" id="tip" role="tooltip" aria-hidden="true"></div>
+</div>
+
+<script>
+"use strict";
+/* =======================================================================
+   Modèle de vue. Un seul réducteur `applyEvent` : le flux live et le mode
+   démonstration y entrent par la même porte, mais par deux chemins
+   strictement séparés (connectLive / startDemo) pour qu'une panne du vrai
+   flux ne puisse jamais être masquée par la démo.
+   ======================================================================= */
+
+const LEVELS = {
+  none:      { label: "Aucun signe",  icon: "#i-good",      token: "--status-good" },
+  watch:     { label: "Vigilance",    icon: "#i-watch",     token: "--status-warning" },
+  alert:     { label: "Alerte",       icon: "#i-alert",     token: "--status-serious" },
+  intervene: { label: "Intervention", icon: "#i-intervene", token: "--status-critical" },
+};
+const THRESHOLDS = [
+  { level: "watch",     at: 40 },
+  { level: "alert",     at: 65 },
+  { level: "intervene", at: 85 },
+];
+
+/* Ordre fixe des slots catégoriels : l'identité suit l'entité, jamais le rang. */
+const SIGNALS = [
+  { key: "llm",        name: "Contenu (Claude)",  weight: 45, slot: "--series-1" },
+  { key: "keyword",    name: "Mots-clés",         weight: 20, slot: "--series-2" },
+  { key: "voice",      name: "Voix synthétique",  weight: 20, slot: "--series-3" },
+  { key: "reputation", name: "Réputation",        weight: 15, slot: "--series-4" },
+];
+const AXIS_MAX = 45;
+const AXIS_TICKS = [0, 10, 20, 30, 40];
+
+const LINE_TYPES = {
+  mobile: "Mobile", landline: "Fixe", fixedVoip: "VoIP fixe",
+  nonFixedVoip: "VoIP non fixe", tollFree: "Numéro vert",
+  personal: "Personnel", unknown: "Inconnu",
+};
+const ACTIONS = {
+  hold_caller:      { label: "Appelant mis en attente", icon: "#i-pause" },
+  resume_caller:    { label: "Appelant réintégré",       icon: "#i-play"  },
+  announce_victim:  { label: "Annonce à la victime",     icon: "#i-speak" },
+  sms_contact:      { label: "SMS au proche de confiance", icon: "#i-sms" },
+  notify_dashboard: { label: "Dashboard notifié",        icon: "#i-watch" },
+};
+
+const state = {
+  callId: null,
+  score: 0,
+  level: "none",
+  risks: { llm: null, keyword: null, voice: null, reputation: null },
+  claimed: null,
+  lineType: null,
+  mismatch: false,
+  lastExplanation: null,
+  reasons: [],
+  breakers: [],
+  feedCount: 0,
+};
+
+/* --- utilitaires DOM. Toute donnée passe par textContent. --------------- */
+const $ = (id) => document.getElementById(id);
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined && text !== null) n.textContent = String(text);
+  return n;
+}
+function svgUse(href, size) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("width", size); s.setAttribute("height", size);
+  s.setAttribute("aria-hidden", "true");
+  const u = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  u.setAttribute("href", href);
+  s.appendChild(u);
+  return s;
+}
+const num1 = (x) => Number(x).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const secs = (t) => Number(t).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "s";
+const clamp01 = (x) => Math.max(0, Math.min(1, Number(x) || 0));
+
+/* --- barres de signaux : construction une fois, mise à jour ensuite ----- */
+function buildSignals() {
+  const axis = $("sigaxis");
+  AXIS_TICKS.forEach((t) => {
+    const s = el("span", null, t);
+    s.style.left = (t / AXIS_MAX * 100) + "%";
+    axis.appendChild(s);
+  });
+
+  const rows = $("sigrows");
+  SIGNALS.forEach((sig) => {
+    const row = el("div", "sig");
+    row.dataset.key = sig.key;
+    row.dataset.silent = "1";
+
+    const head = el("div", "sig-head");
+    const sw = el("span", "sw");
+    sw.style.background = `var(${sig.slot})`;
+    head.appendChild(sw);
+    head.appendChild(el("span", "nm", sig.name));
+    head.appendChild(el("span", "wt", `max ${sig.weight} pts`));
+    row.appendChild(head);
+
+    const body = el("div", "sig-body");
+    const plot = el("div", "sig-plot");
+    AXIS_TICKS.forEach((t) => {
+      if (t === 0) return;
+      const g = el("div", "sig-grid");
+      g.style.left = (t / AXIS_MAX * 100) + "%";
+      plot.appendChild(g);
+    });
+    const track = el("div", "sig-track");
+    track.style.width = (sig.weight / AXIS_MAX * 100) + "%";
+    const fill = el("div", "sig-fill");
+    fill.style.background = `var(${sig.slot})`;
+    fill.style.width = "0%";
+    const hit = el("div", "sig-hit");
+    plot.append(track, fill, hit);
+
+    const val = el("div", "sig-num", "en attente");
+    body.append(plot, val);
+    row.appendChild(body);
+    rows.appendChild(row);
+
+    hit.addEventListener("pointermove", (e) => showTip(e, sig));
+    hit.addEventListener("pointerleave", hideTip);
+    row.tabIndex = 0;
+    row.addEventListener("focus", () => showTipAt(row, sig));
+    row.addEventListener("blur", hideTip);
+  });
+}
+
+function renderSignals() {
+  SIGNALS.forEach((sig) => {
+    const row = document.querySelector(`.sig[data-key="${sig.key}"]`);
+    const risk = state.risks[sig.key];
+    const silent = risk === null || risk === undefined;
+    row.dataset.silent = silent ? "1" : "0";
+
+    const fill = row.querySelector(".sig-fill");
+    const val = row.querySelector(".sig-num");
+    if (silent) {
+      fill.style.width = "0%";
+      val.textContent = "en attente";
+    } else {
+      const pts = clamp01(risk) * sig.weight;
+      fill.style.width = (pts / AXIS_MAX * 100) + "%";
+      /* Étiquette visible : le relief exigé par le WARN de contraste sur
+         l'aqua et le jaune en mode clair. */
+      val.textContent = num1(risk);
+      val.appendChild(el("span", "pts", ` · ${Math.round(pts)} pts`));
+    }
+  });
+  renderTable();
+}
+
+function renderTable() {
+  const host = $("sigtable");
+  host.textContent = "";
+  const t = el("table", "tv");
+  t.appendChild(el("caption", null, "Contribution de chaque signal au score sur 100."));
+  const thead = el("thead");
+  const hr = el("tr");
+  ["Signal", "Risque", "Poids", "Points"].forEach((h) => hr.appendChild(el("th", null, h)));
+  thead.appendChild(hr);
+  t.appendChild(thead);
+
+  const tb = el("tbody");
+  let total = 0;
+  SIGNALS.forEach((sig) => {
+    const risk = state.risks[sig.key];
+    const has = risk !== null && risk !== undefined;
+    const pts = has ? clamp01(risk) * sig.weight : 0;
+    total += pts;
+    const tr = el("tr");
+    const td0 = el("td", "k");
+    const sw = el("span", "sw");
+    sw.style.background = `var(${sig.slot})`;
+    td0.append(sw, document.createTextNode(sig.name));
+    tr.appendChild(td0);
+    tr.appendChild(el("td", null, has ? num1(risk) : "—"));
+    tr.appendChild(el("td", null, sig.weight));
+    tr.appendChild(el("td", null, has ? Math.round(pts) : "—"));
+    tb.appendChild(tr);
+  });
+  const tr = el("tr");
+  tr.appendChild(el("td", "k", "Somme pondérée"));
+  tr.appendChild(el("td", null, ""));
+  tr.appendChild(el("td", null, 100));
+  tr.appendChild(el("td", null, Math.round(total)));
+  tb.appendChild(tr);
+  t.appendChild(tb);
+  host.appendChild(t);
+}
+
+/* --- infobulle --------------------------------------------------------- */
+function tipContent(sig) {
+  const tip = $("tip");
+  tip.textContent = "";
+  const risk = state.risks[sig.key];
+  const has = risk !== null && risk !== undefined;
+  tip.appendChild(el("div", "v", has ? `${Math.round(clamp01(risk) * sig.weight)} pts` : "—"));
+  const n = el("div", "n");
+  const i = el("i");
+  i.style.background = `var(${sig.slot})`;
+  n.append(i, document.createTextNode(sig.name));
+  tip.appendChild(n);
+  tip.appendChild(el("div", "x", has
+    ? `risque ${num1(risk)} × poids ${sig.weight}`
+    : "ce signal n'a pas encore parlé"));
+}
+function showTip(e, sig) {
+  tipContent(sig);
+  const tip = $("tip");
+  tip.style.left = e.clientX + "px";
+  tip.style.top = (e.clientY - 14) + "px";
+  tip.dataset.on = "1";
+}
+function showTipAt(node, sig) {
+  tipContent(sig);
+  const r = node.getBoundingClientRect();
+  const tip = $("tip");
+  tip.style.left = (r.left + r.width / 2) + "px";
+  tip.style.top = (r.top - 6) + "px";
+  tip.dataset.on = "1";
+}
+function hideTip() { $("tip").dataset.on = "0"; }
+
+/* --- score ------------------------------------------------------------- */
+function renderScore() {
+  const lv = LEVELS[state.level] || LEVELS.none;
+  const sc = $("score");
+  sc.textContent = String(state.score);
+  sc.appendChild(el("span", "hero-unit", " / 100"));
+
+  $("state").dataset.level = state.level;
+  $("statelabel").textContent = lv.label;
+  $("stateicon").setAttribute("href", lv.icon);
+
+  const fill = $("fill");
+  fill.style.width = Math.max(0, Math.min(100, state.score)) + "%";
+  fill.dataset.level = state.level;
+  $("meter").setAttribute("aria-label", `Score ${state.score} sur 100, ${lv.label.toLowerCase()}`);
+
+  renderWhy();
+
+  const next = THRESHOLDS.find((th) => state.score < th.at);
+  const tn = $("tonext");
+  tn.textContent = "";
+  if (!next) {
+    tn.appendChild(document.createTextNode("Seuil d'intervention franchi."));
+  } else {
+    tn.appendChild(document.createTextNode("Encore "));
+    tn.appendChild(el("b", null, next.at - state.score));
+    tn.appendChild(document.createTextNode(` point${next.at - state.score > 1 ? "s" : ""} avant « ${LEVELS[next.level].label.toLowerCase()} ».`));
+  }
+}
+
+/* Le « pourquoi » du score, à côté du chiffre : les chaînes françaises des
+   signaux sont écrites pour être lues telles quelles. */
+function renderWhy() {
+  const host = $("why");
+  host.textContent = "";
+  if (!state.reasons.length && !state.lastExplanation && !state.breakers.length) return;
+
+  host.appendChild(el("h3", null, "Pourquoi ce score"));
+  if (state.lastExplanation) host.appendChild(el("div", "quote", "« " + state.lastExplanation + " »"));
+  if (state.reasons.length || state.breakers.length) {
+    const tags = el("div", "tags");
+    state.reasons.slice(0, 8).forEach((r) => tags.appendChild(el("span", "tag", r)));
+    state.breakers.forEach((b) => tags.appendChild(el("span", "tag brk", "coupe-circuit : " + b)));
+    host.appendChild(tags);
+  }
+}
+
+function renderIdentity() {
+  const c = $("claimed");
+  if (state.claimed) { c.textContent = state.claimed; c.className = ""; }
+  else { c.textContent = "non déclarée"; c.className = "quiet"; }
+
+  const l = $("linetype");
+  if (state.lineType) {
+    l.textContent = LINE_TYPES[state.lineType] || state.lineType;
+    l.className = "";
+  } else { l.textContent = "inconnu"; l.className = "quiet"; }
+
+  $("mismatch").dataset.shown = state.mismatch ? "1" : "0";
+}
+
+/* --- transcription ----------------------------------------------------- */
+function addTurn(ev) {
+  const host = $("turns");
+  const first = host.querySelector(".empty");
+  if (first) first.remove();
+
+  const turn = el("div", "turn");
+  turn.dataset.who = ev.speaker === "victim" ? "victim" : "caller";
+  const who = el("div", "who");
+  who.appendChild(el("span", null, ev.speaker === "victim" ? "Victime" : "Appelant"));
+  who.appendChild(el("span", "at", secs(ev.t)));
+  turn.appendChild(who);
+  turn.appendChild(el("div", "txt", ev.data && ev.data.text ? ev.data.text : ""));
+  host.appendChild(turn);
+  host.scrollTop = host.scrollHeight;
+}
+
+/* --- journal ----------------------------------------------------------- */
+function addFeed(ev, kind, headline, iconHref, opts) {
+  const host = $("feed");
+  const first = host.querySelector(".empty");
+  if (first) first.remove();
+
+  const row = el("div", "ev");
+  row.dataset.kind = kind;
+  row.appendChild(el("div", "at", secs(ev.t)));
+
+  const body = el("div", "body");
+  const hl = el("div", "hl");
+  if (iconHref) hl.appendChild(svgUse(iconHref, 19));
+  hl.appendChild(el("span", "lbl", headline));
+  body.appendChild(hl);
+
+  const o = opts || {};
+  if (o.sub) body.appendChild(el("div", "sub", o.sub));
+  if (o.quote) body.appendChild(el("div", "quote", "« " + o.quote + " »"));
+  if ((o.tags && o.tags.length) || (o.breakers && o.breakers.length)) {
+    const tags = el("div", "tags");
+    (o.tags || []).forEach((t) => tags.appendChild(el("span", "tag", t)));
+    (o.breakers || []).forEach((b) => tags.appendChild(el("span", "tag brk", "coupe-circuit : " + b)));
+    body.appendChild(tags);
+  }
+  row.appendChild(body);
+
+  host.insertBefore(row, host.firstChild);
+  state.feedCount += 1;
+  while (host.children.length > 60) host.removeChild(host.lastChild);
+}
+
+function showBanner(ev) {
+  const a = ACTIONS[ev.data && ev.data.action] || { label: ev.data && ev.data.action, icon: "#i-intervene" };
+  $("bannerwho").textContent = a.label;
+  const msg = ev.data && ev.data.message ? String(ev.data.message).trim() : "";
+  $("bannerwhat").textContent = msg || "Action appliquée sur l'appel en cours.";
+  const b = $("banner");
+  b.dataset.shown = "1";
+  b.dataset.pulse = "0";
+  void b.offsetWidth;
+  b.dataset.pulse = "1";
+}
+
+/* --- le réducteur ------------------------------------------------------ */
+function applyEvent(ev) {
+  if (!ev || typeof ev !== "object" || !ev.type) return;
+  const d = ev.data || {};
+
+  if (ev.call_id && ev.call_id !== state.callId) {
+    if (state.callId !== null) resetForNewCall();
+    state.callId = ev.call_id;
+    $("callid").textContent = "appel " + ev.call_id;
+  }
+
+  switch (ev.type) {
+    case "transcript":
+      if (d.is_final === false) return;
+      addTurn(ev);
+      return;
+
+    case "keyword":
+      state.risks.keyword = d.risk;
+      renderSignals();
+      return;
+
+    case "voice":
+      state.risks.voice = d.risk;
+      renderSignals();
+      return;
+
+    case "llm": {
+      state.risks.llm = d.risk;
+      if (d.claimed_identity) state.claimed = d.claimed_identity;
+      renderSignals();
+      renderIdentity();
+      const expl = d.explanation ? String(d.explanation) : "";
+      if (expl && expl !== state.lastExplanation) {
+        state.lastExplanation = expl;
+        addFeed(ev, "llm", "Analyse du contenu", "#i-speak", {
+          quote: expl,
+          tags: Array.isArray(d.tactics) ? d.tactics : [],
+        });
+      }
+      return;
+    }
+
+    case "reputation": {
+      const wasMismatch = state.mismatch;
+      state.risks.reputation = d.risk;
+      if (d.line_type) state.lineType = d.line_type;
+      state.mismatch = Boolean(d.identity_mismatch);
+      renderSignals();
+      renderIdentity();
+      if (state.mismatch && !wasMismatch) {
+        addFeed(ev, "reputation", "Numéro incohérent avec l'identité annoncée", "#i-alert", {
+          tags: Array.isArray(d.reasons) ? d.reasons : [],
+        });
+      }
+      return;
+    }
+
+    case "score": {
+      const prev = state.level;
+      state.score = Math.round(Number(d.score) || 0);
+      state.level = LEVELS[d.level] ? d.level : "none";
+      state.reasons = Array.isArray(d.reasons) ? d.reasons : [];
+      state.breakers = Array.isArray(d.breakers_fired) ? d.breakers_fired : [];
+      renderScore();
+      /* Le score change à chaque signal : on ne journalise que les
+         franchissements de seuil, sinon le journal devient illisible. */
+      if (state.level !== prev) {
+        const lv = LEVELS[state.level];
+        addFeed(ev, "score", `Niveau « ${lv.label.toLowerCase()} » — score ${state.score}`, lv.icon, {
+          tags: Array.isArray(d.reasons) ? d.reasons.slice(0, 7) : [],
+          breakers: Array.isArray(d.breakers_fired) ? d.breakers_fired : [],
+        });
+      }
+      return;
+    }
+
+    case "action": {
+      const a = ACTIONS[d.action] || { label: String(d.action || "action"), icon: "#i-intervene" };
+      addFeed(ev, "action", a.label, a.icon, {
+        sub: d.ok === false ? "Échec de l'appel API Twilio." : undefined,
+        quote: d.message ? String(d.message).trim() : undefined,
+      });
+      if (d.ok !== false) showBanner(ev);
+      return;
+    }
+  }
+}
+
+function resetForNewCall() {
+  state.score = 0; state.level = "none";
+  state.risks = { llm: null, keyword: null, voice: null, reputation: null };
+  state.claimed = null; state.lineType = null; state.mismatch = false;
+  state.lastExplanation = null; state.reasons = []; state.breakers = [];
+  $("turns").textContent = "";
+  $("turns").appendChild(el("p", "empty", "Aucune parole transcrite pour l'instant."));
+  $("feed").textContent = "";
+  $("feed").appendChild(el("p", "empty", "Rien à signaler."));
+  $("banner").dataset.shown = "0";
+  renderScore(); renderSignals(); renderIdentity();
+}
+
+/* --- chemin LIVE : WebSocket + reconnexion progressive ----------------- */
+function setConn(kind, text) {
+  $("conn").dataset.conn = kind;
+  $("conntext").textContent = text;
+}
+
+function connectLive() {
+  let delay = 500;
+  let ws = null;
+
+  const open = () => {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    setConn("wait", "connexion…");
+    try {
+      ws = new WebSocket(`${proto}//${location.host}/ws/dashboard`);
+    } catch (err) {
+      return schedule();
+    }
+
+    ws.onopen = () => { delay = 500; setConn("up", "connecté"); };
+
+    ws.onmessage = (m) => {
+      let payload;
+      try { payload = JSON.parse(m.data); } catch (err) { return; }
+      if (payload && payload.type === "__replay__" && Array.isArray(payload.events)) {
+        payload.events.forEach(applyEvent);
+        return;
+      }
+      applyEvent(payload);
+    };
+
+    ws.onclose = () => schedule();
+    ws.onerror = () => { try { ws.close(); } catch (err) { /* onclose suit */ } };
+  };
+
+  const schedule = () => {
+    setConn("down", "hors ligne — reconnexion…");
+    setTimeout(open, delay);
+    delay = Math.min(8000, Math.round(delay * 1.6));
+  };
+
+  open();
+}
+
+/* --- chemin DÉMONSTRATION : aucun WebSocket, séquence en dur ------------
+   Reprise d'un vrai rejeu de `scenarios/scam_01_petit_fils.json`, pour que
+   Biz 1 puisse travailler la mise en forme sans backend.
+   ----------------------------------------------------------------------- */
+const DEMO_CALL = "CA_DEMO_SCAM_01";
+const DEMO_EVENTS = [
+  { t: 0.0, type: "reputation", data: { risk: 0.35, line_type: "unknown", in_contacts: false, identity_mismatch: false, reasons: ["numéro inconnu"] } },
+  { t: 0.0, type: "score", data: { score: 5, level: "none", reasons: ["numéro inconnu"], breakers_fired: [] } },
+
+  { t: 1.0, type: "transcript", speaker: "caller", data: { text: "Mamie ? Mamie c'est Lucas, tu m'entends ?", is_final: true } },
+  { t: 1.4, type: "keyword", data: { risk: 0.04, terms: ["mamie"] } },
+  { t: 1.8, type: "llm", data: { risk: 0.22, tactics: ["identité revendiquée"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant se présente comme un proche de la victime." } },
+  { t: 2.1, type: "reputation", data: { risk: 0.95, line_type: "nonFixedVoip", in_contacts: false, identity_mismatch: true, reasons: ["numéro inconnu", "numéro différent de celui de Lucas Martin", "ligne VoIP non fixe"] } },
+  { t: 2.3, type: "score", data: { score: 25, level: "none", reasons: ["identité revendiquée", "numéro inconnu"], breakers_fired: [] } },
+
+  { t: 4.0, type: "transcript", speaker: "victim", data: { text: "Lucas ? Mais ta voix est bizarre mon chéri", is_final: true } },
+  { t: 5.2, type: "voice", data: { risk: 0.68, windows_analyzed: 2 } },
+  { t: 5.4, type: "score", data: { score: 38, level: "none", reasons: ["identité revendiquée", "numéro inconnu", "voix possiblement synthétique"], breakers_fired: [] } },
+
+  { t: 7.0, type: "transcript", speaker: "caller", data: { text: "Oui c'est le téléphone, j'ai cassé le mien. Écoute, j'ai eu un accident avec la voiture.", is_final: true } },
+  { t: 7.6, type: "keyword", data: { risk: 0.33, terms: ["j'ai eu un accident", "mamie"] } },
+  { t: 8.2, type: "llm", data: { risk: 0.44, tactics: ["identité revendiquée", "pression émotionnelle"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant invoque un accident pour créer un sentiment d'urgence." } },
+  { t: 8.5, type: "score", data: { score: 48, level: "watch", reasons: ["identité revendiquée", "pression émotionnelle", "numéro inconnu"], breakers_fired: [] } },
+
+  { t: 12.0, type: "transcript", speaker: "victim", data: { text: "Mon Dieu, tu n'as rien ?", is_final: true } },
+
+  { t: 15.0, type: "transcript", speaker: "caller", data: { text: "Non ça va mais il faut payer le garage tout de suite sinon ils gardent la voiture.", is_final: true } },
+  { t: 15.7, type: "keyword", data: { risk: 0.53, terms: ["j'ai eu un accident", "tout de suite", "payer"] } },
+  { t: 16.4, type: "llm", data: { risk: 0.88, tactics: ["urgence", "paiement inhabituel", "identité revendiquée", "pression émotionnelle"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant réclame un paiement immédiat en se faisant passer pour votre petit-fils." } },
+  { t: 16.8, type: "score", data: { score: 85, level: "intervene", reasons: ["urgence", "paiement inhabituel", "identité revendiquée", "numéro inconnu"], breakers_fired: ["payment_request_with_identity_mismatch"] } },
+  { t: 17.1, type: "action", data: { action: "hold_caller", target: "caller", ok: true } },
+  { t: 17.5, type: "action", data: { action: "announce_victim", target: "victim", ok: true, message: "Nous avons mis l'appel en pause et prévenu Lucas Martin. L'appelant réclame un paiement immédiat en se faisant passer pour votre petit-fils." } },
+  { t: 18.0, type: "action", data: { action: "sms_contact", target: "trusted_contact", ok: true, message: "Est-ce toi qui appelles en ce moment ?" } },
+
+  { t: 21.0, type: "transcript", speaker: "caller", data: { text: "Il faut faire un virement de deux mille euros maintenant, c'est urgent.", is_final: true } },
+  { t: 21.6, type: "keyword", data: { risk: 0.77, terms: ["virement", "c'est urgent", "tout de suite"] } },
+  { t: 24.0, type: "transcript", speaker: "caller", data: { text: "Je t'explique, tu me donnes le code de ta carte bancaire et je m'occupe de tout.", is_final: true } },
+  { t: 24.6, type: "keyword", data: { risk: 0.88, terms: ["carte bancaire", "virement", "c'est urgent"] } },
+  { t: 27.0, type: "transcript", speaker: "caller", data: { text: "Et surtout ne dis rien à maman, elle va s'inquiéter pour rien.", is_final: true } },
+  { t: 27.6, type: "keyword", data: { risk: 0.96, terms: ["ne dis rien à", "carte bancaire", "virement"] } },
+  { t: 28.2, type: "llm", data: { risk: 0.95, tactics: ["urgence", "secret", "paiement inhabituel", "identité revendiquée"], claimed_identity: "Lucas, petit-fils", explanation: "L'appelant demande le secret et les coordonnées bancaires de la victime." } },
+  { t: 28.6, type: "score", data: { score: 92, level: "intervene", reasons: ["urgence", "secret", "paiement inhabituel", "numéro inconnu"], breakers_fired: ["payment_request_with_identity_mismatch", "llm_high_confidence"] } },
+];
+
+const DEMO_SPEED = 2.6;
+let demoTimers = [];
+
+function startDemo() {
+  $("demobadge").classList.remove("hidden");
+  $("replay").classList.remove("hidden");
+  setConn("up", "lecture de la démo");
+  $("replay").addEventListener("click", runDemo);
+  runDemo();
+}
+
+function runDemo() {
+  demoTimers.forEach(clearTimeout);
+  demoTimers = [];
+  state.callId = null;
+  resetForNewCall();
+  $("callid").textContent = "appel " + DEMO_CALL + " (démonstration)";
+
+  DEMO_EVENTS.forEach((ev) => {
+    const id = setTimeout(
+      () => applyEvent(Object.assign({ call_id: DEMO_CALL, speaker: null }, ev)),
+      (ev.t / DEMO_SPEED) * 1000
+    );
+    demoTimers.push(id);
+  });
+}
+
+/* --- amorçage ---------------------------------------------------------- */
+function initTheme() {
+  const btn = $("theme");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  let dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : prefersDark;
+  const paint = () => {
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    document.body.dataset.mode = dark ? "dark" : "light";
+    btn.textContent = dark ? "Thème clair" : "Thème sombre";
+  };
+  btn.addEventListener("click", () => { dark = !dark; paint(); });
+  paint();
+}
+
+function initTableToggle() {
+  const btn = $("tvtoggle");
+  btn.addEventListener("click", () => {
+    const tableNowVisible = btn.getAttribute("aria-pressed") !== "true";
+    btn.setAttribute("aria-pressed", String(tableNowVisible));
+    btn.textContent = tableNowVisible ? "Graphique" : "Tableau";
+    $("sigchart").classList.toggle("hidden", tableNowVisible);
+    $("sigtable").classList.toggle("hidden", !tableNowVisible);
+  });
+}
+
+buildSignals();
+initTheme();
+initTableToggle();
+renderScore();
+renderSignals();
+renderIdentity();
+
+if (new URLSearchParams(location.search).get("demo") === "1") {
+  startDemo();
+} else {
+  connectLive();
+}
+</script>
+</body>
+</html>

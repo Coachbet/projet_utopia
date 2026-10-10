@@ -1,0 +1,41 @@
+{
+  "owner": "Jeanne Moreau",
+  "contacts": [
+    {
+      "name": "Lucas Martin",
+      "phone_number": "+33612345678",
+      "relation": "petit-fils",
+      "aliases": ["Lucas", "Lucas Martin", "petit fils", "petit-fils"]
+    },
+    {
+      "name": "Camille Martin",
+      "phone_number": "06 987 654 32",
+      "relation": "fille",
+      "aliases": ["Camille", "maman de Lucas"]
+    },
+    {
+      "name": "Docteur Laurent",
+      "phone_number": "+33145678901",
+      "relation": "médecin",
+      "aliases": ["Laurent", "docteur", "cabinet médical"]
+    },
+    {
+      "name": "Madame Bernard",
+      "phone_number": "0156789012",
+      "relation": "voisine",
+      "aliases": ["Bernard", "la voisine"]
+    },
+    {
+      "name": "Thomas Moreau",
+      "phone_number": "+33678901234",
+      "relation": "fils",
+      "aliases": ["Thomas"]
+    },
+    {
+      "name": "Banque Crédit Mutuel",
+      "phone_number": "+33969321234",
+      "relation": "banque",
+      "aliases": ["crédit mutuel", "ma banque", "conseiller bancaire"]
+    }
+  ]
+}
