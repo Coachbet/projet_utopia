@@ -94,7 +94,6 @@ Les documents opérationnels :
 |---|---|
 | [`docs/terrain.md`](docs/terrain.md) | les sept vérifications à faire **avec un vrai téléphone**, avant de se fier au montage |
 | [`docs/script_demo.md`](docs/script_demo.md) | les trois scénarios de démo, minutés, avec leurs plans B |
-| [`docs/business_plan.md`](docs/business_plan.md) | problème, persona, cadre légal, coûts unitaires — chaque chiffre sourcé ou marqué `HYPOTHÈSE` |
 
 ## Les quatre signaux
 
