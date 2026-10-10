@@ -70,7 +70,10 @@ src/vocalguard/
 │   ├── alerts.py        # seuils et politique d'alerte
 │   ├── ports.py         # interfaces : Transcriber, ContentAnalyzer, CallController…
 │   └── scoring/         # somme pondérée + coupe-circuits
-├── application/         # orchestration : session d'appel, pipeline, intervention
+├── application/         # orchestration, dans le sens du flux :
+│   ├── sessions.py      #   Dev 1 — audio → transcription → événements `transcript`
+│   ├── scoring.py       #   Dev 2 — `transcript` → quatre signaux → `score`
+│   └── intervention.py  #   Dev 1 — `score` → attente, annonce, SMS
 ├── infrastructure/      # adapters, un par dépendance externe
 │   ├── telephony/       # Twilio : TwiML, μ-law, hold/announce, Lookup, SMS
 │   ├── aws/             # Transcribe streaming, Bedrock/Claude
@@ -98,6 +101,39 @@ Toute brique n'émet et ne consomme que ça. Schéma complet dans
 `victim` = la personne appelée (piste `outbound`). Les pistes séparées sont ce qui
 nous permet de savoir qui parle.
 
+## Endpoints (à régler dans la console Twilio)
+
+Le serveur est en place. Une fois `make tunnel` lancé et `PUBLIC_HOSTNAME` renseigné,
+il n'y a qu'une seule URL à coller dans la console : le webhook de réception du numéro.
+Tout le reste, Twilio le rappelle tout seul à partir du TwiML qu'on lui renvoie.
+
+| Route | Rôle |
+|---|---|
+| `POST /twilio/voice/inbound` | **À coller dans la console** (A call comes in). Branche `<Stream>` puis la conférence, et appelle la victime. |
+| `wss://…/ws/media` | Audio μ-law des deux pistes → transcription par locuteur |
+| `/twilio/voice/join/{call_id}` | TwiML de la jambe victime |
+| `/twilio/voice/announce/{call_id}` | Phrase dite à la victime seule (`announce_url`) |
+| `/twilio/voice/hold-music` | Ce qu'entend le scammeur en attente |
+| `/twilio/voice/status` | Fin d'appel : libère la session |
+| `GET /healthz` | Backend choisi, Twilio configuré ou non, appels en cours |
+
+Sans credentials Twilio, le serveur démarre quand même et **trace** les actions au lieu
+de les exécuter : le pipeline complet reste testable sans téléphone
+(`TRANSCRIBE_BACKEND=fake` + `make replay`).
+
+Pour Dev 2, deux points de branchement, sans rien modifier de l'existant :
+
+```python
+create_app(sink=mon_bus, audio_tap_factory=lambda session: mon_detecteur_de_voix)
+```
+
+- `sink` remplace la sortie console par le bus d'événements / le WebSocket du dashboard ;
+- `audio_tap_factory` reçoit l'audio PCM16 décodé de l'appelant (voix synthétique) ;
+- `CallSession.window()` donne la fenêtre glissante de transcript à envoyer à Claude,
+  `CallSession.signals` accueille les quatre signaux ;
+- `InterventionRunner.handle_event(event)` consomme un événement `score` et déclenche
+  les actions Twilio — c'est la seule chose à appeler pour fermer la boucle.
+
 ## Rôles
 
 | Rôle | Responsabilités | Premier livrable |
@@ -113,8 +149,9 @@ Le plus gros risque est la téléphonie. Ces vérifications passent avant tout l
 
 - [ ] **L'annonce n'est entendue que par la victime.** Sinon : coach via Agent
       Conference, ou mise en attente du scammeur avant chaque annonce.
-- [ ] Le rôle AWS autorise `transcribe:StartStreamTranscription` (`make check-aws`).
-      Sinon : Whisper local par morceaux.
+- [x] Le rôle AWS autorise `transcribe:StartStreamTranscription` **et** Bedrock répond
+      — vérifié le 10/10 avec `make check-aws` (rôle `WSParticipantRole`, `us-west-2`,
+      `fr-FR` en 8 kHz). Le repli Whisper n'est donc pas nécessaire.
 - [ ] Tous les téléphones de la démo sont vérifiés dans la console Twilio.
       Un compte d'essai n'appelle que des numéros vérifiés, depuis le pays
       d'inscription. Créditer ~20 $ lève ces limites.

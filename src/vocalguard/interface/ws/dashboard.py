@@ -1,14 +1,17 @@
 """Routes du dashboard : la page et son flux d'événements.
 
-Exposé comme un `APIRouter` et non comme une application : Dev 1 possède
-`interface/app.py` (webhooks TwiML, WebSocket média) et n'a qu'à inclure ce
-routeur.
+Monté par `create_app` via `_mount_dashboard`, qui attend précisément ce chemin
+et un attribut `router` au niveau du module — d'où le `HUB` module, et pas une
+fabrique seule.
 
-    from vocalguard.interface.dashboard import create_dashboard_router
-    from vocalguard.interface.event_hub import EventHub
+Le `HUB` est la destination des événements : l'appelant le compose dans le sink
+pour que le pipeline l'alimente.
 
-    hub = EventHub()                      # à passer aussi au ScoringPipeline
-    app.include_router(create_dashboard_router(hub))
+    from vocalguard.interface.ws.dashboard import HUB
+    sink = FanOutSink(ConsoleEventSink(), HUB, intervention, pipeline)
+
+`create_dashboard_router` reste disponible pour les tests, qui ont besoin d'un
+hub isolé plutôt que du singleton.
 """
 
 from __future__ import annotations
@@ -23,7 +26,8 @@ from vocalguard.interface.event_hub import EventHub
 
 logger = logging.getLogger(__name__)
 
-DASHBOARD_HTML = Path(__file__).parent / "static" / "dashboard.html"
+# `interface/ws/dashboard.py` -> `interface/static/dashboard.html`
+DASHBOARD_HTML = Path(__file__).parent.parent / "static" / "dashboard.html"
 
 
 def create_dashboard_router(hub: EventHub) -> APIRouter:
@@ -59,3 +63,9 @@ def create_dashboard_router(hub: EventHub) -> APIRouter:
             await hub.unsubscribe(send)
 
     return router
+
+
+HUB = EventHub()
+"""Destination par défaut des événements, alimentée par le sink de `create_app`."""
+
+router = create_dashboard_router(HUB)

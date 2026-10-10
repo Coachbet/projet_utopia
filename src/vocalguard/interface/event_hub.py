@@ -27,7 +27,7 @@ class EventHub:
         self._history: deque[dict[str, Any]] = deque(maxlen=history)
         self._lock = asyncio.Lock()
 
-    async def publish(self, event: Event) -> None:
+    async def emit(self, event: Event) -> None:
         payload = event.to_wire()
         self._history.append(payload)
         await self._fanout(payload)

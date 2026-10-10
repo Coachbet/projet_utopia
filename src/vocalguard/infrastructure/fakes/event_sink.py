@@ -1,0 +1,85 @@
+"""Doublures du port `EventSink`.
+
+Le vrai bus d'événements est la part de Dev 2 (sa tâche 7) : ces trois classes
+sont des doublures minimales, pas un bus. Elles existent pour que Dev 1 puisse
+tester le pipeline et rejouer un scénario sans attendre le bus, et pour que les
+assertions des tests portent sur des objets `Event` réels. À remplacer par le
+bus dès qu'il est là — le port est le même, il n'y aura rien à changer ailleurs.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING
+
+from vocalguard.domain.events import Event, EventType
+
+if TYPE_CHECKING:
+    from vocalguard.domain.ports import EventSink
+
+logger = logging.getLogger(__name__)
+
+
+class InMemoryEventSink:
+    """Garde tout en mémoire : c'est ce qui rend les tests observables."""
+
+    def __init__(self) -> None:
+        self.events: list[Event] = []
+
+    async def emit(self, event: Event) -> None:
+        self.events.append(event)
+
+    def by_type(self, type: EventType | str) -> list[Event]:
+        """Accepte l'enum comme la forme wire (`"transcript"`), au choix de l'appelant."""
+        wanted = EventType(type)
+        return [event for event in self.events if event.type is wanted]
+
+    def clear(self) -> None:
+        self.events.clear()
+
+
+class ConsoleEventSink:
+    """Une ligne par événement, pour suivre un replay à l'œil nu dans le terminal.
+
+    `print` et pas `logging` : c'est la sortie utile d'un script de replay, elle
+    ne doit pas dépendre du niveau de log configuré.
+    """
+
+    async def emit(self, event: Event) -> None:
+        speaker = event.speaker or "-"
+        payload = json.dumps(event.data, ensure_ascii=False, default=str)
+        print(f"[{event.t:6.2f}s] {event.type.value:<10} {speaker:<7} {payload}")
+
+
+class FanOutSink:
+    """Diffuse chaque événement vers plusieurs destinations (dashboard + console + tests).
+
+    Un sink qui lève ne doit pas priver les autres de l'événement : pendant la
+    démo, un dashboard déconnecté ne doit pas interrompre le pipeline. Diffusion
+    séquentielle, pour que l'ordre des événements reste celui de l'émission.
+    """
+
+    def __init__(self, *sinks: EventSink) -> None:
+        self._sinks: list[EventSink] = list(sinks)
+
+    def add(self, sink: EventSink) -> None:
+        """Abonne une destination après coup.
+
+        Nécessaire parce que le câblage est circulaire : la session a besoin du
+        sink pour émettre, et le pipeline de score a besoin de la session pour
+        retrouver l'appel — donc il ne peut pas être construit avant le sink.
+        """
+        self._sinks.append(sink)
+
+    async def emit(self, event: Event) -> None:
+        for sink in self._sinks:
+            try:
+                await sink.emit(event)
+            except Exception:
+                logger.warning(
+                    "sink %s en échec sur un événement %s, on continue",
+                    type(sink).__name__,
+                    event.type.value,
+                    exc_info=True,
+                )

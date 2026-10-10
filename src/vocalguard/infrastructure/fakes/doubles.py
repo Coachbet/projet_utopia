@@ -1,16 +1,19 @@
-"""Doublures : tout le pipeline sans téléphone, sans AWS, sans réseau.
+"""Doublures des signaux de Dev 2 : tout le pipeline sans AWS ni réseau.
 
 C'est ce qui permet à Dev 2 et Biz 1 d'avancer pendant que la téléphonie se
 monte, et de rejouer un scénario écrit (`make replay`) de façon déterministe.
+
+Les doublures de Dev 1 vivent à côté : `fakes/event_sink.py` (dont
+`InMemoryEventSink` et `FanOutSink`), `fakes/transcriber.py` et
+`fakes/call_controller.py`. Rien n'est dupliqué ici.
 """
 
 from __future__ import annotations
 
-import logging
 import re
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 
-from vocalguard.domain.events import Event, Speaker
+from vocalguard.domain.events import Speaker
 from vocalguard.domain.models import (
     Contact,
     ContentSignal,
@@ -19,35 +22,6 @@ from vocalguard.domain.models import (
     TranscriptSegment,
     VoiceSignal,
 )
-
-logger = logging.getLogger(__name__)
-
-
-class InMemoryEventSink:
-    """Garde tout en mémoire, et peut relayer vers un abonné (le dashboard)."""
-
-    def __init__(self, relay: Callable[[Event], Awaitable[None]] | None = None) -> None:
-        self.events: list[Event] = []
-        self._relay = relay
-
-    async def publish(self, event: Event) -> None:
-        self.events.append(event)
-        if self._relay is not None:
-            await self._relay(event)
-
-    def of_type(self, type_: str) -> list[Event]:
-        return [e for e in self.events if e.type.value == type_]
-
-    @property
-    def last_score(self) -> int | None:
-        scores = self.of_type("score")
-        return scores[-1].data.get("score") if scores else None
-
-    @property
-    def last_level(self) -> str | None:
-        scores = self.of_type("score")
-        return scores[-1].data.get("level") if scores else None
-
 
 # Marqueurs du scénario d'arnaque. Volontairement grossiers : la doublure sert à
 # vérifier le câblage du pipeline, pas à remplacer le jugement de Claude.
@@ -66,7 +40,16 @@ _TACTIC_PATTERNS: tuple[tuple[str, str], ...] = (
     ("pression émotionnelle", r"accident|hôpital|hopital|prison|problème|probleme|peur|pleure"),
 )
 
-_IDENTITY_RE = re.compile(r"c'est\s+(?:moi\s*,?\s*)?([A-ZÉÈÀÂÎÔÛÇ][\wéèàâîôûç'-]+)", re.UNICODE)
+_IDENTITY_RE = re.compile(
+    # `(?i:...)` seulement sur l'amorce : la majuscule du prénom est justement ce
+    # qui le distingue d'un mot courant, donc la capture reste sensible à la casse.
+    # Sans ça, « C'est Lucas » en début de phrase n'était pas reconnu et le
+    # coupe-circuit paiement + identité ne s'armait jamais en mode hors ligne.
+    # U+2019 est l'apostrophe typographique, que la reconnaissance vocale
+    # produit aussi souvent que l'apostrophe droite.
+    r"(?i:c['\u2019]est)\s+(?:moi\s*,?\s*)?([A-ZÉÈÀÂÎÔÛÇ][\wéèàâîôûç'\u2019-]+)",
+    re.UNICODE,
+)
 
 
 class FakeContentAnalyzer:
@@ -81,8 +64,8 @@ class FakeContentAnalyzer:
         self._per_tactic = risk_per_tactic
         self._max = max_risk
 
-    async def analyze(self, turns: Sequence[TranscriptSegment]) -> ContentSignal | None:
-        caller_text = " ".join(t.text for t in turns if t.is_final and t.speaker == "caller")
+    async def analyze(self, window: Sequence[TranscriptSegment]) -> ContentSignal | None:
+        caller_text = " ".join(t.text for t in window if t.is_final and t.speaker == "caller")
         if not caller_text.strip():
             return None
 
@@ -114,6 +97,7 @@ class FakeVoiceDetector:
         self._windows = 0
 
     async def feed(self, speaker: Speaker, pcm16: bytes, sample_rate: int) -> VoiceSignal | None:
+        # Seul l'appelant est suspecté : la victime n'est pas sous surveillance.
         if speaker != "caller":
             return None
         self._windows += 1
@@ -143,9 +127,10 @@ class FakeReputationChecker:
         )
 
     async def check(
-        self, phone_number: str, claimed_identity: str | None = None
+        self, phone_number: str, *, claimed_identity: str | None = None
     ) -> ReputationSignal:
-        # Le mismatch ne peut exister que si une identité est revendiquée.
+        # Le mismatch ne peut exister que si une identité est revendiquée : sans
+        # identité, il n'y a rien à contredire.
         if claimed_identity is None and self._signal.identity_mismatch:
             return ReputationSignal(
                 risk=self._signal.risk,
@@ -176,28 +161,3 @@ class StaticContactBook:
 
     def all(self) -> Sequence[Contact]:
         return self._contacts
-
-
-class RecordingCallController:
-    """Enregistre les actions au lieu de les exécuter, et les journalise."""
-
-    def __init__(self, *, succeed: bool = True) -> None:
-        self.calls: list[tuple[str, str, str]] = []
-        self._succeed = succeed
-
-    def _record(self, kind: str, target: str, message: str = "") -> bool:
-        self.calls.append((kind, target, message))
-        logger.info("[action] %s -> %s %s", kind, target, message)
-        return self._succeed
-
-    async def announce(self, target: str, message: str) -> bool:
-        return self._record("announce", target, message)
-
-    async def hold(self, target: str) -> bool:
-        return self._record("hold", target)
-
-    async def resume(self, target: str) -> bool:
-        return self._record("resume", target)
-
-    async def send_sms(self, to: str, message: str) -> bool:
-        return self._record("sms", to, message)

@@ -1,0 +1,17 @@
+{
+  "_comment": "FIXTURE TECHNIQUE DE DEV 1 — sert uniquement à vérifier que le pipeline de replay tourne (make replay). Ce n'est PAS un scénario de démo : les 3 arnaques + 2 appels légitimes sont la part de Biz 1 et vivent dans d'autres fichiers de ce dossier. Ne pas l'utiliser devant le jury, et ne pas calibrer les poids dessus.",
+  "_format": "call_id (str), caller_number / victim_number (E.164), turns[] = {t: secondes depuis le debut de l'appel, speaker: caller|victim, text: str, is_final: bool optionnel, defaut true}",
+  "call_id": "CA_smoke_technique",
+  "caller_number": "+15551234567",
+  "victim_number": "+33600000000",
+  "turns": [
+    { "t": 0.5, "speaker": "caller", "text": "Mamie ? C'est Lucas. Ne raccroche pas, s'il te plaît." },
+    { "t": 4.0, "speaker": "victim", "text": "Lucas ? Tu as une drôle de voix, mon grand." },
+    { "t": 7.5, "speaker": "caller", "text": "J'ai eu un accident avec la voiture, je suis au commissariat." },
+    { "t": 12.0, "speaker": "victim", "text": "Mon Dieu, tu n'as rien de cassé ?" },
+    { "t": 15.0, "speaker": "caller", "text": "Ça va, mais il faut payer la caution tout de suite, sinon ils me gardent cette nuit." },
+    { "t": 20.5, "speaker": "victim", "text": "Combien est-ce qu'il faut ?" },
+    { "t": 23.0, "speaker": "caller", "text": "Mille huit cents euros en liquide. Surtout ne dis rien à papa, il va me tuer." },
+    { "t": 29.0, "speaker": "caller", "text": "Un coursier passe chez toi dans vingt minutes pour prendre l'argent, c'est urgent." }
+  ]
+}

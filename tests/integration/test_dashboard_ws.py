@@ -7,12 +7,13 @@ porte un `asyncio.Lock`, qui ne supporte pas d'être utilisé depuis deux boucle
 from __future__ import annotations
 
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
 from vocalguard.domain.events import Event, EventType
-from vocalguard.interface.dashboard import DASHBOARD_HTML, create_dashboard_router
+from vocalguard.domain.ports import EventSink
 from vocalguard.interface.event_hub import EventHub
+from vocalguard.interface.ws.dashboard import DASHBOARD_HTML, create_dashboard_router
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def app_and_hub() -> tuple[FastAPI, EventHub]:
 
     @app.post("/_emit/{score}")
     async def emit(score: int) -> dict[str, bool]:
-        await hub.publish(
+        await hub.emit(
             Event(
                 call_id="CA1",
                 t=float(score),
@@ -100,3 +101,24 @@ def test_dashboard_page_is_served():
         response = client.get("/dashboard")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+
+
+def test_event_hub_satisfies_the_event_sink_port():
+    """Le hub est branché dans le `FanOutSink` : s'il ne respecte pas le port,
+    le dashboard reste muet pendant toute la démo sans qu'aucun test ne tombe."""
+    assert isinstance(EventHub(), EventSink)
+
+
+def test_mount_contract_expected_by_create_app():
+    """`_mount_dashboard` fait exactement cet import et lit `.router`.
+
+    Il avale `ImportError` pour pouvoir démarrer sans dashboard : une erreur
+    d'import ici serait donc silencieuse, d'où ce test.
+    """
+    from vocalguard.interface.ws import dashboard
+
+    assert isinstance(dashboard.router, APIRouter)
+    assert isinstance(dashboard.HUB, EventHub)
+
+    routes = {getattr(r, "path", None) for r in dashboard.router.routes}
+    assert {"/dashboard", "/ws/dashboard"} <= routes
