@@ -116,8 +116,20 @@
         },
         "action": {
           "type": "string",
-          "enum": ["announce_victim", "hold_caller", "resume_caller", "sms_contact", "notify_dashboard"],
-          "description": "action : effet applique via l'API Twilio Participants."
+          "enum": [
+            "announce_victim",
+            "hold_caller",
+            "resume_caller",
+            "sms_contact",
+            "notify_dashboard",
+            "trusted_passthrough",
+            "caller_notice",
+            "verify_requested",
+            "identity_verified",
+            "verify_expired",
+            "spoof_simulated"
+          ],
+          "description": "action : effet applique sur l'appel. Les cinq premiers passent par l'API Twilio Participants (cf. domain.alerts.ActionKind) ; les suivants sont des faits de routage ou de verification d'identite, ajoutes apres H0 SANS nouveau `type` d'evenement — c'est la seule extension autorisee par le contrat fige. trusted_passthrough : appel de confiance transmis sans analyse. caller_notice : annonce d'analyse jouee a l'appelant inconnu. verify_requested / identity_verified / verify_expired : verification d'identite par code a 4 chiffres. spoof_simulated : usurpation de numero SIMULEE en mode demo (DEMO_SPOOF_AS)."
         },
         "target": {
           "type": "string",

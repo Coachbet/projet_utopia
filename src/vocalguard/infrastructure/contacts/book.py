@@ -13,7 +13,7 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
-from vocalguard.domain.models import Contact
+from vocalguard.domain.models import Contact, ContactMode
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +80,43 @@ def _match_strength(contact: Contact, needle: str) -> tuple[int, int]:
     return best
 
 
+_MODES: tuple[str, ...] = ("trusted", "analyze")
+
+
+def _mode_of(entry: dict, name: str) -> ContactMode:
+    """Lit `mode` dans une entrée JSON, en se rabattant sur le défaut documenté.
+
+    Champ absent → `trusted` : c'est la règle (être au carnet, c'est être de
+    confiance) et c'est ce qui garde le carnet d'avant le Lot 1 utilisable.
+
+    Valeur inconnue (faute de frappe, `"Trusted"`, `"analyse"` en français) →
+    `trusted` **avec un avertissement**. On aurait pu choisir `analyze`, « plus
+    prudent » : ce serait prudent pour la détection et faux pour la vie privée.
+    Une coquille mettrait alors la famille sous écoute en silence, alors que
+    notre promesse est l'inverse. On applique donc le défaut annoncé, et on le
+    dit assez fort pour que l'intention réelle soit corrigée dans le fichier.
+    """
+    raw = entry.get("mode")
+    if raw is None:
+        return "trusted"
+    if raw in _MODES:
+        return raw  # type: ignore[return-value]
+    logger.warning(
+        "Contact %s : mode %r inconnu (attendu %s) — traité comme « trusted », "
+        "donc transmis sans analyse. Corriger le carnet si l'intention était l'inverse.",
+        name,
+        raw,
+        " ou ".join(_MODES),
+    )
+    return "trusted"
+
+
 class JsonContactBook:
     """Implémente le port `ContactBook`."""
 
-    def __init__(self, contacts: Sequence[Contact] = ()) -> None:
+    def __init__(self, contacts: Sequence[Contact] = (), *, owner: str = "") -> None:
         self._contacts = tuple(contacts)
+        self._owner = owner
         self._by_number: dict[str, Contact] = {}
         for contact in self._contacts:
             key = normalize_number(contact.phone_number)
@@ -113,11 +145,24 @@ class JsonContactBook:
                 phone_number=e["phone_number"],
                 relation=e.get("relation", ""),
                 aliases=tuple(e.get("aliases", ())),
+                mode=_mode_of(e, e["name"]),
             )
             for e in entries
             if e.get("name") and e.get("phone_number")
         ]
-        return cls(contacts)
+        owner = payload.get("owner", "") if isinstance(payload, dict) else ""
+        return cls(contacts, owner=str(owner or ""))
+
+    @property
+    def owner(self) -> str:
+        """Nom de la personne protégée, tel que le carnet le déclare.
+
+        Sert au SMS de vérification : « si c'est bien toi qui appelles Jeanne en
+        ce moment… ». Un prénom rend le message immédiatement compréhensible pour
+        le proche qui le reçoit ; sans lui, le SMS parle d'un appel sans dire
+        chez qui. Chaîne vide si le carnet ne le déclare pas — l'appelant doit
+        alors formuler sa phrase sans nom, pas inventer un nom."""
+        return self._owner
 
     def by_number(self, phone_number: str) -> Contact | None:
         return self._by_number.get(normalize_number(phone_number))

@@ -60,11 +60,23 @@ class CallSession:
         caller_number: str = "",
         victim_number: str = "",
         audio_tap: AudioConsumer | None = None,
+        transcribe: bool = True,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.call_id = call_id
         self.caller_number = caller_number
         self.victim_number = victim_number
+        self.transcribe = transcribe
+        """Faux pour un appel de CONFIANCE : la session existe, mais aucune
+        transcription n'est ouverte.
+
+        La session doit exister même sans analyse — c'est elle que retrouvent
+        `/control/calls/{id}/…` (vérification d'identité, mise en attente) et le
+        dashboard. Mais un appel de la famille ne s'écoute pas : `start()` sort
+        alors sans ouvrir de stream Transcribe. Le TwiML de ces appels ne porte
+        d'ailleurs aucun `<Stream>`, donc aucun octet d'audio n'arrive jusqu'ici
+        — ce drapeau évite en plus d'ouvrir deux connexions AWS facturées pour
+        une piste qui restera muette."""
         self.stream_sid: str | None = None
         self.history: list[TranscriptSegment] = []
         self.signals = SignalSet()
@@ -130,6 +142,17 @@ class CallSession:
         de quel locuteur il s'agit, et `self._streams` ne reçoit que les pistes
         réellement ouvertes — un `gather` qui renverrait des exceptions mêlées à
         des streams obligerait à re-corréler les positions avec `_SPEAKERS`."""
+        if not self.transcribe:
+            # Appel de confiance : on ne l'écoute pas. Au niveau INFO parce que
+            # c'est une décision produit visible, pas un détail — devant un jury
+            # comme en débogage, « pourquoi n'y a-t-il pas de transcript ? » doit
+            # trouver sa réponse dans le journal.
+            logger.info(
+                "appel %s ouvert sans transcription (contact de confiance) : "
+                "aucune piste Transcribe, aucun audio analysé",
+                self.call_id,
+            )
+            return
         await asyncio.gather(*(self._open_stream(speaker) for speaker in _SPEAKERS))
 
     async def _open_stream(self, speaker: Speaker) -> None:
@@ -295,6 +318,7 @@ class SessionRegistry:
         *,
         caller_number: str = "",
         victim_number: str = "",
+        transcribe: bool = True,
         clock: Callable[[], float] | None = None,
     ) -> CallSession:
         """Ouvre (ou retrouve) la session de `call_id`.
@@ -302,6 +326,10 @@ class SessionRegistry:
         `clock=None` signifie « celle du registre » : un appelant qui n'a rien à
         dire sur le temps n'a rien à passer, et le rejeu peut quand même imposer
         son horloge appel par appel.
+
+        `transcribe=False` ouvre une session **sans écoute**, pour un appel de
+        confiance (cf. `CallSession.transcribe`). Le défaut reste `True` : tout
+        appelant est analysé sauf décision explicite du routage.
         """
         existing = self._sessions.get(call_id)
         if existing is not None:
@@ -317,6 +345,7 @@ class SessionRegistry:
             settings=self._settings,
             caller_number=caller_number,
             victim_number=victim_number,
+            transcribe=transcribe,
             clock=self._clock if clock is None else clock,
         )
         if self._audio_tap_factory is not None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 from vocalguard.domain.alerts import AlertLevel
 from vocalguard.domain.events import Speaker
@@ -36,6 +37,19 @@ class LineType(StrEnum):
     UNKNOWN = "unknown"
 
 
+ContactMode = Literal["trusted", "analyze"]
+"""Ce qu'on fait d'un appel venant de ce contact.
+
+`trusted` : transmis tel quel. Aucune annonce à l'appelant, aucun flux audio
+ouvert, aucune transcription — la famille n'est pas écoutée, et c'est la promesse
+produit, pas un réglage de performance.
+
+`analyze` : traité comme un inconnu (annonce à l'appelant puis analyse). Utile
+pour une entrée qu'on garde au carnet pour la reconnaître à l'écran sans lui
+accorder le silence : une banque, un démarcheur toléré, un numéro dont on doute.
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class Contact:
     """Entrée du carnet d'adresses de la victime."""
@@ -44,6 +58,17 @@ class Contact:
     phone_number: str
     relation: str = ""
     aliases: tuple[str, ...] = ()
+    mode: ContactMode = "trusted"
+    """Défaut `trusted` : être au carnet, c'est être de confiance.
+
+    C'est aussi ce qui rend le carnet existant rétrocompatible — aucune entrée ne
+    porte ce champ, et toutes doivent continuer à passer sans analyse."""
+
+    @property
+    def is_trusted(self) -> bool:
+        """Raccourci lisible côté routage : `contact.is_trusted` plutôt qu'une
+        comparaison de chaîne répétée dans le webhook et dans ses tests."""
+        return self.mode == "trusted"
 
     def matches_identity(self, claimed: str) -> bool:
         """L'identité revendiquée par l'appelant désigne-t-elle ce contact ?
