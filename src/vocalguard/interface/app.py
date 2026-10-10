@@ -22,6 +22,7 @@ from vocalguard.application.scoring import ScoringPipeline, build_pipeline
 from vocalguard.application.sessions import CallSession, SessionRegistry
 from vocalguard.config import Settings, get_settings
 from vocalguard.domain.ports import AudioConsumer, EventSink, Transcriber
+from vocalguard.infrastructure.contacts.book import JsonContactBook
 from vocalguard.infrastructure.fakes.call_controller import LoggingCallController
 from vocalguard.infrastructure.fakes.event_sink import ConsoleEventSink, FanOutSink
 from vocalguard.infrastructure.fakes.transcriber import FakeTranscriber
@@ -92,6 +93,13 @@ def create_app(
             return audio_tap_factory(session)
         return pipeline.audio_tap(session) if pipeline is not None else None
 
+    # Le carnet est chargé ICI, une fois, et partagé. Trois consommateurs en ont
+    # besoin — le routage liste blanche / analyse (`webhooks.py`), le choix du
+    # destinataire du code de vérification (`application/verification.py`) et le
+    # signal de réputation (`build_pipeline`) — et aucun ne doit relire le JSON
+    # dans le chemin de réponse d'un webhook Twilio.
+    contacts = JsonContactBook.from_path(settings.contacts_path)
+
     registry = SessionRegistry(
         transcriber_factory=transcriber_factory or _transcriber_factory(settings),
         sink=fanout,
@@ -104,7 +112,7 @@ def create_app(
         settings=settings,
         registry=registry,
     )
-    pipeline = build_pipeline(settings, registry)
+    pipeline = build_pipeline(settings, registry, contacts=contacts)
 
     # L'ordre compte : l'intervention avant le pipeline, pour qu'un `score` soit
     # traité avant que le segment suivant ne le remplace ; le pipeline en
@@ -131,6 +139,7 @@ def create_app(
     app.state.sink = sink
     app.state.registry = registry
     app.state.controller = controller
+    app.state.contacts = contacts
     app.state.intervention = intervention
     app.state.pipeline = pipeline
     # L'annonce vocale passe par cette file : le webhook `announce_url` y lit le

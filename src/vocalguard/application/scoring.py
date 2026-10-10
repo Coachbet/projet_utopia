@@ -40,6 +40,7 @@ from vocalguard.domain.scoring.engine import assess
 
 if TYPE_CHECKING:
     from vocalguard.domain.ports import (
+        ContactBook,
         ContentAnalyzer,
         KeywordEngine,
         ReputationChecker,
@@ -377,11 +378,21 @@ class ScoringPipeline:
         return assessment
 
 
-def build_pipeline(settings: Settings, registry: SessionRegistry) -> ScoringPipeline:
+def build_pipeline(
+    settings: Settings,
+    registry: SessionRegistry,
+    *,
+    contacts: ContactBook | None = None,
+) -> ScoringPipeline:
     """Câble la moitié Dev 2 : les quatre signaux et le moteur de score.
 
     Vit ici et pas dans `interface/app.py` : ce sont les adapters de Dev 2, donc
     en ajouter un ne doit pas obliger à éditer le fichier de Dev 1.
+
+    `contacts` est à passer quand l'appelant a déjà chargé le carnet — c'est le
+    cas de `create_app`, qui le partage avec le routage liste blanche et la
+    vérification d'identité. Omis, le carnet est relu depuis `contacts_path`,
+    pour que les tests et `make replay` construisent un pipeline d'une ligne.
 
     Imports tardifs : `torch` (installé seulement par `make install-voice`) et
     `boto3` (qui veut des credentials) ne doivent pas être exigés pour démarrer
@@ -411,7 +422,8 @@ def build_pipeline(settings: Settings, registry: SessionRegistry) -> ScoringPipe
         # de 4 s, et en partager un entre deux appels donnerait un score absurde.
         return Wav2VecVoiceDetector()
 
-    contacts = JsonContactBook.from_path(settings.contacts_path)
+    if contacts is None:
+        contacts = JsonContactBook.from_path(settings.contacts_path)
     return ScoringPipeline(
         registry=registry,
         keyword_engine=KeywordDetector(),
