@@ -32,7 +32,14 @@ _TACTIC_PATTERNS: tuple[tuple[str, str], ...] = (
         "paiement inhabituel",
         r"virement|paiement|payer|carte cadeau|crypto|bitcoin|coursier|mandat|iban|rib",
     ),
-    ("fausse autorité", r"police|gendarmerie|banque|impôts|impots|huissier|technicien"),
+    # « banque » a été retiré sciemment : une banque qui se nomme n'usurpe rien,
+    # et la vraie banque de la victime l'appelle pour de bonnes raisons. Le
+    # coupe-circuit `false_authority_with_payment` plancherait alors à 85 sur un
+    # conseiller qui fait correctement son travail — mesuré, risque 0,88. Le vrai
+    # Claude ne pose « fausse autorité » que s'il JUGE l'autorité usurpée ; cette
+    # liste n'est qu'une correspondance de mots, donc elle doit se limiter aux
+    # institutions qu'on n'a aucune raison d'avoir au téléphone.
+    ("fausse autorité", r"police|gendarmerie|gendarme|impôts|impots|huissier|technicien"),
     (
         "identité revendiquée",
         r"c'est moi|c'est ton|c'est votre|mamie|papi|petit[- ]fils|ton fils|ta fille",

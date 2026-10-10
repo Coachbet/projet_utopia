@@ -1,0 +1,27 @@
+{
+  "title": "Le vrai conseiller bancaire (le faux positif le plus dangereux)",
+  "notes": "Le conseiller réel de la victime, depuis le numéro que le carnet d'adresses connaît à « Banque Crédit Mutuel », pour un vrai débit frauduleux sur son compte. L'appel contient légitimement presque tout notre vocabulaire le plus lourdement pondéré : virement, carte bancaire, urgent, votre compte, code. C'est exactement ce qu'un conseiller doit dire. Ce qui le sépare de scam_02 : il ne demande JAMAIS de déplacer de l'argent ni de communiquer un code — il dit l'inverse, et il propose de rappeler le numéro au dos de la carte. Raison d'être du scénario : les deux autres appels légitimes ont un risque mots-clés quasi nul (0,039 et 0,148), donc ils ne pourraient pas détecter une surpondération des mots-clés. Celui-ci est le garde-fou de cet axe.",
+  "call_id": "CA_DEMO_LEGIT_03",
+  "caller_number": "+33969321234",
+  "expect": {
+    "max_score": 39,
+    "level": "none"
+  },
+  "turns": [
+    { "t": 1.0, "speaker": "caller", "text": "Bonjour madame Moreau, Julien Fabre, votre conseiller au Crédit Mutuel de Vannes." },
+    { "t": 6.0, "speaker": "victim", "text": "Ah bonjour monsieur Fabre, oui je vous reconnais" },
+    { "t": 9.0, "speaker": "caller", "text": "Je vous appelle parce qu'on a bloqué un paiement sur votre carte bancaire hier soir, quatre-vingt-dix euros chez un marchand en ligne à l'étranger." },
+    { "t": 17.0, "speaker": "victim", "text": "Quatre-vingt-dix euros ? Mais je n'ai rien acheté moi" },
+    { "t": 21.0, "speaker": "caller", "text": "C'est bien ce qu'on pensait. Le paiement est refusé, vous n'avez rien perdu, votre compte est à l'abri." },
+    { "t": 28.0, "speaker": "victim", "text": "Oh là là. Qu'est-ce qu'il faut faire alors ?" },
+    { "t": 32.0, "speaker": "caller", "text": "Rien dans l'urgence, justement. On a fait opposition sur la carte, et une nouvelle carte bancaire part par courrier cette semaine." },
+    { "t": 40.0, "speaker": "victim", "text": "Et mon virement pour le loyer, il va passer quand même ?" },
+    { "t": 45.0, "speaker": "caller", "text": "Oui, les virements ne sont pas concernés, seule la carte est bloquée. Votre loyer partira normalement le cinq." },
+    { "t": 53.0, "speaker": "victim", "text": "D'accord, vous me rassurez" },
+    { "t": 56.0, "speaker": "caller", "text": "Et je vous le redis, parce qu'il y a beaucoup d'escroqueries en ce moment : ne communiquez jamais votre code à personne, même à quelqu'un qui dit appeler de la banque. Nous, on ne vous le demandera jamais." },
+    { "t": 68.0, "speaker": "victim", "text": "C'est noté, je ne dirai rien à personne" },
+    { "t": 72.0, "speaker": "caller", "text": "Si vous avez un doute sur un appel, raccrochez et rappelez le numéro au dos de votre carte. Vous tomberez toujours sur nous." },
+    { "t": 80.0, "speaker": "victim", "text": "Merci beaucoup monsieur Fabre, bonne journée" },
+    { "t": 84.0, "speaker": "caller", "text": "Bonne journée madame Moreau. Passez à l'agence quand vous voulez pour la nouvelle carte." }
+  ]
+}

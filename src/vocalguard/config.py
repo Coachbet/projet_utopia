@@ -15,8 +15,8 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from vocalguard.domain.alerts import Thresholds
-from vocalguard.domain.scoring.weights import Weights
+from vocalguard.domain.alerts import DEFAULT_THRESHOLDS, Thresholds
+from vocalguard.domain.scoring.weights import DEFAULT_WEIGHTS, Weights
 
 TranscribeBackend = Literal["aws", "whisper_local", "fake"]
 
@@ -94,14 +94,19 @@ class Settings(BaseSettings):
     voice_detector_target_sample_rate: int = 16000
 
     # --- Scoring (Dev 2) ---------------------------------------------------
-    score_weight_llm: int = 45
-    score_weight_keywords: int = 20
-    score_weight_voice: int = 20
-    score_weight_reputation: int = 15
+    # Défauts dérivés du domaine, jamais recopiés. Le piège qu'on évite ici :
+    # ces valeurs écrasent systématiquement celles de `weights.py` et
+    # `alerts.py`, puisque `build_pipeline` passe `settings.weights()`. Deux
+    # listes en parallèle, et modifier le fichier qui s'appelle « weights »
+    # n'avait aucun effet en production — ce qui a déjà trompé une relecture.
+    score_weight_llm: int = DEFAULT_WEIGHTS.llm
+    score_weight_keywords: int = DEFAULT_WEIGHTS.keywords
+    score_weight_voice: int = DEFAULT_WEIGHTS.voice
+    score_weight_reputation: int = DEFAULT_WEIGHTS.reputation
 
-    threshold_watch: int = 40
-    threshold_alert: int = 65
-    threshold_intervene: int = 85
+    threshold_watch: int = DEFAULT_THRESHOLDS.watch
+    threshold_alert: int = DEFAULT_THRESHOLDS.alert
+    threshold_intervene: int = DEFAULT_THRESHOLDS.intervene
 
     # --- Données -----------------------------------------------------------
     contacts_path: Path = Path("data/contacts.json")
