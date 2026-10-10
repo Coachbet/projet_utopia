@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Coachbet/projet_utopia/contracts/event.schema.json",
+  "title": "Event",
+  "description": "Contrat d'echange unique entre toutes les briques. FIGE A H0 : toute modification doit etre validee par l'equipe entiere, car Dev 1, Dev 2 et le dashboard en dependent simultanement.",
+  "type": "object",
+  "required": ["call_id", "t", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "call_id": {
+      "type": "string",
+      "description": "Identifiant d'appel. En production c'est le CallSid Twilio (prefixe CA).",
+      "examples": ["CA123abc456def"]
+    },
+    "t": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Secondes ecoulees depuis le debut de l'appel. Permet de rejouer un scenario a la bonne cadence."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "transcript",
+        "keyword",
+        "llm",
+        "voice",
+        "reputation",
+        "score",
+        "action"
+      ],
+      "description": "transcript/voice emis par Dev 1 ; keyword/llm/reputation/score par Dev 2 ; action par Dev 1 sur decision du score."
+    },
+    "speaker": {
+      "type": ["string", "null"],
+      "enum": ["caller", "victim", null],
+      "description": "caller = appelant (scammeur presume, piste Twilio inbound) ; victim = personne appelee (piste outbound). Null pour les evenements sans locuteur (score, reputation)."
+    },
+    "data": {
+      "type": "object",
+      "description": "Charge utile dependante du type. Voir les sous-schemas ci-dessous a titre indicatif ; non contraint pour laisser chaque brique avancer.",
+      "additionalProperties": true,
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "transcript : le texte reconnu."
+        },
+        "is_final": {
+          "type": "boolean",
+          "description": "transcript : false pour un resultat partiel Transcribe, true pour un segment stabilise. Claude n'est appele que sur les segments finaux."
+        },
+        "risk": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "llm/voice/keyword/reputation : risque normalise du signal, entre 0 et 1."
+        },
+        "reasons": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Raisons lisibles, reutilisees telles quelles dans le dashboard."
+        },
+        "tactics": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "llm : tactiques detectees (urgence, secret, paiement inhabituel, fausse autorite)."
+        },
+        "claimed_identity": {
+          "type": ["string", "null"],
+          "description": "llm : identite revendiquee par l'appelant, ex. 'Lucas, petit-fils'. Null si aucune."
+        },
+        "explanation": {
+          "type": "string",
+          "description": "llm : une phrase, reutilisee dans l'alerte vocale et le dashboard."
+        },
+        "terms": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "keyword : les termes a risque reperes."
+        },
+        "line_type": {
+          "type": "string",
+          "enum": [
+            "mobile",
+            "landline",
+            "fixedVoip",
+            "nonFixedVoip",
+            "tollFree",
+            "personal",
+            "unknown"
+          ],
+          "description": "reputation : valeur Twilio Lookup v2 line_type_intelligence."
+        },
+        "in_contacts": {
+          "type": "boolean",
+          "description": "reputation : le numero figure dans le carnet d'adresses de la victime."
+        },
+        "identity_mismatch": {
+          "type": "boolean",
+          "description": "reputation : l'identite revendiquee existe dans les contacts mais avec un autre numero. Signal fort, alimente un coupe-circuit."
+        },
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "score : somme ponderee des quatre signaux, apres coupe-circuits."
+        },
+        "level": {
+          "type": "string",
+          "enum": ["none", "watch", "alert", "intervene"],
+          "description": "score : none <40, watch 40-64, alert 65-84, intervene >=85."
+        },
+        "breakers_fired": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "score : coupe-circuits declenches, pour tracer pourquoi le score a ete releve ou plafonne."
+        },
+        "action": {
+          "type": "string",
+          "enum": ["announce_victim", "hold_caller", "resume_caller", "sms_contact", "notify_dashboard"],
+          "description": "action : effet applique via l'API Twilio Participants."
+        },
+        "target": {
+          "type": "string",
+          "description": "action : participant ou numero vise."
+        },
+        "ok": {
+          "type": "boolean",
+          "description": "action : l'appel API a reussi."
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "call_id": "CA123",
+      "t": 12.4,
+      "type": "transcript",
+      "speaker": "caller",
+      "data": {
+        "text": "Mamie c'est Lucas, j'ai un probleme, il faut m'envoyer de l'argent tout de suite",
+        "is_final": true
+      }
+    },
+    {
+      "call_id": "CA123",
+      "t": 12.9,
+      "type": "llm",
+      "data": {
+        "risk": 0.82,
+        "tactics": ["urgence", "paiement inhabituel", "identite revendiquee"],
+        "claimed_identity": "Lucas, petit-fils",
+        "explanation": "L'appelant se presente comme un proche et reclame un virement immediat."
+      }
+    },
+    {
+      "call_id": "CA123",
+      "t": 13.0,
+      "type": "score",
+      "data": {
+        "score": 85,
+        "level": "intervene",
+        "reasons": ["urgence", "paiement inhabituel", "numero inconnu"],
+        "breakers_fired": ["payment_request_with_identity_mismatch"]
+      }
+    },
+    {
+      "call_id": "CA123",
+      "t": 13.2,
+      "type": "action",
+      "data": { "action": "hold_caller", "target": "caller", "ok": true }
+    }
+  ]
+}

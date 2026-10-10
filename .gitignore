@@ -1,0 +1,108 @@
+# --- Secrets & config locale -------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+credentials
+claude-bedrock.sh
+.aws/
+
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib60/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Environnements virtuels -------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# --- Outils / caches ---------------------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+.tox/
+.nox/
+uv.lock.bak
+
+# --- Modèles ML & caches HuggingFace ----------------------------------------
+.cache/
+models/
+*.onnx
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# --- Données d'appel (audio, transcripts) : jamais commitées ----------------
+data/recordings/
+data/transcripts/
+data/calls/
+*.wav
+*.mp3
+*.ulaw
+*.raw
+!scenarios/**/*.wav
+
+# Contacts réels : seul l'exemple est versionné
+data/contacts.json
+!data/contacts.example.json
+
+# --- Logs --------------------------------------------------------------------
+*.log
+logs/
+
+# --- ngrok -------------------------------------------------------------------
+ngrok
+ngrok.yml
+.ngrok2/
+
+# --- OS / éditeurs -----------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# --- Notebooks ---------------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- Démo / livrables lourds -------------------------------------------------
+demo/*.mp4
+demo/*.mov
+*.key
