@@ -221,14 +221,6 @@ function mocks() {
     qaRevokedURLs.push(url);
     return revokeURL(url);
   };
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: {
-      writeText: async (value) => {
-        window.qaCopiedNumber = value;
-      },
-    },
-  });
   window.qaNewCall = () => {
     const call = new Emitter();
     call.parameters = { CallSid: "CA_qa_client" };
@@ -459,8 +451,16 @@ function mocks() {
       await page.locator("#numerotation-numero").inputValue(),
       "+33600000000",
     );
-    await page.locator("#btn-copier-numero").click();
-    assert.equal(await page.evaluate(() => qaCopiedNumber), "+33600000000");
+    // Le pavé doit tenir dans l'écran : un scroll ici, et le bouton d'appel
+    // passe sous le pli sur les téléphones courts.
+    const debordement = await page.evaluate(() => {
+      const racine = document.documentElement;
+      return racine.scrollHeight - racine.clientHeight;
+    });
+    assert.ok(
+      debordement <= 1,
+      `L'écran Clavier déborde de ${debordement}px : il scrolle.`,
+    );
     await shot("11-clavier");
     await page.locator("#btn-appeler").click();
     await page.waitForFunction(() => etat.sortant && etat.decroche);
@@ -668,7 +668,7 @@ function mocks() {
             "4 onglets téléphone",
             "filtres récents/manqués",
             "contacts et recherche",
-            "copie numéro",
+            "clavier sans scroll",
             "appel sortant nonce SDK",
             "sortants sans analyse",
             "lecture WAV privé avec PIN",

@@ -77,6 +77,11 @@
         line-height: 1.5;
         color: var(--ink);
         -webkit-tap-highlight-color: transparent;
+        /* Deux appuis rapides sur une touche du pavé composaient deux chiffres
+           ET zoomaient la page. `manipulation` supprime le zoom au double-tap
+           sans toucher au pincement : l'agrandissement reste possible pour qui
+           en a besoin. */
+        touch-action: manipulation;
       }
       button,
       input {
@@ -2011,14 +2016,6 @@
         margin: 12px 0 4px;
         line-height: 1.6;
       }
-      .dialer-note {
-        font-size: 11px;
-        margin: 2px 0 0;
-      }
-      #btn-copier-numero {
-        font-size: 13px;
-        min-height: 40px;
-      }
       .voicemail-heading {
         display: flex;
         align-items: center;
@@ -2240,39 +2237,59 @@
         min-height: 48px;
         font-size: 29px;
       }
+      /* Le pavé tient dans la hauteur visible, sans scroll. Des tailles fixes
+         en pixels ne tombent juste que sur un seul modèle de téléphone : ici
+         le shell est une colonne, et la grille des touches absorbe la place
+         qui reste. Les cercles rétrécissent au lieu de pousser le bouton
+         d'appel sous le pli. */
+      .phone-shell[data-onglet="clavier"] {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .phone-shell[data-onglet="clavier"] #ecran-numerotation,
+      .phone-shell[data-onglet="clavier"] .dialer {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
       .phone-shell[data-onglet="clavier"] .dialer-keypad {
-        gap: 12px 25px;
-        width: 300px;
+        flex: 1;
+        min-height: 0;
+        grid-template-rows: repeat(4, minmax(0, 1fr));
+        gap: clamp(4px, 1.2vh, 12px) 25px;
+        width: min(100%, 300px);
       }
       .phone-shell[data-onglet="clavier"] .dialer-keypad > button {
-        width: 78px;
-        height: 78px;
-        font-size: 40px;
+        width: auto;
+        height: 100%;
+        aspect-ratio: 1;
+        max-width: 78px;
+        max-height: 78px;
+        margin: 0 auto;
+        font-size: clamp(25px, 4.4vh, 40px);
+        overflow: hidden;
+      }
+      /* Sous une certaine taille de touche, les lettres ne se lisent plus et
+         ne font que voler de la place au chiffre. */
+      @media (max-height: 680px) {
+        .phone-shell[data-onglet="clavier"] .dialer-keypad > button small {
+          display: none;
+        }
       }
       .phone-shell[data-onglet="clavier"] .dialer-call {
-        width: 78px;
-        height: 78px;
-        margin-top: 14px;
+        flex: none;
+        width: clamp(60px, 8.6vh, 78px);
+        height: clamp(60px, 8.6vh, 78px);
+        margin: clamp(8px, 1.8vh, 18px) auto clamp(0px, 0.6vh, 6px);
       }
-      .phone-shell[data-onglet="clavier"] .dialer-note {
-        max-width: 300px;
-        margin: 0 auto;
-        font-size: 10px;
+      .phone-shell[data-onglet="clavier"] .dialer-status {
+        flex: none;
+        margin: clamp(4px, 1vh, 12px) 0 0;
       }
       @media (max-height: 760px) {
-        .phone-shell[data-onglet="clavier"] .dialer-keypad {
-          gap: 9px 22px;
-          width: 278px;
-        }
-        .phone-shell[data-onglet="clavier"] .dialer-keypad > button {
-          width: 70px;
-          height: 70px;
-          font-size: 36px;
-        }
-        .phone-shell[data-onglet="clavier"] .dialer-call {
-          width: 70px;
-          height: 70px;
-        }
         .phone-shell[data-onglet="clavier"] .shell-page-heading {
           margin-top: 14px;
         }
@@ -2683,12 +2700,6 @@
               role="status"
               hidden
             ></p>
-            <button id="btn-copier-numero" class="text-button" disabled>
-              Copy number
-            </button>
-            <p class="note dialer-note">
-              Outgoing calls are not analyzed.<br />Short codes and emergency calls are not supported.
-            </p>
           </div>
         </section>
         <section
@@ -3258,7 +3269,6 @@
         sortant: false,
         sortantPending: false,
         dialing: false,
-        numeroCopie: null,
         voicemail: {
           items: [],
           enabled: true,
@@ -5531,13 +5541,6 @@
         const value = numeroCompose(),
           valid = /^\+?[1-9]\d{6,14}$/.test(value) || /^0\d{9}$/.test(value);
         $("btn-appeler").disabled = !valid || etat.dialing || !etat.registered;
-        $("btn-copier-numero").disabled = !value;
-        txt(
-          "btn-copier-numero",
-          value && etat.numeroCopie === value
-            ? "Number copied"
-            : "Copy number",
-        );
         $("btn-effacer-chiffre").disabled = !value;
         const nom = etat.contacts.items.find(
           (contact) => contact.number === value,
@@ -5569,22 +5572,6 @@
       function etatNumerotation(message) {
         txt("numerotation-etat", message);
         voir("numerotation-etat", true);
-      }
-      async function copierNumero() {
-        const number = numeroCompose();
-        if (!number) return;
-        try {
-          if (!navigator.clipboard || !navigator.clipboard.writeText)
-            throw new Error();
-          await navigator.clipboard.writeText(number);
-          etat.numeroCopie = number;
-          voir("numerotation-etat", false);
-          actualiserNumerotation();
-        } catch (e) {
-          $("numerotation-numero").focus();
-          $("numerotation-numero").select();
-          etatNumerotation("Select the number, then choose Copy.");
-        }
       }
       async function demarrerSortant(number = numeroCompose(), name = "") {
         if (
@@ -6166,7 +6153,6 @@
         );
         actualiserNumerotation();
       });
-      $("btn-copier-numero").addEventListener("click", copierNumero);
       $("btn-appeler").addEventListener("click", () =>
         demarrerSortant(numeroCompose(), $("numerotation-contact").textContent),
       );
