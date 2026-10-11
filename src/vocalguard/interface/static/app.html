@@ -46,10 +46,15 @@
         --brand: var(--ctl-white);
         --brand-deep: var(--ctl-navy-deep);
         --cut: var(--ctl-cut);
+        /* L'orange « cut » est la MARQUE : logo, onglet actif, accents. Le rouge
+           est le DANGER : refuser, raccrocher, alerte, intervention. Les deux ne
+           se confondent pas — un onglet actif ne doit pas ressembler à une
+           alarme, et une alarme ne doit pas ressembler à de la décoration. */
+        --danger: #e4151b;
         --accept: #1f9d6b;
-        --reject: var(--ctl-cut);
+        --reject: var(--danger);
         --warning: #f2b84b;
-        --critical: var(--ctl-cut);
+        --critical: var(--danger);
         --radius: 24px;
         --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
       }
@@ -554,7 +559,7 @@
          pouce tombe, parce que c'est l'action protectrice. « Continuer » est en
          retrait (ghost) : la reprise doit être un choix, pas un réflexe. */
       .intervention {
-        border: 2px solid var(--cut);
+        border: 2px solid var(--danger);
         border-radius: 18px;
         padding: 16px;
         margin-top: 14px;
@@ -578,7 +583,7 @@
         gap: 9px;
         font-size: 17px;
         font-weight: 720;
-        color: var(--cut);
+        color: var(--danger);
       }
       .intervention-entete svg {
         width: 22px;
@@ -612,7 +617,7 @@
         fill: currentColor;
       }
       .principal.danger {
-        background: var(--cut);
+        background: var(--danger);
         color: var(--ctl-white);
       }
       .intervention-note {
@@ -627,7 +632,7 @@
       }
       .risque[data-niveau="alert"],
       .risque[data-niveau="intervene"] {
-        border-color: var(--cut);
+        border-color: var(--danger);
         background: #3b2620;
       }
       .risque .entete {
@@ -906,9 +911,9 @@
         padding: 24px;
       }
       .alerte {
-        background: var(--cut);
-        border-color: var(--cut);
-        color: var(--ctl-navy-deep);
+        background: var(--danger);
+        border-color: var(--danger);
+        color: var(--ctl-white);
         position: relative;
         overflow: hidden;
         border-radius: 28px;
@@ -917,9 +922,9 @@
         width: min(100%, 460px);
       }
       .alert-icon {
-        background: #06141c1a;
-        border: 2px solid var(--ctl-navy-deep);
-        color: var(--ctl-navy-deep);
+        background: #ffffff1f;
+        border: 2px solid var(--ctl-white);
+        color: var(--ctl-white);
         border-radius: 50%;
         width: 68px;
         height: 68px;
@@ -943,7 +948,7 @@
       }
       .alerte .detail {
         font-size: 15px;
-        color: var(--ctl-navy-deep);
+        color: #ffe3e3;
         margin: 0 0 23px;
       }
       .alerte .principal {
@@ -1113,9 +1118,9 @@
         color: #ffb39e;
       }
       .level-chip[data-level="intervene"] {
-        background: var(--cut);
-        border: 1px solid var(--cut);
-        color: var(--ctl-navy-deep);
+        background: var(--danger);
+        border: 1px solid var(--danger);
+        color: var(--ctl-white);
       }
       .level-chip[data-level="unknown"] {
         background: var(--surface);
@@ -1240,7 +1245,7 @@
         background: #ff8a6e;
       }
       .timeline-marker[data-level="intervene"] {
-        background: var(--cut);
+        background: var(--danger);
         border-color: var(--surface);
       }
       .timeline-range {
@@ -1276,7 +1281,7 @@
         color: #ff8a6e;
       }
       .threshold[data-level="intervene"] strong {
-        color: var(--cut);
+        color: var(--danger);
       }
       .threshold.not-crossed strong {
         color: var(--muted);
@@ -1491,8 +1496,8 @@
         width: 116%;
         height: 7px;
         border-radius: 7px;
-        background: var(--ctl-navy-deep);
-        opacity: 0.16;
+        background: var(--ctl-white);
+        opacity: 0.18;
         transform: rotate(-9deg) scaleX(0);
         transform-origin: left center;
         animation: slash 0.5s cubic-bezier(0.7, 0, 0.3, 1) 0.18s forwards;
@@ -1507,17 +1512,6 @@
         to {
           transform: rotate(-9deg) scaleX(1);
         }
-      }
-      /* Onglet actif : le petit trait orange de la marque. */
-      .phone-tabs > button[aria-selected="true"]::after {
-        content: "";
-        position: absolute;
-        bottom: 4px;
-        width: 18px;
-        height: 3px;
-        border-radius: 3px;
-        background: var(--cut);
-        transform: rotate(-12deg);
       }
       .principal,
       .phone-action .circle,
@@ -1617,27 +1611,12 @@
       .phone-shell {
         padding-bottom: 95px;
       }
-      .shell-brand .brand {
-        font-size: 18px;
-      }
-      .shell-brand .brand-mark {
-        width: 31px;
-        height: 34px;
-        border-radius: 10px;
-      }
-      .shell-brand .brand-mark svg {
-        width: 21px;
-      }
       .protection-toggle {
         background: none;
         color: var(--muted);
         font: inherit;
         font-size: 12px;
         min-height: 38px;
-      }
-      .protection-toggle > svg {
-        width: 13px;
-        height: 13px;
       }
       .shell-protection {
         margin-top: 20px;
@@ -1656,10 +1635,6 @@
         font-weight: 750;
         margin-top: 9px;
       }
-      .shell-owner {
-        color: var(--muted);
-        font-size: 13px;
-      }
       .phone-tabs {
         position: fixed;
         z-index: 10;
@@ -1668,7 +1643,7 @@
         transform: translateX(-50%);
         width: min(100%, 560px);
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         background: #0b2433f0;
         backdrop-filter: blur(20px);
         border-top: 1px solid #2b516899;
@@ -1695,9 +1670,11 @@
         width: 23px;
         height: 23px;
       }
+      /* Onglet actif : l'orange « cut » de la marque, pas un simple trait — à
+         bout de bras, un soulignement de 3 px ne se voit pas. */
       .phone-tabs > button[aria-selected="true"] {
-        background: #ffffff14;
-        color: var(--ink);
+        background: var(--cut);
+        color: var(--ctl-navy-deep);
       }
       .tab-badge {
         position: absolute;
@@ -1713,6 +1690,12 @@
         padding: 0 3px;
         display: grid;
         place-items: center;
+      }
+      /* Sur l'onglet actif, l'orange du badge disparaîtrait dans l'orange du
+         fond : on l'inverse pour que le nombre de messages reste lisible. */
+      .phone-tabs > button[aria-selected="true"] .tab-badge {
+        background: var(--ctl-navy-deep);
+        color: var(--ctl-white);
       }
       .recent-toolbar {
         display: flex;
@@ -1838,6 +1821,30 @@
       .contact-main .contact-trust.analyzed {
         color: var(--warning);
       }
+      /* L'étoile est jaune et non rouge ni orange : épingler quelqu'un ne coupe
+         rien et n'alerte de rien, donc elle ne doit emprunter ni la couleur du
+         danger ni celle de la marque. */
+      .contact-favori {
+        border: 0;
+        background: none;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        flex: none;
+        color: #6e8a9b;
+      }
+      .contact-favori svg {
+        width: 21px;
+        height: 21px;
+        fill: none;
+      }
+      .contact-favori[aria-pressed="true"] {
+        color: var(--warning);
+      }
+      .contact-favori[aria-pressed="true"] svg {
+        fill: var(--warning);
+      }
       .contact-call {
         width: 45px;
         height: 45px;
@@ -1854,6 +1861,63 @@
       }
       #contacts-compteur {
         margin: 17px 0 3px;
+      }
+      .contacts-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .contacts-toolbar .search-field {
+        flex: 1;
+        min-width: 0;
+      }
+      .contact-add {
+        background: var(--cut);
+        border-color: var(--cut);
+        color: var(--ctl-navy-deep);
+      }
+      .contact-add svg {
+        width: 21px;
+        height: 21px;
+      }
+      .contact-form {
+        display: grid;
+        gap: 16px;
+        margin-top: 18px;
+      }
+      .contact-field > label,
+      .contact-field .field-label {
+        display: block;
+        font-size: 15px;
+        font-weight: 700;
+        margin-bottom: 7px;
+      }
+      .contact-field input {
+        width: 100%;
+        min-height: 52px;
+        background: #0a2130;
+        border: 1px solid #4a6c80;
+        border-radius: 13px;
+        padding: 12px 15px;
+        color: var(--ink);
+        font-size: 16px;
+      }
+      .contact-field input::placeholder {
+        color: #8fa9b9;
+      }
+      .contact-field .segmented {
+        display: inline-flex;
+      }
+      .contact-field .note {
+        margin-top: 9px;
+      }
+      .contact-form-actions {
+        display: flex;
+        gap: 12px;
+      }
+      .contact-form-actions .principal {
+        flex: 1;
+        font-size: 16px;
       }
       .dialer {
         text-align: center;
@@ -1916,7 +1980,7 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        font-size: 32px;
+        font-size: 40px;
         font-weight: 450;
         line-height: 1.1;
       }
@@ -1958,8 +2022,7 @@
       .voicemail-heading {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 12px;
+        justify-content: flex-end;
       }
       .voicemail-heading .text-button {
         min-width: 44px;
@@ -2072,6 +2135,56 @@
         height: 46px;
         color-scheme: light;
       }
+      .voicemail-empty {
+        margin-top: 4px;
+      }
+      .voicemail-empty > h2 {
+        font-size: 21px;
+      }
+      .voicemail-apercu {
+        margin-top: 14px;
+      }
+      /* Les lignes s'effacent vers le bas : la grille se lit comme une boîte
+         vide, pas comme un chargement en cours qui finirait par afficher
+         quelque chose. */
+      .voicemail-apercu > li:nth-child(2) {
+        opacity: 0.62;
+      }
+      .voicemail-apercu > li:nth-child(3) {
+        opacity: 0.38;
+      }
+      .voicemail-apercu > li:nth-child(4) {
+        opacity: 0.18;
+      }
+      .voicemail-apercu .voicemail-unread {
+        background: var(--line);
+      }
+      .ghost {
+        display: block;
+        border-radius: 99px;
+        background: #ffffff14;
+      }
+      .ghost-nom {
+        width: 54%;
+        height: 15px;
+      }
+      .ghost-meta {
+        width: 34%;
+        height: 11px;
+        margin-top: 10px;
+      }
+      .ghost-play {
+        width: 124px;
+        height: 43px;
+        border-radius: 11px;
+        background: none;
+        border: 1px dashed #335c75;
+      }
+      .ghost-duree {
+        width: 36px;
+        height: 11px;
+        margin-left: auto;
+      }
       .voicemail-play-status {
         font-size: 12px;
         color: var(--muted);
@@ -2081,7 +2194,7 @@
         .dialer-keypad > button {
           width: 65px;
           height: 65px;
-          font-size: 29px;
+          font-size: 35px;
         }
         .dialer-keypad {
           gap: 9px 21px;
@@ -2119,9 +2232,6 @@
         font-size: 28px;
         margin-top: 0;
       }
-      .phone-shell[data-onglet="clavier"] .shell-owner {
-        display: none;
-      }
       .phone-shell[data-onglet="clavier"] .dialer-contact {
         min-height: 20px;
         font-size: 14px;
@@ -2131,36 +2241,37 @@
         font-size: 29px;
       }
       .phone-shell[data-onglet="clavier"] .dialer-keypad {
-        gap: 11px 24px;
-        width: 270px;
+        gap: 12px 25px;
+        width: 300px;
       }
       .phone-shell[data-onglet="clavier"] .dialer-keypad > button {
-        width: 68px;
-        height: 68px;
-        font-size: 29px;
+        width: 78px;
+        height: 78px;
+        font-size: 40px;
       }
       .phone-shell[data-onglet="clavier"] .dialer-call {
-        width: 68px;
-        height: 68px;
+        width: 78px;
+        height: 78px;
         margin-top: 14px;
       }
       .phone-shell[data-onglet="clavier"] .dialer-note {
-        max-width: 270px;
+        max-width: 300px;
         margin: 0 auto;
         font-size: 10px;
       }
       @media (max-height: 760px) {
         .phone-shell[data-onglet="clavier"] .dialer-keypad {
           gap: 9px 22px;
-          width: 256px;
+          width: 278px;
         }
         .phone-shell[data-onglet="clavier"] .dialer-keypad > button {
-          width: 60px;
-          height: 60px;
+          width: 70px;
+          height: 70px;
+          font-size: 36px;
         }
         .phone-shell[data-onglet="clavier"] .dialer-call {
-          width: 60px;
-          height: 60px;
+          width: 70px;
+          height: 70px;
         }
         .phone-shell[data-onglet="clavier"] .shell-page-heading {
           margin-top: 14px;
@@ -2196,6 +2307,9 @@
       <symbol id="i-effacer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 5H21v14H8.6L2.6 12z"/><path d="m12 9.4 5 5.2M17 9.4l-5 5.2"/></g></symbol>
       <symbol id="i-actualiser" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.6v4.6h-4.6"/></g></symbol>
       <symbol id="i-corbeille" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16M9 6.5V4h6v2.5M6.4 6.5l1 13.6h9.2l1-13.6M10.4 10.4v6M13.6 10.4v6"/></g></symbol>
+      <symbol id="i-reglages" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><circle cx="12" cy="12" r="7.4"/><path d="M12 1.9v2.7M12 19.4v2.7M1.9 12h2.7M19.4 12h2.7M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M19.1 4.9l-1.9 1.9M6.8 17.2l-1.9 1.9"/></g></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></g></symbol>
+      <symbol id="i-etoile" viewBox="0 0 24 24"><path d="M12 2.9l2.92 5.92 6.53.95-4.72 4.6 1.11 6.51L12 17.81l-5.84 3.07 1.11-6.51-4.72-4.6 6.53-.95z" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     </svg>
     <main>
       <section id="ecran-pin">
@@ -2269,37 +2383,69 @@
         </div>
       </section>
       <section id="ecran-attente" class="phone-shell" hidden>
+        <!-- L'état de la protection d'abord, à gauche : c'est la seule chose que
+             la personne protégée doit pouvoir lire d'un coup d'œil. Les deux
+             boutons ouvrent la MÊME feuille de réglages — le détail de l'état
+             n'existe qu'à un seul endroit, il ne peut donc pas s'y contredire. -->
         <div class="topbar shell-brand">
-          <div class="brand">
-            <span class="brand-mark"><svg aria-hidden="true"><use href="#i-marque" /></svg></span><span>Cut <span class="mark">the</span> Line</span>
-          </div>
           <button
             id="connexion-chip"
             class="status-chip protection-toggle"
-            aria-expanded="false"
-            aria-controls="shell-protection"
+            aria-haspopup="dialog"
           >
             <span class="dot"></span
-            ><span id="connexion-chip-texte">Connecting…</span
-            ><svg aria-hidden="true"><use href="#i-chevron" /></svg>
+            ><span id="connexion-chip-texte">Connecting…</span>
+          </button>
+          <button
+            id="btn-reglages"
+            class="icon-button"
+            aria-label="Settings"
+            aria-haspopup="dialog"
+          >
+            <svg aria-hidden="true"><use href="#i-reglages" /></svg>
           </button>
         </div>
-        <div id="shell-protection" class="carte shell-protection" hidden>
-          <p class="etat-ligne" id="etat-ligne" data-ok="" role="status">
-            <span class="puce"></span><span id="etat-texte">Connecting…</span>
-          </p>
-          <p class="etat-ligne" id="etat-micro" data-ok="">
-            <span class="puce"></span
-            ><span id="etat-micro-texte">Microphone: not checked</span>
-          </p>
-          <p class="note">
-            <strong>Keep this page open and the screen on.</strong> If it is closed, calls go to your backup line or your voicemail, depending on your setup.
-          </p>
-        </div>
         <div class="shell-page-heading">
-          <p id="titre-attente" class="shell-owner">Protection on</p>
           <h1 id="shell-titre">Recents</h1>
         </div>
+        <!-- Favoris : les proches qu'on appelle vraiment, en gros et sans
+             recherche à taper. Une seule liste, les noms triés, un bouton
+             d'appel par ligne — rien d'autre, c'est l'écran de l'urgence. -->
+        <section
+          id="ecran-favoris"
+          role="tabpanel"
+          aria-labelledby="tab-favoris"
+          hidden
+        >
+          <p id="favoris-erreur" class="erreur space" role="alert" hidden></p>
+          <p
+            id="favoris-chargement"
+            class="history-loading"
+            role="status"
+            hidden
+          >
+            Loading favourites…
+          </p>
+          <ul
+            id="favoris-liste"
+            class="contacts-list"
+            aria-label="Your favourites"
+          ></ul>
+          <div id="favoris-vide" class="empty-state" hidden>
+            <svg aria-hidden="true"><use href="#i-etoile" /></svg>
+            <h2>No favourites</h2>
+            <p>
+              Open Contacts and tap the star next to the people you call most.
+            </p>
+          </div>
+          <button
+            id="btn-favoris-reessayer"
+            class="principal ghost space"
+            hidden
+          >
+            Try again
+          </button>
+        </section>
         <section
           id="ecran-historique"
           role="tabpanel"
@@ -2367,17 +2513,90 @@
           aria-labelledby="tab-contacts"
           hidden
         >
-          <label for="contacts-recherche" class="sr-only"
-            >Search your contacts</label
-          >
-          <div class="search-field">
-            <svg aria-hidden="true"><use href="#i-recherche" /></svg
-            ><input
-              id="contacts-recherche"
-              type="search"
-              placeholder="Name or number"
-              autocomplete="off"
-            />
+          <div class="contacts-toolbar">
+            <label for="contacts-recherche" class="sr-only"
+              >Search your contacts</label
+            >
+            <div class="search-field">
+              <svg aria-hidden="true"><use href="#i-recherche" /></svg
+              ><input
+                id="contacts-recherche"
+                type="search"
+                placeholder="Name or number"
+                autocomplete="off"
+              />
+            </div>
+            <button
+              id="btn-ajouter-contact"
+              class="icon-button contact-add"
+              aria-label="Add a contact"
+              aria-expanded="false"
+              aria-controls="formulaire-contact"
+            >
+              <svg aria-hidden="true"><use href="#i-plus" /></svg>
+            </button>
+          </div>
+          <!-- Ce formulaire ne remplit pas une liste : il change le ROUTAGE des
+               appels. À la seconde où l'ajout répond, un appel de ce numéro passe
+               sans annonce ni analyse. D'où le choix du mode affiché en clair, et
+               pas caché derrière un réglage par défaut. -->
+          <div id="formulaire-contact" class="carte contact-form" hidden>
+            <h3>Add a contact</h3>
+            <div class="contact-field">
+              <label for="nouveau-contact-nom">Name</label>
+              <input
+                id="nouveau-contact-nom"
+                type="text"
+                autocomplete="name"
+                maxlength="120"
+                placeholder="First and last name"
+              />
+            </div>
+            <div class="contact-field">
+              <label for="nouveau-contact-numero">Phone number</label>
+              <input
+                id="nouveau-contact-numero"
+                type="tel"
+                inputmode="tel"
+                autocomplete="tel"
+                maxlength="64"
+                placeholder="+33 6 12 34 56 78"
+              />
+            </div>
+            <div class="contact-field">
+              <label for="nouveau-contact-relation">Relationship (optional)</label>
+              <input
+                id="nouveau-contact-relation"
+                type="text"
+                maxlength="120"
+                placeholder="Son, doctor, neighbour…"
+              />
+            </div>
+            <div class="contact-field">
+              <p class="field-label" id="contact-mode-titre">
+                How should their calls be handled?
+              </p>
+              <div
+                class="segmented"
+                role="group"
+                aria-labelledby="contact-mode-titre"
+              >
+                <button id="contact-mode-trusted" type="button" aria-pressed="true">
+                  Trusted</button
+                ><button id="contact-mode-analyze" type="button" aria-pressed="false">
+                  Analyzed
+                </button>
+              </div>
+              <p id="contact-mode-aide" class="note"></p>
+            </div>
+            <p id="contact-form-erreur" class="erreur" role="alert" hidden></p>
+            <div class="contact-form-actions">
+              <button id="btn-annuler-contact" type="button" class="principal ghost">
+                Cancel</button
+              ><button id="btn-sauver-contact" type="button" class="principal accepter">
+                Save
+              </button>
+            </div>
           </div>
           <p id="contacts-compteur" class="panel-caption">
             Your trusted contacts
@@ -2479,7 +2698,6 @@
           hidden
         >
           <div class="voicemail-heading">
-            <p class="panel-caption">Your voicemail</p>
             <button
               id="btn-messagerie-actualiser"
               class="text-button"
@@ -2488,9 +2706,6 @@
               <svg aria-hidden="true"><use href="#i-actualiser" /></svg>
             </button>
           </div>
-          <p id="messagerie-description" class="note">
-            Messages left after an unanswered call are saved to your voicemail.
-          </p>
           <p
             id="messagerie-erreur"
             class="erreur space"
@@ -2510,12 +2725,68 @@
             class="voicemail-list"
             aria-label="Voicemail messages"
           ></ul>
-          <div id="messagerie-vide" class="empty-state" hidden>
-            <svg aria-hidden="true"><use href="#i-messagerie" /></svg>
+          <!-- Messagerie vide : on garde la grille de la boîte vocale, en creux,
+               au lieu d'une carte « aucun message ». Les lignes fantômes occupent
+               EXACTEMENT la place des vrais messages, donc l'écran ne change pas
+               de forme au premier message — la personne retrouve le bouton
+               « Play » là où elle l'avait déjà vu. `aria-hidden` sur la grille :
+               un lecteur d'écran ne doit pas annoncer quatre messages vides. -->
+          <div id="messagerie-vide" class="voicemail-empty" hidden>
             <h2 id="messagerie-vide-titre">No voicemail</h2>
-            <p id="messagerie-vide-texte">
-              Messages from your callers will appear here.
-            </p>
+            <ul class="voicemail-list voicemail-apercu" aria-hidden="true">
+              <li class="voicemail-card">
+                <div class="voicemail-card-head">
+                  <span class="voicemail-unread"></span>
+                  <div class="voicemail-identity">
+                    <span class="ghost ghost-nom"></span
+                    ><span class="ghost ghost-meta"></span>
+                  </div>
+                </div>
+                <div class="voicemail-actions">
+                  <span class="ghost ghost-play"></span
+                  ><span class="ghost ghost-duree"></span>
+                </div>
+              </li>
+              <li class="voicemail-card">
+                <div class="voicemail-card-head">
+                  <span class="voicemail-unread"></span>
+                  <div class="voicemail-identity">
+                    <span class="ghost ghost-nom"></span
+                    ><span class="ghost ghost-meta"></span>
+                  </div>
+                </div>
+                <div class="voicemail-actions">
+                  <span class="ghost ghost-play"></span
+                  ><span class="ghost ghost-duree"></span>
+                </div>
+              </li>
+              <li class="voicemail-card">
+                <div class="voicemail-card-head">
+                  <span class="voicemail-unread"></span>
+                  <div class="voicemail-identity">
+                    <span class="ghost ghost-nom"></span
+                    ><span class="ghost ghost-meta"></span>
+                  </div>
+                </div>
+                <div class="voicemail-actions">
+                  <span class="ghost ghost-play"></span
+                  ><span class="ghost ghost-duree"></span>
+                </div>
+              </li>
+              <li class="voicemail-card">
+                <div class="voicemail-card-head">
+                  <span class="voicemail-unread"></span>
+                  <div class="voicemail-identity">
+                    <span class="ghost ghost-nom"></span
+                    ><span class="ghost ghost-meta"></span>
+                  </div>
+                </div>
+                <div class="voicemail-actions">
+                  <span class="ghost ghost-play"></span
+                  ><span class="ghost ghost-duree"></span>
+                </div>
+              </li>
+            </ul>
           </div>
           <button
             id="btn-messagerie-reessayer"
@@ -2535,6 +2806,15 @@
           role="tablist"
         >
           <button
+            id="tab-favoris"
+            role="tab"
+            aria-selected="false"
+            aria-controls="ecran-favoris"
+            tabindex="-1"
+          >
+            <svg aria-hidden="true"><use href="#i-etoile" /></svg
+            ><span>Favourites</span></button
+          ><button
             id="btn-historique"
             role="tab"
             aria-selected="true"
@@ -2923,6 +3203,42 @@
             Delete
           </button>
         </div>
+      </div>
+    </div>
+    <div id="reglages" class="overlay" hidden>
+      <div
+        class="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reglages-titre"
+        tabindex="-1"
+      >
+        <div class="handle" aria-hidden="true"></div>
+        <div class="sheet-header">
+          <h2 id="reglages-titre">Settings</h2>
+          <button
+            id="btn-fermer-reglages"
+            class="icon-button"
+            aria-label="Close settings"
+          >
+            <svg aria-hidden="true"><use href="#i-fermer" /></svg>
+          </button>
+        </div>
+        <div class="carte shell-protection">
+          <p class="etat-ligne" id="etat-ligne" data-ok="" role="status">
+            <span class="puce"></span><span id="etat-texte">Connecting…</span>
+          </p>
+          <p class="etat-ligne" id="etat-micro" data-ok="">
+            <span class="puce"></span
+            ><span id="etat-micro-texte">Microphone: not checked</span>
+          </p>
+          <p class="note">
+            <strong>Keep this page open and the screen on.</strong> If it is closed, calls go to your backup line or your voicemail, depending on your setup.
+          </p>
+        </div>
+        <p class="privacy space">
+          <svg aria-hidden="true"><use href="#i-cadenas" /></svg>Protected by your code · nothing is stored on this phone
+        </p>
       </div>
     </div>
     <!-- Version exacte et empreinte SRI : le SDK Voice est la seule dépendance réseau. -->
@@ -3471,12 +3787,6 @@
           const jeton = await posterProtege("/app/token");
           await autoriserMicro();
           $("pin").value = "";
-          txt(
-            "titre-attente",
-            jeton.owner
-              ? "Protection on, " + jeton.owner
-              : "Protection on",
-          );
           await demarrerDevice(jeton.token);
           ecouterLeBus();
           garderEcranAllume();
@@ -4921,6 +5231,11 @@
 
       /* Navigation téléphone : les réponses d'un onglet quitté restent sans effet. */
       const ONGLETS = {
+        favoris: {
+          button: "tab-favoris",
+          panel: "ecran-favoris",
+          title: "Favourites",
+        },
         recents: {
           button: "btn-historique",
           panel: "ecran-historique",
@@ -4970,7 +5285,7 @@
         etat.onglet = nom;
         montrer("attente");
         if (nom === "recents") await chargerHistorique(true);
-        if (nom === "contacts") await chargerContacts();
+        if (nom === "favoris" || nom === "contacts") await chargerContacts();
         if (nom === "messagerie") await chargerMessagerie();
         if (nom === "clavier") actualiserNumerotation();
       }
@@ -4980,38 +5295,108 @@
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "");
       }
+      /* Le carnet alimente DEUX onglets — Favoris et Contacts — depuis la même
+         requête et le même état. Deux chargeurs séparés se marcheraient sur les
+         pieds : épingler quelqu'un depuis Contacts doit changer l'onglet Favoris
+         sans qu'on ait à y retourner pour le recharger. */
+      const ongletCarnet = () =>
+        ongletActif("favoris") ? "favoris" : ongletActif("contacts") ? "contacts" : null;
+      function contactsTries(items) {
+        return (Array.isArray(items) ? items : [])
+          .filter((item) => item && item.name && item.number)
+          .sort((a, b) => a.name.localeCompare(b.name, "en"));
+      }
       async function chargerContacts() {
-        if (!ongletActif("contacts")) return;
+        const onglet = ongletCarnet();
+        if (!onglet) return;
+        const prefixe = onglet === "favoris" ? "favoris" : "contacts";
         const requete = ++etat.contacts.requete;
-        voir("contacts-erreur", false);
-        voir("btn-contacts-reessayer", false);
-        voir("contacts-chargement", true);
+        voir(prefixe + "-erreur", false);
+        voir("btn-" + prefixe + "-reessayer", false);
+        voir(prefixe + "-chargement", true);
         try {
           const rep = await posterProtege("/app/contacts");
-          if (requete !== etat.contacts.requete || !ongletActif("contacts"))
-            return;
-          etat.contacts.items = (Array.isArray(rep.items) ? rep.items : [])
-            .filter((item) => item && item.name && item.number)
-            .sort((a, b) => a.name.localeCompare(b.name, "en"));
+          if (requete !== etat.contacts.requete || !ongletCarnet()) return;
+          etat.contacts.items = contactsTries(rep.items);
           rendreContacts();
         } catch (e) {
-          if (requete !== etat.contacts.requete || !ongletActif("contacts"))
-            return;
+          if (requete !== etat.contacts.requete || !ongletCarnet()) return;
           txt(
-            "contacts-erreur",
+            prefixe + "-erreur",
             e.statut === 403 || e.statut === 429
               ? e.message
               : "Your contacts could not be loaded. Try again in a moment.",
           );
-          voir("contacts-erreur", true);
-          voir("btn-contacts-reessayer", true);
-          voir("contacts-vide", false);
+          voir(prefixe + "-erreur", true);
+          voir("btn-" + prefixe + "-reessayer", true);
+          voir(prefixe + "-vide", false);
         } finally {
           if (requete === etat.contacts.requete)
-            voir("contacts-chargement", false);
+            voir(prefixe + "-chargement", false);
+        }
+      }
+      function ligneContact(item, { etoile = true } = {}) {
+        const row = el("li", "contacts-row"),
+          main = el("button", "contact-main");
+        const av = el("span", "history-avatar");
+        avatar(av, item.name);
+        av.setAttribute("aria-hidden", "true");
+        const identity = el("span", "");
+        identity.append(
+          el("strong", "", item.name),
+          el("small", "", item.relation || item.number),
+          el(
+            "small",
+            "contact-trust" + (item.mode === "analyze" ? " analyzed" : ""),
+            item.mode === "analyze" ? "Analyzed calls" : "Trusted contact",
+          ),
+        );
+        main.append(av, identity);
+        main.addEventListener("click", () =>
+          preparerNumero(item.number, item.name),
+        );
+        row.append(main);
+        if (etoile) {
+          const favori = el("button", "contact-favori");
+          favori.append(icone("#i-etoile"));
+          favori.setAttribute("aria-pressed", String(Boolean(item.favorite)));
+          favori.setAttribute(
+            "aria-label",
+            (item.favorite ? "Unpin " : "Pin ") + item.name,
+          );
+          favori.addEventListener("click", () => basculerFavori(item, favori));
+          row.append(favori);
+        }
+        const call = el("button", "contact-call");
+        call.append(icone("#i-telephone"));
+        call.setAttribute("aria-label", "Call " + item.name);
+        call.addEventListener("click", () =>
+          demarrerSortant(item.number, item.name),
+        );
+        row.append(call);
+        return row;
+      }
+      /* Épingler n'écrit QUE le drapeau d'affichage : surtout pas le mode, qui
+         décide si les appels de cette personne sont analysés. */
+      async function basculerFavori(item, bouton) {
+        if (bouton.disabled) return;
+        bouton.disabled = true;
+        try {
+          const rep = await posterProtege("/app/contacts/favorite", {
+            number: item.number,
+            favorite: !item.favorite,
+          });
+          etat.contacts.items = contactsTries(rep.items);
+          rendreContacts();
+        } catch (e) {
+          bouton.disabled = false;
+          const prefixe = ongletCarnet() === "favoris" ? "favoris" : "contacts";
+          txt(prefixe + "-erreur", e.message || "This contact could not be pinned.");
+          voir(prefixe + "-erreur", true);
         }
       }
       function rendreContacts() {
+        rendreFavoris();
         const needle = rechercher($("contacts-recherche").value),
           all = etat.contacts.items;
         const items = all.filter((item) =>
@@ -5033,35 +5418,7 @@
             container.append(group);
             lettre = letter;
           }
-          const row = el("li", "contacts-row"),
-            main = el("button", "contact-main");
-          const av = el("span", "history-avatar");
-          avatar(av, item.name);
-          av.setAttribute("aria-hidden", "true");
-          const identity = el("span", "");
-          identity.append(
-            el("strong", "", item.name),
-            el("small", "", item.relation || item.number),
-            el(
-              "small",
-              "contact-trust" + (item.mode === "analyze" ? " analyzed" : ""),
-              item.mode === "analyze"
-                ? "Analyzed calls"
-                : "Trusted contact",
-            ),
-          );
-          main.append(av, identity);
-          main.addEventListener("click", () =>
-            preparerNumero(item.number, item.name),
-          );
-          const call = el("button", "contact-call");
-          call.append(icone("#i-telephone"));
-          call.setAttribute("aria-label", "Call " + item.name);
-          call.addEventListener("click", () =>
-            demarrerSortant(item.number, item.name),
-          );
-          row.append(main, call);
-          container.append(row);
+          container.append(ligneContact(item));
         }
         txt(
           "contacts-compteur",
@@ -5081,6 +5438,89 @@
             ? "Try another name or number."
             : "Your trusted contacts will appear here.",
         );
+      }
+      function rendreFavoris() {
+        const favoris = etat.contacts.items.filter((item) => item.favorite);
+        const container = $("favoris-liste");
+        container.replaceChildren();
+        // Pas d'étoile ici : dans cet onglet, tout est déjà un favori, et un
+        // bouton qui ne fait que retirer la ligne où l'on vient d'appuyer est
+        // le plus sûr moyen de perdre un numéro par erreur. On dépingle depuis
+        // Contacts, là où on voit ce qu'on change.
+        for (const item of favoris)
+          container.append(ligneContact(item, { etoile: false }));
+        voir("favoris-vide", !favoris.length);
+      }
+
+      /* Ajout d'un contact. Les deux clés de `MODES_CONTACT` sont EXACTEMENT les
+         valeurs que le serveur accepte (`CONTACT_MODES` dans contacts/book.py) :
+         tout autre libellé repart en 400, et le contact resterait un inconnu
+         sans que l'écran ne le dise. */
+      const MODES_CONTACT = {
+        trusted: "Their calls go straight through, without analysis.",
+        analyze:
+          "They are told the call is protected, then the call is analyzed.",
+      };
+      function modeContactChoisi() {
+        return $("contact-mode-analyze").getAttribute("aria-pressed") === "true"
+          ? "analyze"
+          : "trusted";
+      }
+      function choisirModeContact(mode) {
+        for (const nom of Object.keys(MODES_CONTACT))
+          $("contact-mode-" + nom).setAttribute(
+            "aria-pressed",
+            String(nom === mode),
+          );
+        txt("contact-mode-aide", MODES_CONTACT[mode]);
+      }
+      function ouvrirFormulaireContact(ouvert) {
+        voir("formulaire-contact", ouvert);
+        $("btn-ajouter-contact").setAttribute("aria-expanded", String(ouvert));
+        // Les champs sont vidés à l'OUVERTURE, pas à la fermeture : un ajout
+        // refusé par le serveur doit laisser la saisie à l'écran pour être
+        // corrigée, pas obliger à tout retaper.
+        if (!ouvert) return;
+        for (const champ of ["nom", "numero", "relation"])
+          $("nouveau-contact-" + champ).value = "";
+        voir("contact-form-erreur", false);
+        choisirModeContact("trusted");
+        $("nouveau-contact-nom").focus();
+      }
+      function erreurFormulaireContact(message) {
+        txt("contact-form-erreur", message);
+        voir("contact-form-erreur", true);
+      }
+      async function enregistrerContact() {
+        const name = $("nouveau-contact-nom").value.trim();
+        const number = $("nouveau-contact-numero").value.trim();
+        voir("contact-form-erreur", false);
+        if (!name || !number) {
+          erreurFormulaireContact(
+            name ? "Enter their phone number." : "Enter the contact's name.",
+          );
+          return;
+        }
+        $("btn-sauver-contact").disabled = true;
+        try {
+          await posterProtege("/app/contacts/add", {
+            name,
+            number,
+            // Chaîne vide et jamais `null` : le serveur attend une chaîne, un
+            // `null` repartirait en 422 de validation au lieu d'un message.
+            relation: $("nouveau-contact-relation").value.trim(),
+            mode: modeContactChoisi(),
+          });
+        } catch (e) {
+          erreurFormulaireContact(
+            e.message || "This contact could not be saved.",
+          );
+          return;
+        } finally {
+          $("btn-sauver-contact").disabled = false;
+        }
+        ouvrirFormulaireContact(false);
+        await chargerContacts();
       }
 
       /* Numérotation réelle : le serveur autorise une cible, le SDK reçoit seulement un nonce. */
@@ -5459,21 +5899,7 @@
         txt("messagerie-badge", unread > 9 ? "9+" : String(unread));
         txt(
           "messagerie-vide-titre",
-          etat.voicemail.enabled
-            ? "No voicemail"
-            : "Voicemail turned off",
-        );
-        txt(
-          "messagerie-vide-texte",
-          etat.voicemail.enabled
-            ? "Messages from your callers will appear here."
-            : "Voicemail is not enabled for your line.",
-        );
-        txt(
-          "messagerie-description",
-          etat.voicemail.enabled
-            ? "Messages left after an unanswered call are saved to your voicemail."
-            : "Your conversations remain available in the call history.",
+          etat.voicemail.enabled ? "No voicemail" : "Voicemail turned off",
         );
       }
       function arreterLecture() {
@@ -5693,14 +6119,25 @@
           $(ONGLETS[next].button).focus();
         }
       });
-      $("connexion-chip").addEventListener("click", () => {
-        const expanded =
-          $("connexion-chip").getAttribute("aria-expanded") === "true";
-        $("connexion-chip").setAttribute("aria-expanded", String(!expanded));
-        voir("shell-protection", !expanded);
-      });
+      for (const id of ["connexion-chip", "btn-reglages"])
+        $(id).addEventListener("click", () => ouvrirModal("reglages"));
+      $("btn-fermer-reglages").addEventListener("click", fermerFeuille);
+      $("btn-ajouter-contact").addEventListener("click", () =>
+        ouvrirFormulaireContact(
+          $("btn-ajouter-contact").getAttribute("aria-expanded") !== "true",
+        ),
+      );
+      $("btn-annuler-contact").addEventListener("click", () =>
+        ouvrirFormulaireContact(false),
+      );
+      for (const mode of Object.keys(MODES_CONTACT))
+        $("contact-mode-" + mode).addEventListener("click", () =>
+          choisirModeContact(mode),
+        );
+      $("btn-sauver-contact").addEventListener("click", enregistrerContact);
       $("contacts-recherche").addEventListener("input", rendreContacts);
-      $("btn-contacts-reessayer").addEventListener("click", chargerContacts);
+      for (const id of ["btn-contacts-reessayer", "btn-favoris-reessayer"])
+        $(id).addEventListener("click", chargerContacts);
       $("filtre-tous").addEventListener("click", () => {
         etat.historique.filtre = "all";
         rendreHistorique();

@@ -37,6 +37,9 @@ evaluate: ## Évalue les scénarios (EVAL_MODE=offline|keywords|bedrock)
 calibrate-voice: ## Calibre la voix synthétique (HUMAN="a.wav b.wav" FAKE="c.wav d.wav")
 	uv run python scripts/calibrate_voice.py --human $(HUMAN) --fake $(FAKE)
 
+seed-demo: ## Contenu de démo (appels, favoris, messages). À lancer AVANT make run
+	uv run python scripts/seed_demo_data.py $(SEED_ARGS)
+
 test: ## Tests unitaires
 	uv run pytest -q
 

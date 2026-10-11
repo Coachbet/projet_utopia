@@ -160,12 +160,19 @@ class TestAjout:
         assert reponse.status_code == 200
         assert reponse.json() == {
             "items": [
-                {"name": "Camille", "number": CAMILLE, "relation": "fille", "mode": "trusted"},
+                {
+                    "name": "Camille",
+                    "number": CAMILLE,
+                    "relation": "fille",
+                    "mode": "trusted",
+                    "favorite": False,
+                },
                 {
                     "name": "Lucas Martin",
                     "number": LUCAS,
                     "relation": "petit-fils",
                     "mode": "trusted",
+                    "favorite": False,
                 },
             ]
         }

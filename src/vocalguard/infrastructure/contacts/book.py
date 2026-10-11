@@ -140,6 +140,10 @@ def _lire(path: Path, *, consequence: str) -> tuple[tuple[Contact, ...], str] | 
                 relation=e.get("relation", ""),
                 aliases=tuple(e.get("aliases", ())),
                 mode=_mode_of(e, e["name"]),
+                # Champ de confort : une valeur absente ou farfelue n'a aucune
+                # conséquence sur le routage, donc elle ne mérite pas le
+                # traitement prudent réservé à `mode`.
+                favorite=bool(e.get("favorite", False)),
             )
             for e in entries
             if e.get("name") and e.get("phone_number")

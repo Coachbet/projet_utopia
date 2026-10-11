@@ -172,6 +172,7 @@ def test_contacts_proteges_par_pin_et_sans_alias(harness) -> None:
                 "number": NUMERO_LUCAS,
                 "relation": "petit-fils",
                 "mode": "trusted",
+                "favorite": False,
             }
         ]
     }

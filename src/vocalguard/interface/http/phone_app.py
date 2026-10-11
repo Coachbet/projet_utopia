@@ -353,11 +353,17 @@ class DemandeAjoutContact(DemandeApp):
     number: str = Field(default="", max_length=64)
     relation: str = Field(default="", max_length=120)
     mode: str = Field(default="trusted", max_length=32)
+    favorite: bool = False
     aliases: list[str] = Field(default_factory=list, max_length=20)
 
 
 class DemandeRetraitContact(DemandeApp):
     number: str = Field(default="", max_length=64)
+
+
+class DemandeFavori(DemandeApp):
+    number: str = Field(default="", max_length=64)
+    favorite: bool = False
 
 
 @router.post("/app/contacts/add")
@@ -404,12 +410,51 @@ async def ajouter_contact(demande: DemandeAjoutContact, request: Request) -> dic
     relation = demande.relation.strip()
     if relation:
         entree["relation"] = relation
+    if demande.favorite:
+        # Écrit seulement s'il vaut `True` : le carnet se relit à la main, et une
+        # ligne `"favorite": false` sur chaque entrée n'apprendrait rien.
+        entree["favorite"] = True
     alias = [valeur.strip() for valeur in demande.aliases if valeur.strip()]
     if alias:
         entree["aliases"] = alias
 
     _ecrire_carnet(settings.contacts_path, document, [*entrees, entree])
     log.info("Carnet : un contact ajouté en mode %s (nom et numéro non journalisés).", demande.mode)
+    return _recharger_puis_repondre(request)
+
+
+@router.post("/app/contacts/favorite")
+async def epingler_contact(demande: DemandeFavori, request: Request) -> dict[str, object]:
+    """Épingle ou dépingle un contact. Ne touche QUE l'affichage.
+
+    Volontairement séparée de `contacts/add` : un favori se change d'un geste, et
+    réutiliser l'ajout obligerait l'app à renvoyer le nom, le mode et la relation
+    pour épingler quelqu'un — donc à risquer d'écraser le MODE d'un contact, et
+    avec lui la décision d'analyser ses appels ou non, sur un simple appui sur
+    une étoile.
+    """
+    state = request.app.state
+    require_pin(state, demande.pin)
+    settings = state.settings
+
+    numero = normalize_number(demande.number)
+    if not numero:
+        raise HTTPException(400, "Enter the number of the contact to pin.")
+
+    document, entrees = _carnet_sur_disque(settings.contacts_path)
+    cible = _entree_du_numero(entrees, numero)
+    if cible is None:
+        raise HTTPException(404, "This number is not in your contacts.")
+    if demande.favorite:
+        cible["favorite"] = True
+    else:
+        cible.pop("favorite", None)
+
+    _ecrire_carnet(settings.contacts_path, document, entrees)
+    log.info(
+        "Carnet : un contact %s (numéro non journalisé).",
+        "épinglé" if demande.favorite else "dépinglé",
+    )
     return _recharger_puis_repondre(request)
 
 
@@ -459,6 +504,7 @@ def _reponse_carnet(contacts) -> dict[str, object]:
                 "number": contact.phone_number,
                 "relation": contact.relation,
                 "mode": contact.mode,
+                "favorite": contact.favorite,
             }
             for contact in sorted(contacts, key=lambda contact: contact.name.casefold())
         ]

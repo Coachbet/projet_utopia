@@ -87,7 +87,7 @@ def test_security_notice_accessible_dialogs_and_pinned_sdk() -> None:
     assert "@twilio/voice-sdk@2.18.5/" in str(sdk["src"])
     assert str(sdk["integrity"]).startswith("sha384-")
     assert sdk["crossorigin"] == "anonymous"
-    assert len(markup.dialogs) == 6
+    assert len(markup.dialogs) == 7
     for dialog in markup.dialogs:
         assert dialog["aria-modal"] == "true"
         assert dialog["aria-labelledby"] in markup.ids

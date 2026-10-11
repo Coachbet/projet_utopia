@@ -64,6 +64,13 @@ class Contact:
     C'est aussi ce qui rend le carnet existant rétrocompatible — aucune entrée ne
     porte ce champ, et toutes doivent continuer à passer sans analyse."""
 
+    favorite: bool = False
+    """Épinglé en haut de la liste des contacts dans l'app.
+
+    Confort d'affichage UNIQUEMENT : ce champ ne touche ni le routage, ni le
+    score, ni l'annonce. `mode` reste le seul à décider si un appel est analysé —
+    un favori en mode `analyze` est toujours analysé."""
+
     @property
     def is_trusted(self) -> bool:
         """Raccourci lisible côté routage : `contact.is_trusted` plutôt qu'une
