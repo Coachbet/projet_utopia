@@ -9,7 +9,7 @@ const path = require("node:path");
 const { chromium } = require("playwright");
 
 const root = path.resolve(__dirname, "..");
-const output = path.join(root, "docs/qa/appel-historique");
+const output = path.join(root, "docs/captures");
 const PIN = "432198";
 const start = "2026-10-10T17:42:00+00:00";
 const example = {
@@ -92,12 +92,14 @@ const contacts = [
     number: "+33600000000",
     relation: "Petit-fils",
     mode: "trusted",
+    favorite: true,
   },
   {
     name: "Sophie Martin",
     number: "+33600000001",
     relation: "Fille",
     mode: "trusted",
+    favorite: true,
   },
   {
     name: "Conseiller bancaire",
@@ -351,6 +353,13 @@ function mocks() {
         });
       if (url.pathname === "/app/contacts")
         return route.fulfill({ json: { items: contacts } });
+      if (url.pathname === "/app/contacts/favorite") {
+        const cible = contacts.find(
+          (contact) => contact.number === body.number,
+        );
+        if (cible) cible.favorite = Boolean(body.favorite);
+        return route.fulfill({ json: { items: contacts } });
+      }
       if (url.pathname === "/app/outgoing")
         return route.fulfill({
           json: {
@@ -412,33 +421,75 @@ function mocks() {
         json: { detail: "Route de test inconnue" },
       });
     });
-    const shot = async (name, fullPage = false) =>
-      page.screenshot({ path: path.join(output, name + ".png"), fullPage });
+    /* Chaque capture porte son sujet dans son nom de fichier, et sa légende
+       part dans index.md : un dossier de PNG numérotés sans texte ne se relit
+       pas trois jours plus tard, et encore moins par quelqu'un d'autre. */
+    const captures = [];
+    const shot = async (name, legende, fullPage = false) => {
+      captures.push({ name, legende });
+      await page.screenshot({
+        path: path.join(output, name + ".png"),
+        fullPage,
+      });
+    };
     await page.goto("http://vocalguard.test/app");
-    await shot("00-activation");
+    await shot(
+      "01-activation-saisie-du-pin",
+      "Entrée de l'app : le PIN ouvre la session et signe ensuite chaque appel au serveur.",
+    );
     await page.locator("#pin").fill(PIN);
     await page.locator("#btn-activer").click();
     await page.locator("#ecran-attente").waitFor({ state: "visible" });
     await page.locator(".history-row").first().waitFor();
-    await shot("01-protection");
-    assert.match(await page.locator("#titre-attente").textContent(), /Jeanne/);
+    await shot(
+      "02-recents-appels-recus",
+      "Onglet Récents : les derniers appels, leur provenance, et ceux qui ont été manqués.",
+    );
+    assert.equal(await page.locator("#shell-titre").textContent(), "Recents");
     assert.equal(
       await page.locator('#telephone-onglets [role="tab"]').count(),
-      4,
+      5,
     );
     await page.locator("#filtre-manques").click();
     assert.equal(await page.locator(".history-row").count(), 1);
     await page.locator("#filtre-tous").click();
     assert.equal(await page.locator(".history-row").count(), 4);
+    await page.locator("#tab-favoris").click();
+    await page.locator("#favoris-liste .contact-main").first().waitFor();
+    assert.equal(
+      await page.locator("#favoris-liste .contact-main").count(),
+      2,
+    );
+    await shot(
+      "03-favoris-proches-epingles",
+      "Onglet Favoris : les proches épinglés, appelables sans rien taper — l'écran de l'urgence.",
+    );
+    await page.locator("#btn-reglages").click();
+    await page.locator("#reglages").waitFor({ state: "visible" });
+    await shot(
+      "04-reglages-etat-de-la-protection",
+      "Feuille Réglages : l'état de la protection et les réglages, à un seul endroit.",
+    );
+    await page.locator("#btn-fermer-reglages").click();
+    await page.locator("#reglages").waitFor({ state: "hidden" });
     await page.locator("#tab-contacts").click();
-    await page.locator(".contact-main").first().waitFor();
-    assert.equal(await page.locator(".contact-main").count(), 3);
+    await page.locator("#contacts-liste .contact-main").first().waitFor();
+    assert.equal(
+      await page.locator("#contacts-liste .contact-main").count(),
+      3,
+    );
     await page.locator("#contacts-recherche").fill("lucas");
-    assert.equal(await page.locator(".contact-main").count(), 1);
+    assert.equal(
+      await page.locator("#contacts-liste .contact-main").count(),
+      1,
+    );
     await page.locator("#contacts-recherche").fill("");
-    await shot("10-contacts");
+    await shot(
+      "05-contacts-carnet-d-adresses",
+      "Onglet Contacts : le carnet, et pour chacun « contact de confiance » ou « appels analysés ».",
+    );
     await page
-      .locator(".contact-main")
+      .locator("#contacts-liste .contact-main")
       .filter({ hasText: "Lucas Martin" })
       .click();
     assert.equal(
@@ -461,7 +512,10 @@ function mocks() {
       debordement <= 1,
       `L'écran Clavier déborde de ${debordement}px : il scrolle.`,
     );
-    await shot("11-clavier");
+    await shot(
+      "06-clavier-numero-compose",
+      "Onglet Clavier : le pavé tient dans l'écran, sans scroll, et rien ne s'écrit sous le bouton d'appel.",
+    );
     await page.locator("#btn-appeler").click();
     await page.waitForFunction(() => etat.sortant && etat.decroche);
     assert.deepEqual(await page.evaluate(() => qaOutgoingParams), {
@@ -470,13 +524,19 @@ function mocks() {
     assert.equal(await page.locator("#appel-risque").isVisible(), false);
     assert.equal(await page.locator("#btn-verifier").isVisible(), false);
     assert.equal(await page.locator("#btn-attente").isVisible(), false);
-    await shot("12-sortant");
+    await shot(
+      "07-appel-sortant-non-analyse",
+      "Appel sortant en cours : ni analysé ni enregistré — aucun score, pas de bouton Vérifier ni Attente.",
+    );
     await page.locator("#btn-raccrocher").click();
     await page.locator("#ecran-attente").waitFor({ state: "visible" });
     await page.locator("#tab-messagerie").click();
-    await page.locator(".voicemail-card").first().waitFor();
-    assert.equal(await page.locator(".voicemail-card").count(), 2);
-    await shot("13-messagerie");
+    await page.locator("#messagerie-liste .voicemail-card").first().waitFor();
+    assert.equal(await page.locator("#messagerie-liste .voicemail-card").count(), 2);
+    await shot(
+      "08-messagerie-deux-messages",
+      "Onglet Messagerie : les messages déposés après le bip, avec leur état lu / non lu.",
+    );
     await page.locator(".voicemail-listen").first().click();
     await page.waitForFunction(
       () => etat.voicemail.audio && etat.voicemail.audio.readyState >= 2,
@@ -486,24 +546,33 @@ function mocks() {
       await page.locator(".voicemail-player audio").first().getAttribute("src"),
       /^blob:/,
     );
-    await shot("14-message-lecture");
+    await shot(
+      "09-messagerie-ecoute-d-un-message",
+      "Écoute d'un message : l'audio arrive par une route protégée par le PIN, sans URL Twilio dans le navigateur.",
+    );
     const activeURL = await page.evaluate(() => etat.voicemail.url);
     await page.locator("#tab-contacts").click();
     assert.equal(await page.evaluate(() => etat.voicemail.url), null);
     assert.ok((await page.evaluate(() => qaRevokedURLs)).includes(activeURL));
     await page.locator("#tab-messagerie").click();
-    await page.locator(".voicemail-card").first().waitFor();
+    await page.locator("#messagerie-liste .voicemail-card").first().waitFor();
     await page.locator(".voicemail-delete").first().click();
-    await shot("15-message-suppression");
+    await shot(
+      "10-messagerie-suppression-a-confirmer",
+      "Supprimer un message demande une confirmation : l'audio distant part avec la ligne.",
+    );
     await page.locator("#btn-message-conserver").click();
-    assert.equal(await page.locator(".voicemail-card").count(), 2);
+    assert.equal(await page.locator("#messagerie-liste .voicemail-card").count(), 2);
     await page.locator(".voicemail-delete").first().click();
     await page.locator("#btn-message-supprimer").click();
     await page.waitForFunction(() => etat.voicemail.items.length === 1);
     await page.locator(".voicemail-delete").first().click();
     await page.locator("#btn-message-supprimer").click();
     await page.locator("#messagerie-vide").waitFor({ state: "visible" });
-    await shot("16-messagerie-vide");
+    await shot(
+      "11-messagerie-aucun-message",
+      "Messagerie vide : la boîte se lit comme vide, pas comme un chargement qui n'en finit pas.",
+    );
     assert.ok(
       voicemailRequests.some((request) => request.operation === "heard"),
     );
@@ -551,7 +620,10 @@ function mocks() {
     await page.waitForFunction(
       () => document.getElementById("appel-nom").textContent === "+33700000000",
     );
-    await shot("02-entrant");
+    await shot(
+      "12-appel-entrant-numero-inconnu",
+      "Appel entrant d'un numéro inconnu : le vrai numéro de l'appelant, sa provenance, et le bouton Vérifier.",
+    );
     await page.locator("#btn-decrocher").click();
     await page.locator("#appel-boutons-encours").waitFor({ state: "visible" });
     await page.evaluate(() => {
@@ -563,17 +635,28 @@ function mocks() {
       });
       rendreAttente();
     });
-    await shot("03-en-cours");
+    await shot(
+      "13-appel-en-cours-vigilance-score-48",
+      "Appel analysé en cours, score 48 : vigilance. Le dashboard s'oriente, mais rien n'est encore audible.",
+    );
     await page.locator("#btn-muet").click();
     assert.equal(await page.evaluate(() => qaCall.muted), true);
     await page.locator("#btn-muet").click();
     assert.equal(await page.evaluate(() => qaCall.muted), false);
     await page.locator("#btn-clavier").click();
+    await shot(
+      "14-appel-clavier-dtmf",
+      "Clavier pendant l'appel : les touches partent en DTMF dans la conversation (serveurs vocaux).",
+    );
     await page.locator('#clavier-touches button[aria-label="5"]').click();
     assert.deepEqual(await page.evaluate(() => qaCall.digits), ["5"]);
     await page.locator("#btn-fermer-clavier").click();
     await page.locator("#btn-attente").click();
     await page.waitForFunction(() => etat.enAttente);
+    await shot(
+      "15-appel-scammeur-en-attente",
+      "Mise en attente de l'appelant : il entend une musique, la personne protégée garde la main. Jamais de raccrochage automatique.",
+    );
     await page.locator("#btn-attente").click();
     await page.waitForFunction(() => !etat.enAttente);
     await page.locator("#btn-haut-parleur").click();
@@ -589,14 +672,20 @@ function mocks() {
       }),
     );
     await page.locator("#appel-alerte").waitFor({ state: "visible" });
-    await shot("04-alerte");
+    await shot(
+      "16-appel-alerte-arnaque-score-72",
+      "Score 72 : alerte. Annonce à la personne protégée seule, et SMS au vrai proche.",
+    );
     await page.locator("#btn-fermer-alerte").click();
     await page.locator("#btn-verifier").click();
     await page.locator("#appel-code").waitFor({ state: "visible" });
-    await shot("05-code");
+    await shot(
+      "17-verification-code-a-4-chiffres",
+      "Vérification d'identité : le code part par SMS au numéro que le carnet connaît, jamais à celui qui appelle. « Ne dites jamais ce code. »",
+    );
     assert.match(
       await page.locator("#appel-code").textContent(),
-      /Ne dites jamais ce code/,
+      /Never say this code/,
     );
     await page.evaluate(() =>
       appliquerEvenement({
@@ -608,30 +697,51 @@ function mocks() {
     await page.locator("#appel-code").waitFor({ state: "hidden" });
     assert.match(
       await page.locator("#appel-message").textContent(),
-      /pas été confirmée|échou|pu être confirmée/,
+      /failed or the code is wrong/,
+    );
+    await shot(
+      "18-verification-echouee",
+      "Le code n'a pas été lu : deux essais au maximum, et l'app le dit sans détour.",
     );
     await page.locator("#btn-raccrocher").click();
     await page.locator("#ecran-fin").waitFor({ state: "visible" });
-    await shot("06-fin");
+    await shot(
+      "19-appel-termine",
+      "Fin d'appel : ce qui a été constaté pendant la conversation, une fois raccroché.",
+    );
     await page.locator("#ecran-attente").waitFor({ state: "visible" });
     await page.locator("#btn-historique").click();
     await page.locator(".history-row").first().waitFor();
     assert.equal(await page.locator(".history-row").count(), 4);
-    await shot("07-historique");
+    await shot(
+      "20-historique-liste-des-appels",
+      "Historique : les appels conservés 30 jours, sans audio ni transcript en base.",
+    );
     await page.locator(".history-row").first().click();
     await page.locator(".timeline-marker").first().waitFor();
     assert.equal(await page.locator(".timeline-marker").count(), 3);
     assert.equal(await page.locator(".signal").count(), 4);
-    await shot("08-detail", true);
+    await shot(
+      "21-historique-detail-d-un-appel-analyse",
+      "Détail d'un appel analysé, page entière : les 3 seuils franchis, les 4 signaux, les tactiques et la vérification.",
+      true,
+    );
     await page.locator("#btn-detail-retour").click();
     await page.locator("#btn-effacer-historique").click();
-    await shot("09-effacement");
+    await shot(
+      "22-historique-effacement-a-confirmer",
+      "Effacer l'historique demande une confirmation, et couvre aussi l'appel en cours.",
+    );
     await page.locator("#btn-annuler-effacement").click();
     assert.equal(await page.locator(".history-row").count(), 4);
     await page.locator("#btn-effacer-historique").click();
     await page.locator("#btn-confirmer-effacement").click();
     await page.locator("#historique-vide").waitFor({ state: "visible" });
     assert.equal(await page.locator(".history-row").count(), 0);
+    await shot(
+      "23-historique-aucun-appel",
+      "Historique vide après effacement : plus aucune métadonnée d'appel en base.",
+    );
     assert.ok(controls.some((route) => route.endsWith("/hold")));
     assert.ok(controls.some((route) => route.endsWith("/resume")));
     assert.equal(
@@ -662,10 +772,10 @@ function mocks() {
             "effacement avec confirmation",
             "absence stockage PIN",
           ],
-          screenshots: 17,
+          screenshots: captures.length,
           passed: true,
           additionalChecks: [
-            "4 onglets téléphone",
+            "5 onglets téléphone",
             "filtres récents/manqués",
             "contacts et recherche",
             "clavier sans scroll",
@@ -682,9 +792,26 @@ function mocks() {
         2,
       ) + "\n",
     );
-    console.log(
-      "QA mobile : appels, 4 onglets, messagerie WAV privée, responsive et 17 captures validés (SDK/API simulés).",
+    await fs.writeFile(
+      path.join(output, "index.md"),
+      [
+        "# Captures de l'app Cut the Line",
+        "",
+        "Produites par `make test-ui` (`scripts/check_mobile_ui.cjs`) : navigateur réel",
+        "en 390×844, SDK Voice Twilio et API entièrement simulés — aucun appel, aucun",
+        "numéro et aucun identifiant réel n'y figure. Les captures suivent le parcours,",
+        "de l'activation à l'historique effacé.",
+        "",
+        ...captures.map(
+          (capture) =>
+            `## ${capture.name}\n\n![${capture.legende}](${capture.name}.png)\n\n${capture.legende}\n`,
+        ),
+      ].join("\n") + "\n",
     );
+    console.log(
+      `QA mobile : appels, 5 onglets, messagerie WAV privée, responsive et ${captures.length} captures validés (SDK/API simulés).`,
+    );
+    console.log("Captures et légendes : docs/captures/ (voir index.md)");
   } finally {
     await browser.close();
   }

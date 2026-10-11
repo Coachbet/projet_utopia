@@ -18,13 +18,13 @@
     "effacement avec confirmation",
     "absence stockage PIN"
   ],
-  "screenshots": 17,
+  "screenshots": 23,
   "passed": true,
   "additionalChecks": [
-    "4 onglets téléphone",
+    "5 onglets téléphone",
     "filtres récents/manqués",
     "contacts et recherche",
-    "copie numéro",
+    "clavier sans scroll",
     "appel sortant nonce SDK",
     "sortants sans analyse",
     "lecture WAV privé avec PIN",
