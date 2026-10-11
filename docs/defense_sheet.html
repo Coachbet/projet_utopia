@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Cut the Line — Defense Sheet</title>
+<style>
+@page { size: A4; margin: 11mm 12mm; }
+:root{--navy:#0E2A3B;--slate:#3A5363;--mist:#C9D6DE;--surface:#F3F6F7;--cut:#FF5A36;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,sans-serif;font-size:9.2pt;line-height:1.4;color:#1b2b35;background:#fff}
+header{display:flex;align-items:center;gap:10px;border-bottom:2px solid var(--navy);padding-bottom:6px;margin-bottom:7px}
+header svg{width:30px;height:30px;flex:none}
+h1{font-family:"Inter Display",Inter,sans-serif;font-size:17pt;font-weight:800;color:var(--navy);letter-spacing:-.3px;line-height:1}
+h1 span{color:var(--cut)}
+.sub{font-size:8pt;color:var(--slate);margin-top:2px}
+.meta{margin-left:auto;text-align:right;font-size:7.4pt;color:var(--slate)}
+h2{font-family:"Inter Display",Inter,sans-serif;font-size:10.2pt;font-weight:700;color:var(--navy);margin:12px 0 5px;text-transform:uppercase;letter-spacing:.5px}
+h2::before{content:"";display:inline-block;width:8px;height:2px;background:var(--cut);vertical-align:middle;margin-right:5px}
+p{margin-bottom:3px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+table{width:100%;border-collapse:collapse;font-size:8.7pt}
+th{background:var(--navy);color:#fff;text-align:left;font-weight:600;padding:3px 5px}
+td{padding:3.6px 6px;border-bottom:1px solid var(--mist);vertical-align:top}
+tr:nth-child(even) td{background:var(--surface)}
+td.k{font-weight:600;color:var(--navy);white-space:nowrap}
+td.c{text-align:center;white-space:nowrap}
+.tbd{color:var(--cut);font-weight:600}
+ul{padding-left:12px}
+li{margin-bottom:2px}
+b{color:var(--navy)}
+.note{font-size:8pt;color:var(--slate);margin-top:3px}
+.box{background:var(--surface);border-left:3px solid var(--cut);padding:7px 9px;border-radius:2px}
+</style></head><body>
+<header>
+<svg viewBox="0 0 200 200"><rect width="200" height="200" rx="46" fill="#0E2A3B"/><g transform="translate(17 17) scale(0.83)"><g fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M100 12 V51"/><ellipse cx="100" cy="58" rx="13" ry="5"/><ellipse cx="100" cy="67" rx="13" ry="5"/><ellipse cx="100" cy="76" rx="13" ry="5"/><ellipse cx="100" cy="85" rx="13" ry="5"/><ellipse cx="100" cy="94" rx="13" ry="5"/><path d="M100 100 V114"/><g transform="rotate(16 104 134)"><path d="M104 134 V168 A16 16 0 0 1 72 168 V157 L80 164"/></g></g><path d="M76 131 L128 113" fill="none" stroke="#FF5A36" stroke-width="8" stroke-linecap="round"/></g></svg>
+<div><h1>Cut the Line <span>·</span> Defense Sheet</h1>
+<div class="sub">Real-time protection against phone scams and AI-cloned voices</div></div>
+<div class="meta">Hackathon PoC<br>October 2026</div>
+</header>
+
+<h2>Threat scenario</h2>
+<p class="box">A scammer calls an elderly person posing as a grandchild, a bank advisor or the police, sometimes with an <b>AI-cloned voice</b> or a <b>spoofed number</b>, and pushes for an urgent, secret payment. Cut the Line sits on the call path: it analyzes unknown callers live, warns the callee, puts the caller on hold, and verifies identity with a 4-digit code texted to the <b>real</b> relative's phone. A voice clone cannot pass it.</p>
+
+<div class="grid">
+<div>
+<h2>NIST CSF 2.0 functions</h2>
+<table>
+<tr><th>Function</th><th>What Cut the Line does</th></tr>
+<tr><td class="k">Govern</td><td>Caller notified before any analysis; no audio or transcript kept; metadata purged after 30 days</td></tr>
+<tr><td class="k">Identify</td><td>Trusted contact book; number reputation (VoIP, hidden, identity vs number)</td></tr>
+<tr><td class="k">Protect</td><td>Out-of-band code to the real relative; PIN-locked app; signed Twilio webhooks</td></tr>
+<tr><td class="k">Detect</td><td>4 live signals: Claude content 45, keywords 20, synthetic voice 20, reputation 15</td></tr>
+<tr><td class="k">Respond</td><td>Score 40 caution · 65 warning to callee + text to relative · 85 caller on hold. Never auto hang-up</td></tr>
+<tr><td class="k">Recover <span style="font-weight:400">(partial)</span></td><td>Resume after verification; history with risk peaks and actions</td></tr>
+</table>
+</div>
+<div>
+<h2>ATT&amp;CK · ATLAS · OWASP</h2>
+<table>
+<tr><th>Technique / risk</th><th>Mitigation</th></tr>
+<tr><td class="k">T1566.004 · T1598.004<br><span style="font-weight:400">Spearphishing Voice</span></td><td>Live content analysis; requests for codes or bank details trip a circuit breaker</td></tr>
+<tr><td class="k">T1684.001<br><span style="font-weight:400">Impersonation</span></td><td>Claimed identity checked against the contact book; code sent to the real relative</td></tr>
+<tr><td class="k">ATLAS AML.T0052.001 · T0088<br><span style="font-weight:400">Deepfake phishing</span></td><td>Voice signal capped at 64 alone; identity proven by the real phone, not the voice</td></tr>
+<tr><td class="k">OWASP LLM01<br><span style="font-weight:400">Prompt injection</span></td><td>Transcript treated as untrusted data; LLM is one signal of four</td></tr>
+<tr><td class="k">LLM05 · LLM06</td><td>JSON-only, clamped output; a fixed policy, not the LLM, triggers actions</td></tr>
+<tr><td class="k">LLM02</td><td>No audio, transcript or code stored</td></tr>
+</table>
+</div>
+</div>
+
+<div class="grid">
+<div>
+<h2>Metrics</h2>
+<table>
+<tr><th>22 scripted calls (11 scam / 11 legit)</th><th>Detected</th><th>False pos.</th></tr>
+<tr><td>Keywords only</td><td class="c">0 / 11</td><td class="c">0 / 11</td></tr>
+<tr><td>Offline stand-in for Claude</td><td class="c">3 / 11</td><td class="c">0 / 11</td></tr>
+<tr><td><b>Claude on Bedrock</b></td><td class="c tbd">to run</td><td class="c tbd">to run</td></tr>
+</table>
+<p style="margin-top:4px"><b>Time to detect:</b> 15 s into the grandparent scam (score 85); 64 s for the fake bank advisor.<br>
+<b>Time to respond:</b> hold + warning 0.3 s after the threshold (replay). Real network latency not yet measured.</p>
+<p class="note">1,024 automated tests pass. Scenarios are synthetic: they validate the pipeline, not field accuracy.</p>
+</div>
+<div>
+<h2>Known limitations</h2>
+<ul>
+<li><b>One US relay number</b>; a carrier could run the same logic natively.</li>
+<li><b>Single user, one call at a time</b>; no database yet.</li>
+<li><b>Web app rings only while open</b> (no VoIP push without a native app).</li>
+<li><b>Spoofed trusted numbers</b> are not analyzed; the code check is the defense.</li>
+<li><b>Voice model</b> needs calibration on real phone audio.</li>
+<li><b>Amazon Transcribe</b> reuses audio unless an AWS AI opt-out policy is applied.</li>
+</ul>
+</div>
+</div>
+</body></html>

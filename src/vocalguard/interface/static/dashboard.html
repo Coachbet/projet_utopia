@@ -508,7 +508,7 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
     </div>
 
     <div class="meter-legend">
-      <span><i style="background:var(--status-good)"></i>&lt;&nbsp;40 aucun signe</span>
+      <span><i style="background:var(--status-good)"></i>&lt;&nbsp;40 no signs</span>
       <span><i style="background:var(--status-warning)"></i>40–64 caution</span>
       <span><i style="background:var(--status-serious)"></i>65–84 alert</span>
       <span><i style="background:var(--status-critical)"></i>≥&nbsp;85 intervention</span>
@@ -537,7 +537,7 @@ table.tv td .sw { width: 10px; height: 10px; border-radius: 3px; display: inline
   </section>
 
   <section class="card c-identity" aria-labelledby="h-id">
-    <h2 id="h-id">Qui appelle&nbsp;?</h2>
+    <h2 id="h-id">Who is calling?</h2>
     <dl class="kv">
       <dt>Claimed identity</dt>
       <dd class="quiet" id="claimed">not stated</dd>
@@ -588,7 +588,7 @@ const THRESHOLDS = [
 
 /* Ordre fixe des slots catégoriels : l'identité suit l'entité, jamais le rang. */
 const SIGNALS = [
-  { key: "llm",        name: "Contenu (Claude)",  weight: 45, slot: "--series-1" },
+  { key: "llm",        name: "Content (Claude)",  weight: 45, slot: "--series-1" },
   { key: "keyword",    name: "Keywords",         weight: 20, slot: "--series-2" },
   { key: "voice",      name: "Synthetic voice",  weight: 20, slot: "--series-3" },
   { key: "reputation", name: "Reputation",        weight: 15, slot: "--series-4" },
@@ -846,9 +846,8 @@ function renderScore() {
   if (!next) {
     tn.appendChild(document.createTextNode("Intervention threshold crossed."));
   } else {
-    tn.appendChild(document.createTextNode("Encore "));
-    tn.appendChild(el("b", null, next.at - state.score));
-    tn.appendChild(document.createTextNode(` point${next.at - state.score > 1 ? "s" : ""} avant « ${LEVELS[next.level].label.toLowerCase()} ».`));
+        tn.appendChild(el("b", null, next.at - state.score));
+    tn.appendChild(document.createTextNode(` more point${next.at - state.score > 1 ? "s" : ""} before “${LEVELS[next.level].label.toLowerCase()}”.`));
   }
 }
 
@@ -860,7 +859,7 @@ function renderWhy() {
   if (!state.reasons.length && !state.lastExplanation && !state.breakers.length) return;
 
   host.appendChild(el("h3", null, "Why this score"));
-  if (state.lastExplanation) host.appendChild(el("div", "quote", "« " + state.lastExplanation + " »"));
+  if (state.lastExplanation) host.appendChild(el("div", "quote", "“" + state.lastExplanation + "”"));
   if (state.reasons.length || state.breakers.length) {
     const tags = el("div", "tags");
     state.reasons.slice(0, 8).forEach((r) => tags.appendChild(el("span", "tag", r)));
@@ -918,7 +917,7 @@ function addFeed(ev, kind, headline, iconHref, opts) {
 
   const o = opts || {};
   if (o.sub) body.appendChild(el("div", "sub", o.sub));
-  if (o.quote) body.appendChild(el("div", "quote", "« " + o.quote + " »"));
+  if (o.quote) body.appendChild(el("div", "quote", "“" + o.quote + "”"));
   if ((o.tags && o.tags.length) || (o.breakers && o.breakers.length)) {
     const tags = el("div", "tags");
     (o.tags || []).forEach((t) => tags.appendChild(el("span", "tag", t)));
@@ -1089,7 +1088,7 @@ function applyEvent(ev) {
          franchissements de seuil, sinon le journal devient illisible. */
       if (state.level !== prev) {
         const lv = LEVELS[state.level];
-        addFeed(ev, "score", `Niveau « ${lv.label.toLowerCase()} » — score ${state.score}`, lv.icon, {
+        addFeed(ev, "score", `Level “${lv.label.toLowerCase()}” — score ${state.score}`, lv.icon, {
           tags: Array.isArray(d.reasons) ? d.reasons.slice(0, 7) : [],
           breakers: Array.isArray(d.breakers_fired) ? d.breakers_fired : [],
         });
