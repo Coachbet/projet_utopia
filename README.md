@@ -248,11 +248,4 @@ the pipeline, not real-world accuracy.
   verified. Caller-ID spoofing in the demo is simulated (`DEMO_SPOOF_AS`), because
   Twilio forbids presenting a number you don't own.
 
-## Team
 
-| Role | Scope |
-|---|---|
-| Dev 1, Telephony and real time | Twilio, TwiML, media streams, Transcribe, call actions |
-| Dev 2, Intelligence and scoring | Claude prompt, keywords, voice model, reputation, score engine |
-| Biz 1, Product and demo | Scenarios, lexicon, dashboard, demo script |
-| Biz 2, Pitch and business | Market, persona, business model, GDPR, deck, backup video |
